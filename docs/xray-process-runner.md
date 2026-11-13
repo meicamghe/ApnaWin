@@ -38,7 +38,8 @@ The current profile's host and port do not specify protocol, security, flow, cre
 - Does not capture or expose raw Xray output, which could contain server details.
 - Validates the config before launch.
 - Refuses duplicate starts.
-- Stops the process and escalates to kill after the configured timeout.
+- Validates finite positive validation and stop timeouts at construction.
+- Stops the process and escalates to kill after the configured timeout. The process handle is cleared only after exit is confirmed; termination, kill or wait failures raise `XrayProcessError` and retain the handle when the child may still be alive.
 - Does not alter Windows routes, DNS, firewall or adapters.
 
 ## Next acceptance steps
