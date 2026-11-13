@@ -55,6 +55,7 @@ def test_job_object_contains_child_and_grandchild_after_root_exits(tmp_path):
 
         process.terminate()
         # The root has exited, but its child and grandchild remain active.
+        assert process.poll() is None
         with pytest.raises(subprocess.TimeoutExpired):
             process.wait(timeout=0.25)
 
