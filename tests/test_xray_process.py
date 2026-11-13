@@ -525,3 +525,88 @@ def test_socks_readiness_rejects_invalid_timeouts(files, timeout):
         runner.is_socks_ready(connect_timeout=timeout)
     with pytest.raises(ValueError, match="timeout"):
         runner.is_socks_protocol_ready(timeout=timeout)
+
+
+@pytest.mark.parametrize("timeout_name", ["validation_timeout", "stop_timeout"])
+@pytest.mark.parametrize("timeout", [0, -1, float("inf"), float("nan"), True, "1"])
+def test_runner_rejects_invalid_process_timeouts(files, timeout_name, timeout):
+    executable, config, _ = files
+    with pytest.raises(ValueError, match=timeout_name):
+        XrayProcessRunner(executable, config, **{timeout_name: timeout})
+
+
+def test_stop_retains_process_when_terminate_fails(files):
+    executable, config, _ = files
+
+    class TerminateFailure(FakeProcess):
+        def terminate(self):
+            raise OSError("access denied")
+
+    process = TerminateFailure()
+    runner = XrayProcessRunner(executable, config)
+    runner._process = process
+
+    with pytest.raises(XrayProcessError, match="request Xray termination"):
+        runner.stop()
+    assert runner._process is process
+    assert runner.is_running
+
+
+def test_stop_escalates_to_kill_after_timeout(files):
+    executable, config, _ = files
+
+    class NeedsKill(FakeProcess):
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout=None):
+            if not self.killed:
+                raise subprocess.TimeoutExpired("xray", timeout)
+            self.returncode = -9
+            return self.returncode
+
+    process = NeedsKill()
+    runner = XrayProcessRunner(executable, config, stop_timeout=0.25)
+    runner._process = process
+
+    runner.stop()
+    assert process.terminated
+    assert process.killed
+    assert runner._process is None
+    assert not runner.is_running
+
+
+def test_stop_retains_process_when_kill_does_not_finish(files):
+    executable, config, _ = files
+
+    class Unstoppable(FakeProcess):
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout=None):
+            raise subprocess.TimeoutExpired("xray", timeout)
+
+        def kill(self):
+            self.killed = True
+
+    process = Unstoppable()
+    runner = XrayProcessRunner(executable, config, stop_timeout=0.01)
+    runner._process = process
+
+    with pytest.raises(XrayProcessError, match="did not exit"):
+        runner.stop()
+    assert process.killed
+    assert runner._process is process
+    assert runner.is_running
+
+
+def test_stop_clears_already_exited_process(files):
+    executable, config, _ = files
+    process = FakeProcess(returncode=0)
+    runner = XrayProcessRunner(executable, config)
+    runner._process = process
+
+    runner.stop()
+
+    assert runner._process is None
+    assert not process.terminated
