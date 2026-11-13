@@ -79,6 +79,9 @@ Additional failure-path and creation-time tests have now been added:
   without losing handle ownership.
 - A job-handle-close failure test verifies that the failed handle is retained
   and a later close can retry successfully.
+- The initial thread handle is now retained by the controller if its first
+  CloseHandle call fails; close() retries it before releasing the Job Object.
+  A focused test covers this ownership and retry path.
 - The Windows child/grandchild integration test now calls IsProcessInJob at
   the root process's first Python user-code entry and asserts membership. This
   checks creation-time containment before the root starts spawning descendants.
