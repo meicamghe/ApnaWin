@@ -366,11 +366,33 @@ class XrayProcessRunner:
             try:
                 process.wait(timeout=self.stop_timeout)
             except subprocess.TimeoutExpired:
-                try:
-                    process.kill()
-                except OSError as exc:
-                    if process.poll() is None:
-                        raise XrayProcessError("Could not force-stop Xray") from exc
+                if os.name == "nt":
+                    # taskkill /T asks Windows to include descendants when the
+                    # supervised process is still present. Fall back to Popen.kill
+                    # if taskkill is unavailable or cannot complete.
+                    try:
+                        tree_result = subprocess.run(
+                            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                            stdin=subprocess.DEVNULL,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            timeout=self.stop_timeout,
+                            check=False,
+                            shell=False,
+                        )
+                    except (OSError, subprocess.TimeoutExpired):
+                        tree_result = None
+                    if tree_result is not None and tree_result.returncode == 0:
+                        try:
+                            process.wait(timeout=self.stop_timeout)
+                        except subprocess.TimeoutExpired:
+                            pass
+                if process.poll() is None:
+                    try:
+                        process.kill()
+                    except OSError as exc:
+                        if process.poll() is None:
+                            raise XrayProcessError("Could not force-stop Xray") from exc
                 try:
                     process.wait(timeout=self.stop_timeout)
                 except subprocess.TimeoutExpired as exc:
