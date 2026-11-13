@@ -125,6 +125,8 @@ class FakeLifecycleKernel32:
         return self.terminate_ok
 
     def QueryInformationJobObject(self, _job, _class, info_pointer, _size, _returned):
+        import ctypes
+
         if not self.query_ok:
             return False
         info = ctypes.cast(
