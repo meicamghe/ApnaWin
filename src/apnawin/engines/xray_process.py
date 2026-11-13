@@ -198,6 +198,84 @@ class XrayProcessRunner:
         except OSError:
             return False
 
+    def socks_exchange(
+        self,
+        destination_host: str,
+        destination_port: int,
+        payload: bytes,
+        *,
+        timeout: float = 3.0,
+        max_response_bytes: int = 65536,
+    ) -> bytes | None:
+        """Send bounded application bytes through SOCKS5 and read to EOF.
+
+        Returns response bytes on a clean EOF, or None on socket/proxy failure.
+        The caller owns payload framing and must choose an authorized endpoint.
+        A response-size overflow raises ValueError rather than truncating data.
+        This does not establish system-wide tunnel routing.
+        """
+        if not isinstance(payload, bytes):
+            raise TypeError("payload must be bytes")
+        if isinstance(max_response_bytes, bool) or not isinstance(max_response_bytes, int) or max_response_bytes < 1:
+            raise ValueError("max_response_bytes must be a positive integer")
+        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
+            raise ValueError("timeout must be a positive number")
+        if not isinstance(destination_host, str) or not destination_host.strip():
+            raise ValueError("destination_host must be a non-empty hostname or IP address")
+        if isinstance(destination_port, bool) or not isinstance(destination_port, int) or not 1 <= destination_port <= 65535:
+            raise ValueError("destination_port must be an integer from 1 to 65535")
+
+        host = destination_host.strip()
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            try:
+                encoded_host = host.encode("idna")
+            except UnicodeError as exc:
+                raise ValueError("destination_host is not a valid IDNA hostname") from exc
+            if not encoded_host or len(encoded_host) > 255:
+                raise ValueError("destination hostname must be 1 to 255 encoded bytes")
+            destination = bytes((3, len(encoded_host))) + encoded_host
+        else:
+            destination = (bytes((1,)) + address.packed if address.version == 4
+                           else bytes((4,)) + address.packed)
+        request = bytes((5, 1, 0)) + destination + destination_port.to_bytes(2, "big")
+        inbound = self.local_socks_inbound()
+        try:
+            with socket.create_connection((inbound.host, inbound.port), timeout=timeout) as connection:
+                connection.settimeout(timeout)
+                connection.sendall(bytes((5, 1, 0)))
+                if self._recv_exact(connection, 2) != bytes((5, 0)):
+                    return None
+                connection.sendall(request)
+                version, reply, reserved, address_type = self._recv_exact(connection, 4)
+                if version != 5 or reserved != 0:
+                    return None
+                if address_type == 1:
+                    address_length = 4
+                elif address_type == 4:
+                    address_length = 16
+                elif address_type == 3:
+                    address_length = self._recv_exact(connection, 1)[0]
+                else:
+                    return None
+                self._recv_exact(connection, address_length + 2)
+                if reply != 0:
+                    return None
+                if payload:
+                    connection.sendall(payload)
+                connection.shutdown(socket.SHUT_WR)
+                response = bytearray()
+                while True:
+                    chunk = connection.recv(min(4096, max_response_bytes + 1 - len(response)))
+                    if not chunk:
+                        return bytes(response)
+                    response.extend(chunk)
+                    if len(response) > max_response_bytes:
+                        raise ValueError("SOCKS response exceeded max_response_bytes")
+        except OSError:
+            return None
+
     def validate(self, profile: ConnectionProfile) -> None:
         """Run Xray's config test; this does not establish network connectivity."""
         self._validate_inputs(profile)
