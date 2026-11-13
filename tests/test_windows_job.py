@@ -105,10 +105,14 @@ def test_launch_failure_cleans_job_and_attribute_resources(
 
 
 class FakeLifecycleKernel32:
-    def __init__(self, *, terminate_ok=True, query_ok=True, close_failures=()):
+    def __init__(
+        self, *, terminate_ok=True, query_ok=True, close_failures=(),
+        root_exit_code=windows_job._STILL_ACTIVE,
+    ):
         self.terminate_ok = terminate_ok
         self.query_ok = query_ok
         self.close_failures = list(close_failures)
+        self.root_exit_code = root_exit_code
         self.closed = []
         self.terminate_calls = []
 
@@ -116,7 +120,7 @@ class FakeLifecycleKernel32:
         import ctypes
 
         ctypes.cast(code_pointer, ctypes.POINTER(windows_job.wintypes.DWORD)).contents.value = (
-            windows_job._STILL_ACTIVE
+            self.root_exit_code
         )
         return True
 
@@ -158,7 +162,8 @@ def test_terminate_failure_is_reported_without_dropping_owned_handles(monkeypatc
 
 
 def test_active_process_query_failure_is_reported_and_handles_are_retained(monkeypatch):
-    fake = FakeLifecycleKernel32(query_ok=False)
+    # An exited root forces poll() to query the job's active-process count.
+    fake = FakeLifecycleKernel32(query_ok=False, root_exit_code=0)
     monkeypatch.setattr(windows_job.ctypes, "get_last_error", lambda: 5, raising=False)
     process = windows_job.WindowsJobProcess(windows_job._Win32(fake), 10, 20, 123)
 
