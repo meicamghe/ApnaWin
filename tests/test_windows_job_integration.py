@@ -24,6 +24,13 @@ def test_job_object_contains_child_and_grandchild_after_root_exits(tmp_path):
         "time.sleep(60)"
     )
     root_script = (
+        "import ctypes; "
+        "kernel32=ctypes.WinDLL('kernel32'); "
+        "kernel32.GetCurrentProcess.restype=ctypes.c_void_p; "
+        "kernel32.IsProcessInJob.restype=ctypes.c_int; "
+        "membership=ctypes.c_int(); "
+        "assert kernel32.IsProcessInJob(kernel32.GetCurrentProcess(),None,ctypes.byref(membership)); "
+        "assert membership.value == 1; "
         "import subprocess,sys,time; "
         "child=subprocess.Popen([sys.executable,'-c',sys.argv[3],sys.argv[2],sys.argv[4]]); "
         "open(sys.argv[1],'w',encoding='ascii').write(str(child.pid)); "
