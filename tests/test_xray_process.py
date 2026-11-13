@@ -416,13 +416,14 @@ def test_socks_exchange_localhost_integration_round_trip(files):
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.bind(("127.0.0.1", 0))
     listener.listen(1)
+    listener.settimeout(3)
     port = listener.getsockname()[1]
     config.write_text(json.dumps({
         "inbounds": [{"listen": "127.0.0.1", "port": port, "protocol": "socks"}],
         "outbounds": [],
     }), encoding="utf-8")
     received = {}
-    response = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello"
+    response = b"HTTP/1.1 200 OK\\r\\nContent-Length: 5\\r\\n\\r\\nhello"
 
     def read_exact(connection, count):
         data = bytearray()
@@ -437,11 +438,11 @@ def test_socks_exchange_localhost_integration_round_trip(files):
         try:
             connection, _ = listener.accept()
             with connection:
+                connection.settimeout(3)
                 received["greeting"] = read_exact(connection, 3)
-                connection.sendall(b"\x05")
-                connection.sendall(b"\x00")
-                header = read_exact(connection, 5)
-                assert header == bytes((5, 1, 0, 3, 11))
+                connection.sendall(bytes((5, 0)))
+                request_prefix = read_exact(connection, 5)
+                assert request_prefix == bytes((5, 1, 0, 3, 11))
                 received["host"] = read_exact(connection, 11)
                 received["port"] = read_exact(connection, 2)
                 connection.sendall(bytes((5, 0, 0, 1, 127, 0, 0, 1, 0, 80)))
@@ -453,6 +454,8 @@ def test_socks_exchange_localhost_integration_round_trip(files):
                     body.extend(chunk)
                 received["payload"] = bytes(body)
                 connection.sendall(response)
+        except Exception as exc:
+            received["server_error"] = repr(exc)
         finally:
             listener.close()
 
@@ -460,11 +463,12 @@ def test_socks_exchange_localhost_integration_round_trip(files):
     worker.start()
     try:
         result = XrayProcessRunner(executable, config).socks_exchange(
-            "example.com", 80, b"GET / HTTP/1.0\r\nHost: example.com\r\n\r\n",
+            "example.com", 80, b"GET / HTTP/1.0\\r\\nHost: example.com\\r\\n\\r\\n",
             timeout=2.0, max_response_bytes=1024,
         )
-        worker.join(timeout=3)
-        assert not worker.is_alive()
+        worker.join(timeout=4)
+        assert not worker.is_alive(), "local SOCKS fixture did not finish"
+        assert "server_error" not in received, received.get("server_error")
         assert result == response
         assert received["greeting"] == bytes((5, 1, 0))
         assert received["host"] == b"example.com"
