@@ -332,7 +332,7 @@ def test_socks_readiness_returns_false_when_listener_is_unavailable(monkeypatch,
 
 
 class FakeExchangeConnection:
-    def __init__(self, response=b"HTTP/1.1 200 OK\\r\\n\\r\\nhello"):
+    def __init__(self, response=b"HTTP/1.1 200 OK\r\n\r\nhello"):
         self.replies = [bytes((5, 0)), bytes((5, 0, 0, 1)), bytes((127, 0, 0, 1, 0x1F, 0x90))]
         self.response = response
         self.sent = []
@@ -360,10 +360,10 @@ def test_socks_exchange_sends_payload_and_reads_response_to_eof(monkeypatch, fil
     monkeypatch.setattr(socket, "create_connection", lambda *a, **k: connection)
 
     result = XrayProcessRunner("xray.exe", config).socks_exchange(
-        "example.com", 80, b"GET / HTTP/1.0\\r\\nHost: example.com\\r\\n\\r\\n"
+        "example.com", 80, b"GET / HTTP/1.0\r\nHost: example.com\r\n\r\n"
     )
 
-    assert result == b"HTTP/1.1 200 OK\\r\\n\\r\\nhello"
+    assert result == b"HTTP/1.1 200 OK\r\n\r\nhello"
     assert connection.sent[0] == bytes((5, 1, 0))
     assert connection.sent[1] == bytes((5, 1, 0, 3, 11)) + b"example.com" + (80).to_bytes(2, "big")
     assert connection.sent[2].startswith(b"GET / HTTP/1.0")
@@ -422,7 +422,7 @@ def test_socks_exchange_localhost_integration_round_trip(files):
         "outbounds": [],
     }), encoding="utf-8")
     received = {}
-    response = b"HTTP/1.1 200 OK\\r\\nContent-Length: 5\\r\\n\\r\\nhello"
+    response = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello"
 
     def read_exact(connection, count):
         data = bytearray()
@@ -438,8 +438,8 @@ def test_socks_exchange_localhost_integration_round_trip(files):
             connection, _ = listener.accept()
             with connection:
                 received["greeting"] = read_exact(connection, 3)
-                connection.sendall(b"\\x05")
-                connection.sendall(b"\\x00")
+                connection.sendall(b"\x05")
+                connection.sendall(b"\x00")
                 header = read_exact(connection, 5)
                 assert header == bytes((5, 1, 0, 3, 11))
                 received["host"] = read_exact(connection, 11)
@@ -460,7 +460,7 @@ def test_socks_exchange_localhost_integration_round_trip(files):
     worker.start()
     try:
         result = XrayProcessRunner(executable, config).socks_exchange(
-            "example.com", 80, b"GET / HTTP/1.0\\r\\nHost: example.com\\r\\n\\r\\n",
+            "example.com", 80, b"GET / HTTP/1.0\r\nHost: example.com\r\n\r\n",
             timeout=2.0, max_response_bytes=1024,
         )
         worker.join(timeout=3)
