@@ -28,6 +28,7 @@ def test_job_object_contains_child_and_grandchild_after_root_exits(tmp_path):
         "kernel32=ctypes.WinDLL('kernel32'); "
         "kernel32.GetCurrentProcess.restype=ctypes.c_void_p; "
         "kernel32.IsProcessInJob.restype=ctypes.c_int; "
+        "kernel32.IsProcessInJob.argtypes=[ctypes.c_void_p,ctypes.c_void_p,ctypes.POINTER(ctypes.c_int)]; "
         "membership=ctypes.c_int(); "
         "assert kernel32.IsProcessInJob(kernel32.GetCurrentProcess(),None,ctypes.byref(membership)); "
         "assert membership.value == 1; "
@@ -95,9 +96,17 @@ def test_closing_final_job_handle_terminates_descendant_tree(tmp_path):
     child_handle = None
     try:
         deadline = time.monotonic() + 5
-        while not child_pid_file.exists() and time.monotonic() < deadline:
+        while (
+            (
+                not child_pid_file.exists()
+                or child_pid_file.stat().st_size == 0
+            )
+            and time.monotonic() < deadline
+        ):
             time.sleep(0.02)
-        assert child_pid_file.exists(), "helper did not create its child process"
+        assert child_pid_file.exists() and child_pid_file.stat().st_size > 0, (
+            "helper did not write its child process ID"
+        )
         child_pid = int(child_pid_file.read_text(encoding="ascii"))
 
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
