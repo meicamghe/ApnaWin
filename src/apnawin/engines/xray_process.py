@@ -128,7 +128,7 @@ class XrayProcessRunner:
             ) as connection:
                 connection.settimeout(timeout)
                 connection.sendall(bytes((5, 1, 0)))
-                return connection.recv(2) == bytes((5, 0))
+                return self._recv_exact(connection, 2) == bytes((5, 0))
         except OSError:
             return False
 
