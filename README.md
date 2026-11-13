@@ -4,9 +4,15 @@ A native Windows 10/11 desktop client project inspired by the workflow of APNA T
 
 ## Current status
 
-**Milestone M0 is committed:** repository structure, Python packaging, a minimal PySide6 desktop shell, an initial test, and architecture/APK-analysis notes.
+**Milestone M2 is in progress.** The repository includes:
+- A native PySide6 desktop application.
+- Add, edit, select and remove connection profiles.
+- Local JSON persistence for non-secret profile metadata.
+- A transport-neutral profile model and tunnel-engine contract.
+- A test-only mock engine that does not touch the network.
+- Windows GitHub Actions tests.
 
-The Connect button is intentionally disabled. No working tunnel engine, server compatibility, or release installer is claimed yet.
+The Connect button is intentionally disabled. No working tunnel engine, APNA TUNNEL server compatibility, or release installer is claimed yet.
 
 ## Run from source
 
@@ -26,12 +32,26 @@ Run tests:
 python -m pytest
 ```
 
+## Profile storage
+
+Profiles are saved under the current user's application-data directory in `profiles.json`. The current schema stores only:
+- Profile name
+- Transport selection (Xray, OpenVPN or SOCKS)
+- Server host
+- Server port
+
+It does not store passwords, access tokens, private keys or other credentials. Do not place secrets in profile names or endpoint fields.
+
 ## Project structure
 
 - `src/apnawin/` — application package and desktop entry point
-- `tests/` — automated tests
+- `src/apnawin/domain/` — transport-neutral domain models
+- `src/apnawin/engines/` — tunnel-engine contract and test-only mock
+- `src/apnawin/storage/` — profile persistence
+- `tests/` — automated tests, including desktop profile workflow checks
 - `docs/architecture.md` — architecture, milestones and security boundaries
 - `docs/apk-analysis.md` — preliminary APK observations and reproducible verification checklist
+- `docs/engine-contract.md` — requirements for production tunnel adapters
 
 ## Important compatibility note
 
