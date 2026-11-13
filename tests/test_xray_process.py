@@ -686,3 +686,40 @@ def test_windows_stop_falls_back_when_taskkill_is_unavailable(monkeypatch, files
     assert commands == [["taskkill", "/PID", "4322", "/T", "/F"]]
     assert process.killed
     assert runner._process is None
+
+
+def test_windows_stop_falls_back_when_taskkill_returns_failure(monkeypatch, files):
+    import apnawin.engines.xray_process as xray_module
+
+    executable, config, _ = files
+
+    class TreeProcess(FakeProcess):
+        pid = 4323
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout=None):
+            if not self.killed:
+                raise subprocess.TimeoutExpired("xray", timeout)
+            self.returncode = -9
+            return self.returncode
+
+    process = TreeProcess()
+    commands = []
+
+    def rejected(command, **kwargs):
+        commands.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 1, b"", b"access denied")
+
+    monkeypatch.setattr(xray_module.os, "name", "nt")
+    monkeypatch.setattr(subprocess, "run", rejected)
+    runner = XrayProcessRunner(executable, config, stop_timeout=0.1)
+    runner._process = process
+
+    runner.stop()
+
+    assert commands[0][0] == ["taskkill", "/PID", "4323", "/T", "/F"]
+    assert commands[0][1]["shell"] is False
+    assert process.killed
+    assert runner._process is None
