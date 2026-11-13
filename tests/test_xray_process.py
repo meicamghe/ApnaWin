@@ -1,11 +1,17 @@
 import json
+import socket
 import subprocess
 from pathlib import Path
 
 import pytest
 
 from apnawin.domain.profile import ConnectionProfile, Transport
-from apnawin.engines.xray_process import XrayProcessError, XrayProcessRunner
+from apnawin.engines.xray_process import (
+    LocalSocksInbound,
+    XrayProcessError,
+    XrayProcessRunner,
+    inspect_local_socks_inbound,
+)
 
 
 @pytest.fixture
@@ -13,7 +19,13 @@ def files(tmp_path):
     executable = tmp_path / "xray.exe"
     executable.write_bytes(b"test executable placeholder")
     config = tmp_path / "config.json"
-    config.write_text(json.dumps({"inbounds": [], "outbounds": []}), encoding="utf-8")
+    config.write_text(
+        json.dumps({
+            "inbounds": [{"listen": "127.0.0.1", "port": 10808, "protocol": "socks"}],
+            "outbounds": [],
+        }),
+        encoding="utf-8",
+    )
     profile = ConnectionProfile("Test Xray", Transport.XRAY, "127.0.0.1", 443)
     return executable, config, profile
 
@@ -132,3 +144,60 @@ def test_missing_executable_is_reported(tmp_path):
 
     with pytest.raises(FileNotFoundError, match="executable"):
         XrayProcessRunner(tmp_path / "missing.exe", config).validate(profile)
+
+
+def test_inspect_local_socks_inbound(files):
+    _, config, _ = files
+    runner = XrayProcessRunner("xray.exe", config)
+    assert runner.local_socks_inbound() == LocalSocksInbound("127.0.0.1", 10808)
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "::", "192.0.2.10"])
+def test_inspect_rejects_non_loopback_socks_bind(host):
+    config = {"inbounds": [{"listen": host, "port": 10808, "protocol": "socks"}]}
+    with pytest.raises(ValueError, match="loopback"):
+        inspect_local_socks_inbound(config)
+
+
+@pytest.mark.parametrize("port", [0, 65536, True, "1080", None])
+def test_inspect_rejects_invalid_socks_port(port):
+    config = {"inbounds": [{"listen": "127.0.0.1", "port": port, "protocol": "socks"}]}
+    with pytest.raises(ValueError, match="port"):
+        inspect_local_socks_inbound(config)
+
+
+def test_inspect_requires_exactly_one_socks_inbound():
+    with pytest.raises(ValueError, match="exactly one"):
+        inspect_local_socks_inbound({"inbounds": []})
+
+
+def test_socks_readiness_checks_configured_listener(monkeypatch, files):
+    _, config, _ = files
+    observed = []
+
+    class FakeConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def fake_create_connection(address, timeout):
+        observed.append((address, timeout))
+        return FakeConnection()
+
+    monkeypatch.setattr(socket, "create_connection", fake_create_connection)
+    runner = XrayProcessRunner("xray.exe", config)
+
+    assert runner.is_socks_ready(connect_timeout=0.2)
+    assert observed == [(("127.0.0.1", 10808), 0.2)]
+
+
+def test_socks_readiness_returns_false_when_listener_is_unavailable(monkeypatch, files):
+    _, config, _ = files
+
+    def unavailable(*args, **kwargs):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(socket, "create_connection", unavailable)
+    assert not XrayProcessRunner("xray.exe", config).is_socks_ready()
