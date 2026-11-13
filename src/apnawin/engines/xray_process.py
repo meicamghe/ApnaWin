@@ -114,6 +114,23 @@ class XrayProcessRunner:
         except OSError:
             return False
 
+    def is_socks_protocol_ready(self, *, timeout: float = 1.0) -> bool:
+        """Negotiate SOCKS5 no-auth on localhost; does not test remote traffic.
+
+        Credentials are deliberately not read or sent by this diagnostic.
+        A listener requiring username/password therefore returns False.
+        """
+        inbound = self.local_socks_inbound()
+        try:
+            with socket.create_connection(
+                (inbound.host, inbound.port), timeout=timeout
+            ) as connection:
+                connection.settimeout(timeout)
+                connection.sendall(bytes((5, 1, 0)))
+                return connection.recv(2) == bytes((5, 0))
+        except OSError:
+            return False
+
     def validate(self, profile: ConnectionProfile) -> None:
         """Run Xray's config test; this does not establish network connectivity."""
         self._validate_inputs(profile)
