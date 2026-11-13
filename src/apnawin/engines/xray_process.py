@@ -6,6 +6,7 @@ can check whether an explicitly configured localhost SOCKS inbound is listening.
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import socket
@@ -128,6 +129,72 @@ class XrayProcessRunner:
                 connection.settimeout(timeout)
                 connection.sendall(bytes((5, 1, 0)))
                 return connection.recv(2) == bytes((5, 0))
+        except OSError:
+            return False
+
+    @staticmethod
+    def _recv_exact(connection: socket.socket, size: int) -> bytes:
+        """Read exactly size bytes or fail on a truncated SOCKS response."""
+        chunks = bytearray()
+        while len(chunks) < size:
+            chunk = connection.recv(size - len(chunks))
+            if not chunk:
+                raise OSError("truncated SOCKS5 response")
+            chunks.extend(chunk)
+        return bytes(chunks)
+
+    def socks_connect(self, destination_host: str, destination_port: int, *, timeout: float = 3.0) -> bool:
+        """Ask the local SOCKS5 proxy to CONNECT to an explicit destination.
+
+        This performs a real outbound connection attempt through the proxy.
+        Callers must supply a destination they are authorized to test. No
+        credentials are sent; only SOCKS5 no-authentication is supported.
+        True means the proxy replied SOCKS5 success, not that application
+        data was exchanged or that the full VPN routing configuration works.
+        """
+        if not isinstance(destination_host, str) or not destination_host.strip():
+            raise ValueError("destination_host must be a non-empty hostname or IP address")
+        if isinstance(destination_port, bool) or not isinstance(destination_port, int) or not 1 <= destination_port <= 65535:
+            raise ValueError("destination_port must be an integer from 1 to 65535")
+        host = destination_host.strip()
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            try:
+                encoded_host = host.encode("idna")
+            except UnicodeError as exc:
+                raise ValueError("destination_host is not a valid IDNA hostname") from exc
+            if not encoded_host or len(encoded_host) > 255:
+                raise ValueError("destination hostname must be 1 to 255 encoded bytes")
+            destination = bytes((3, len(encoded_host))) + encoded_host
+        else:
+            if address.version == 4:
+                destination = bytes((1,)) + address.packed
+            else:
+                destination = bytes((4,)) + address.packed
+        request = bytes((5, 1, 0)) + destination + destination_port.to_bytes(2, "big")
+        inbound = self.local_socks_inbound()
+        try:
+            with socket.create_connection((inbound.host, inbound.port), timeout=timeout) as connection:
+                connection.settimeout(timeout)
+                connection.sendall(bytes((5, 1, 0)))
+                if self._recv_exact(connection, 2) != bytes((5, 0)):
+                    return False
+                connection.sendall(request)
+                header = self._recv_exact(connection, 4)
+                version, reply, reserved, address_type = header
+                if version != 5 or reserved != 0:
+                    return False
+                if address_type == 1:
+                    address_length = 4
+                elif address_type == 4:
+                    address_length = 16
+                elif address_type == 3:
+                    address_length = self._recv_exact(connection, 1)[0]
+                else:
+                    return False
+                self._recv_exact(connection, address_length + 2)
+                return reply == 0
         except OSError:
             return False
 
