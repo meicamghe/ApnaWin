@@ -67,13 +67,18 @@ def load_profiles(path: str | Path) -> list[ConnectionProfile]:
         if not isinstance(record, dict) or set(record) != _REQUIRED_KEYS:
             raise ValueError(f"Profile at index {index} has an invalid schema")
         try:
-            transport = Transport(record["transport"])
+            if not isinstance(record["name"], str):
+                raise ValueError("name must be a string")
+            if not isinstance(record["endpoint_host"], str):
+                raise ValueError("endpoint_host must be a string")
+            if not isinstance(record["transport"], str):
+                raise ValueError("transport must be a string")
             port = record["endpoint_port"]
             if isinstance(port, bool) or not isinstance(port, int):
                 raise ValueError("endpoint_port must be an integer")
             profile = ConnectionProfile(
                 name=record["name"],
-                transport=transport,
+                transport=Transport(record["transport"]),
                 endpoint_host=record["endpoint_host"],
                 endpoint_port=port,
             )
