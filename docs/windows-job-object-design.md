@@ -2,17 +2,17 @@
 
 ## Decision and implementation status
 
-The Windows Xray runner now launches through a Windows Job Object configured
+The Windows Xray runner launches through a Windows Job Object configured
 with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. The implementation lives in
 `src/apnawin/engines/windows_job.py` and is imported safely on non-Windows
 systems. Windows launch uses `CreateProcessW` with
 `PROC_THREAD_ATTRIBUTE_JOB_LIST`, so assignment happens before the initial
 thread executes. There is no uncontained `Popen` fallback on Windows.
 
-This is an initial implementation, not yet a fully verified production
-milestone. Windows CI must validate the Win32 structures and actual lifecycle;
-the child/grandchild integration tests and failure-injection coverage remain
-required before relying on this as complete containment.
+The implementation and its current Windows CI verification are complete for
+the M2b process-containment scope. This does not make Xray a complete VPN
+engine and does not satisfy the later TUN, route, DNS, privilege, rollback,
+or authorized-server acceptance requirements.
 
 ## Creation-time assignment
 
@@ -27,8 +27,8 @@ required before relying on this as complete containment.
 4. Call `CreateProcessW` with `EXTENDED_STARTUPINFO_PRESENT`, explicit
    application path and a Windows-quoted mutable command line. No shell is
    used. Job membership is established before the initial thread executes.
-5. Close the thread handle and retain the process and job handles in
-   `WindowsJobProcess`.
+5. Retain process and job handles in `WindowsJobProcess`. If closing the
+   initial thread handle fails, retain it so a later `close()` can retry.
 6. On launch failure, terminate/wait for any created process and close owned
    handles. A failed contained launch is reported as an error; it never falls
    back to an uncontained Windows process.
@@ -61,46 +61,46 @@ The legacy taskkill path remains only for the pre-existing generic process
 fallback/test-double path; production Windows launches use the Job Object
 controller.
 
-## Verification completed and remaining work
+## Verification completed
 
 The Windows-only integration suite in
-`tests/test_windows_job_integration.py` now launches real Python helper
-processes under the Job Object. It verifies that a root process can exit while
-its child and grandchild remain contained, that `poll()` continues to report
-the process tree as active, that stop escalation drains the active-process
-count to zero, and that closing the final job handle activates
-`KILL_ON_JOB_CLOSE`. These integration tests passed in Windows CI run #75.
+`tests/test_windows_job_integration.py` launches real Python helper
+processes under the Job Object. It verifies that:
 
-Additional failure-path and creation-time tests have now been added:
+- The root process is already a member of the Job Object at its first Python
+  user-code entry, before it spawns descendants.
+- A root process can exit while its child and grandchild remain contained.
+- `poll()` continues to report the process tree as active while descendants
+  remain, and stop escalation drains the active-process count to zero.
+- Closing the final job handle activates `KILL_ON_JOB_CLOSE` and terminates
+  the descendant tree.
 
-- A termination-failure test verifies that a failed root termination is
-  surfaced while both owned handles remain.
-- An active-process-query failure test verifies that query errors are surfaced
-  without losing handle ownership.
-- A job-handle-close failure test verifies that the failed handle is retained
-  and a later close can retry successfully.
-- The initial thread handle is now retained by the controller if its first
-  CloseHandle call fails; close() retries it before releasing the Job Object.
-  A focused test covers this ownership and retry path.
-- The Windows child/grandchild integration test now calls IsProcessInJob at
-  the root process's first Python user-code entry and asserts membership. This
-  checks creation-time containment before the root starts spawning descendants.
+Failure-injection tests cover launch initialization failures, root termination
+failure, active-process query failure, process/thread/job handle-close
+ownership, and retry after a failed handle close. Failed operations surface as
+errors without silently dropping the controller's retained handle references.
 
-All of the above tests passed in Windows CI run #89 (116 tests total).
-Remaining work before calling M2b complete:
+**Latest verified CI:** Windows workflow run
+[#91](https://github.com/meicamghe/ApnaWin/actions/runs/43511327269)
+completed successfully on `main` at commit
+`c648f2bcbcbf427a3a60b1cdc90caac5a8a2096e`. Both the full Windows test job
+and the Windows build job succeeded. The build job completed PyInstaller
+packaging, ran `ApnaWin.exe --smoke-test`, and uploaded the
+`ApnaWin-Windows-x64` portable-folder artifact (about 50.6 MB). This verifies
+the packaged GUI startup path, not VPN connectivity or system-wide routing.
 
-1. Verify all newly added failure-injection and first-entry membership tests
-   pass on the hosted Windows runner.
-2. Extend failure injection to launch cleanup after partial process creation
-   and any remaining Win32 cleanup edge cases; keep failed ownership
-   operations fail-closed.
-3. Keep exercising launch under the hosted Windows runner; incompatible outer
-   job constraints must remain fail-closed.
-4. Confirm the latest complete Windows PyInstaller build, packaged-app smoke
-   test, and artifact upload; inspect their CI results.
+## Remaining boundaries
 
-Connect remains disabled. Process containment alone does not implement TUN,
-routes, DNS, rollback, privilege management, or a working VPN.
+- Exercise the launcher on clean Windows 10/11 machines and under supported
+  endpoint-security/host Job Object policies; incompatible outer-job
+  constraints must remain fail-closed.
+- Add further failure injection if new Win32 cleanup paths are introduced.
+- M3 still requires an authorized test-server configuration and a separately
+  verified end-to-end engine path.
+- TUN, routes, DNS, elevation/service integration, rollback, and disconnect
+  cleanup remain out of scope for this process-containment milestone.
+
+Connect remains disabled. Process containment alone does not implement a VPN.
 
 ## References
 
