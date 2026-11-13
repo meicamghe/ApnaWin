@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from apnawin.domain.profile import ConnectionProfile, Transport
+from apnawin.engines import xray_process as xray_module
 from apnawin.engines.xray_process import (
     LocalSocksInbound,
     XrayProcessError,
@@ -110,6 +111,7 @@ def test_start_and_stop_process(monkeypatch, files):
         lambda command, **kwargs: subprocess.CompletedProcess(command, 0, b"", b""),
     )
     monkeypatch.setattr(subprocess, "Popen", lambda command, **kwargs: process)
+    monkeypatch.setattr(xray_module.WindowsJobProcess, "launch", lambda *args: process)
     runner = XrayProcessRunner(executable, config)
 
     runner.start(profile)
@@ -132,6 +134,7 @@ def test_start_rejects_process_that_exits_immediately(monkeypatch, files):
         lambda command, **kwargs: subprocess.CompletedProcess(command, 0, b"", b""),
     )
     monkeypatch.setattr(subprocess, "Popen", lambda command, **kwargs: process)
+    monkeypatch.setattr(xray_module.WindowsJobProcess, "launch", lambda *args: process)
 
     with pytest.raises(XrayProcessError, match="exited during startup"):
         XrayProcessRunner(executable, config).start(profile)
