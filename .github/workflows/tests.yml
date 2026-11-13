@@ -1,4 +1,4 @@
-name: Windows tests
+name: Windows tests and build
 
 on:
   push:
@@ -21,3 +21,26 @@ jobs:
         run: python -m pip install -e ".[dev]"
       - name: Run unit tests
         run: python -m pytest -q
+
+  build-windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install project and build dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Build Windows desktop application
+        run: python -m PyInstaller --noconfirm --clean --windowed --name ApnaWin --paths src src/apnawin/__main__.py
+      - name: Upload portable application folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: ApnaWin-Windows-x64
+          path: dist/ApnaWin/
+          if-no-files-found: error
+          retention-days: 14
