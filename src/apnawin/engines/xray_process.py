@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import math
 import os
 import socket
 import subprocess
@@ -156,6 +157,8 @@ class XrayProcessRunner:
             raise ValueError("destination_host must be a non-empty hostname or IP address")
         if isinstance(destination_port, bool) or not isinstance(destination_port, int) or not 1 <= destination_port <= 65535:
             raise ValueError("destination_port must be an integer from 1 to 65535")
+        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not math.isfinite(timeout) or timeout <= 0:
+            raise ValueError("timeout must be a finite positive number")
         host = destination_host.strip()
         try:
             address = ipaddress.ip_address(host)
@@ -218,8 +221,8 @@ class XrayProcessRunner:
             raise TypeError("payload must be bytes")
         if isinstance(max_response_bytes, bool) or not isinstance(max_response_bytes, int) or max_response_bytes < 1:
             raise ValueError("max_response_bytes must be a positive integer")
-        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
-            raise ValueError("timeout must be a positive number")
+        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not math.isfinite(timeout) or timeout <= 0:
+            raise ValueError("timeout must be a finite positive number")
         if not isinstance(destination_host, str) or not destination_host.strip():
             raise ValueError("destination_host must be a non-empty hostname or IP address")
         if isinstance(destination_port, bool) or not isinstance(destination_port, int) or not 1 <= destination_port <= 65535:
