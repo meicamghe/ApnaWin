@@ -156,7 +156,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Could not load profiles",
-                f"Profiles were not loaded. The file was left unchanged.\n\n{exc}",
+                f"Profiles were not loaded. The file was left unchanged.\\n\\n{exc}",
             )
             self.profiles = []
         self._refresh_profiles()
@@ -244,9 +244,16 @@ class MainWindow(QMainWindow):
 
 
 def main() -> int:
-    app = QApplication(sys.argv)
+    """Start the GUI; --smoke-test initializes and closes it for CI packaging checks."""
+    smoke_test = "--smoke-test" in sys.argv
+    qt_args = [argument for argument in sys.argv if argument != "--smoke-test"]
+    app = QApplication(qt_args)
     app.setOrganizationName("ApnaWin")
     app.setApplicationName("ApnaWin")
     window = MainWindow()
     window.show()
+    if smoke_test:
+        app.processEvents()
+        window.close()
+        return 0
     return app.exec()
