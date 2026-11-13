@@ -106,3 +106,21 @@ def test_profile_store_rejects_wrong_field_types(tmp_path):
     with pytest.raises(ValueError, match="name must be a string"):
         load_profiles(path)
 
+
+
+def test_profile_store_preserves_previous_file_when_atomic_replace_fails(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    path = tmp_path / "profiles.json"
+    path.write_text("previous contents", encoding="utf-8")
+
+    def fail_replace(_self, _target):
+        raise OSError("simulated replace failure")
+
+    monkeypatch.setattr(Path, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="simulated replace failure"):
+        save_profiles(path, sample_profiles())
+
+    assert path.read_text(encoding="utf-8") == "previous contents"
+    assert not path.with_name(path.name + ".tmp").exists()
