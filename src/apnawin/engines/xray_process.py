@@ -101,7 +101,11 @@ class XrayProcessRunner:
             raise FileNotFoundError(f"Xray executable not found: {self.executable}")
         if not self.config_path.is_file():
             raise FileNotFoundError(f"Xray config not found: {self.config_path}")
-        self._read_config()
+        config = self._read_config()
+        # The runner exposes this local proxy to the desktop client. Refuse
+        # wildcard/non-loopback binds before either validation or launch so a
+        # malformed profile cannot accidentally publish an unauthenticated proxy.
+        inspect_local_socks_inbound(config)
 
     def local_socks_inbound(self) -> LocalSocksInbound:
         """Return the single explicitly configured loopback SOCKS endpoint."""
