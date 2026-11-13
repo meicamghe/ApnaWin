@@ -366,10 +366,11 @@ class XrayProcessRunner:
             try:
                 process.wait(timeout=self.stop_timeout)
             except subprocess.TimeoutExpired:
-                if os.name == "nt":
+                if os.name == "nt" and getattr(process, "pid", None) is not None:
                     # taskkill /T asks Windows to include descendants when the
                     # supervised process is still present. Fall back to Popen.kill
-                    # if taskkill is unavailable or cannot complete.
+                    # if taskkill is unavailable or cannot complete. Lightweight
+                    # process doubles without a PID use the direct kill fallback.
                     try:
                         tree_result = subprocess.run(
                             ["taskkill", "/PID", str(process.pid), "/T", "/F"],
