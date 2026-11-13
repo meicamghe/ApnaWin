@@ -177,6 +177,7 @@ class WindowsJobProcess:
         process_info = _PROCESS_INFORMATION()
         attribute_list = None
         attribute_buffer = None
+        attribute_list_initialized = False
         try:
             limits = _EXTENDED_LIMIT_INFORMATION()
             limits.BasicLimitInformation.LimitFlags = _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
@@ -194,6 +195,7 @@ class WindowsJobProcess:
                 attribute_list, 1, 0, ctypes.byref(size)
             ):
                 _raise_last_error("InitializeProcThreadAttributeList")
+            attribute_list_initialized = True
 
             job_array = (wintypes.HANDLE * 1)(job)
             if not k.UpdateProcThreadAttribute(
@@ -226,7 +228,7 @@ class WindowsJobProcess:
             k.CloseHandle(job)
             raise
         finally:
-            if attribute_list:
+            if attribute_list_initialized:
                 k.DeleteProcThreadAttributeList(attribute_list)
         k.CloseHandle(process_info.hThread)
         return cls(api, process_info.hProcess, job, int(process_info.dwProcessId))
