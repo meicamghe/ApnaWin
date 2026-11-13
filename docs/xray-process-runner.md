@@ -30,6 +30,8 @@ The current profile's host and port do not specify protocol, security, flow, cre
 
 `socks_connect(destination_host, destination_port)` sends a SOCKS5 CONNECT request for the explicit destination supplied by the caller. It supports domain names, IPv4 and IPv6 literals, validates the destination port, parses the proxy's reply and returns true only for SOCKS5 success. It does not send credentials, so authenticated-only inbounds are unsupported by this probe. Use only a destination you are authorized to test. A successful CONNECT reply confirms that the proxy reports a connection to that destination; it does not exchange application payload or prove Windows system-wide routing.
 
+`socks_exchange(destination_host, destination_port, payload, max_response_bytes=65536)` builds on the same no-auth SOCKS5 CONNECT flow, sends caller-supplied bytes, half-closes the write side and reads the response until EOF. It returns the response bytes on clean EOF, `None` for socket/proxy failures, and raises `ValueError` if the response exceeds the configured positive byte limit. Payload must be `bytes`; the caller is responsible for protocol framing, request safety and authorization of the destination. Use a short timeout and a conservative response limit. This is an application-level proxy data-exchange probe only: it does not validate a particular protocol beyond the bytes returned, prove APNA TUNNEL compatibility, or establish Windows system-wide routing. Tests use fake sockets and do not contact public endpoints.
+
 ## Safety behavior
 
 - Uses argument arrays and `shell=False`.
@@ -42,7 +44,7 @@ The current profile's host and port do not specify protocol, security, flow, cre
 ## Next acceptance steps
 
 1. Test with an authorized Xray config and a pinned Windows binary on a Windows 10/11 test machine.
-2. Exchange a small application-level request through an authorized test endpoint and verify its response.
+2. Use `socks_exchange` with a small, bounded request against an authorized test endpoint and verify the returned application response.
 3. Separately design and test TUN, DNS, route rollback and privilege boundaries.
 4. Only then implement a real `TunnelEngine` adapter and enable the Connect button.
 
