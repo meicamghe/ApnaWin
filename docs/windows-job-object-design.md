@@ -71,19 +71,29 @@ the process tree as active, that stop escalation drains the active-process
 count to zero, and that closing the final job handle activates
 `KILL_ON_JOB_CLOSE`. These integration tests passed in Windows CI run #75.
 
-Still required before calling M2b complete:
+Additional failure-path and creation-time tests have now been added:
 
-1. Unit-test Win32 API call ordering, flags, structure sizes, handle ownership,
-   and cleanup for failures at every initialization/create/terminate/close
-   step.
-2. Add explicit verification that the root is assigned to the job before its
-   initial thread executes (the implementation uses the documented creation-
-   time attribute, but this invariant needs a focused test).
-3. Verify retained handles and retry behavior when termination or active-count
-   confirmation fails.
-4. Keep exercising launch under the hosted Windows runner; incompatible outer
+- A termination-failure test verifies that a failed root termination is
+  surfaced while both owned handles remain.
+- An active-process-query failure test verifies that query errors are surfaced
+  without losing handle ownership.
+- A job-handle-close failure test verifies that the failed handle is retained
+  and a later close can retry successfully.
+- The Windows child/grandchild integration test now calls IsProcessInJob at
+  the root process's first Python user-code entry and asserts membership. This
+  checks creation-time containment before the root starts spawning descendants.
+
+These new tests are pending Windows CI validation. Remaining work before
+calling M2b complete:
+
+1. Verify all newly added failure-injection and first-entry membership tests
+   pass on the hosted Windows runner.
+2. Extend failure injection to launch cleanup after partial process creation
+   and any remaining Win32 cleanup edge cases; keep failed ownership
+   operations fail-closed.
+3. Keep exercising launch under the hosted Windows runner; incompatible outer
    job constraints must remain fail-closed.
-5. Confirm the latest complete Windows test, PyInstaller build, packaged-app
+4. Confirm the latest complete Windows test, PyInstaller build, packaged-app
    smoke test, and artifact upload; inspect their CI results.
 
 Connect remains disabled. Process containment alone does not implement TUN,
