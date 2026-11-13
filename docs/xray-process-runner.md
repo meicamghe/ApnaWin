@@ -18,6 +18,8 @@ The caller supplies:
 - A complete UTF-8 JSON Xray configuration file.
 - A profile whose transport is `xray`.
 
+Before config validation or process launch, the runner requires exactly one SOCKS inbound bound explicitly to loopback (`127.0.0.1`, `::1`, or `localhost`). Wildcard, non-loopback, missing, or ambiguous SOCKS inbounds are rejected before Xray is executed. This prevents the desktop client from inadvertently starting an unauthenticated proxy reachable from the LAN. Configurations intended for a different inbound topology need a separately designed policy rather than bypassing this check.
+
 The current profile's host and port do not specify protocol, security, flow, credentials, UUID, TLS/Reality parameters, transport settings or routing. Therefore the runner intentionally does not synthesize a config from those two fields.
 
 ## Local SOCKS diagnostics
@@ -36,7 +38,7 @@ The current profile's host and port do not specify protocol, security, flow, cre
 
 - Uses argument arrays and `shell=False`.
 - Does not capture or expose raw Xray output, which could contain server details.
-- Validates the config before launch.
+- Validates the config before launch and rejects missing, duplicate, wildcard or non-loopback SOCKS inbounds before executing Xray.
 - Refuses duplicate starts.
 - Validates finite positive validation and stop timeouts at construction.
 - Stops the process and escalates after the configured timeout. On Windows, the forced-stop path first attempts `taskkill /T /F` for the supervised PID so Windows can include descendants. If `taskkill` is unavailable, times out, or returns a non-zero exit code, it falls back to the direct `Popen.kill()` handle. The process handle is cleared only after exit is confirmed; termination, kill or wait failures raise `XrayProcessError` and retain the handle when the child may still be alive. A successful `taskkill` exit code is followed by a wait on the supervised process, but does not independently prove that every descendant has exited.
