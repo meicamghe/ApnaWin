@@ -1,13 +1,16 @@
 """Safe process supervision for a separately installed Xray executable.
 
 This module deliberately does not claim that a running Xray process means a
-working tunnel. It only validates a supplied config and supervises the process.
+working tunnel. It validates a supplied config, supervises the process, and
+can check whether an explicitly configured localhost SOCKS inbound is listening.
 """
 from __future__ import annotations
 
 import json
 import os
+import socket
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 from apnawin.domain.profile import ConnectionProfile, Transport
@@ -15,6 +18,39 @@ from apnawin.domain.profile import ConnectionProfile, Transport
 
 class XrayProcessError(RuntimeError):
     """Raised when Xray cannot be validated or supervised."""
+
+
+@dataclass(frozen=True, slots=True)
+class LocalSocksInbound:
+    """An explicitly configured loopback-only SOCKS listener."""
+
+    host: str
+    port: int
+
+
+def inspect_local_socks_inbound(config: dict) -> LocalSocksInbound:
+    """Find exactly one explicit loopback SOCKS inbound; reject exposed binds."""
+    inbounds = config.get("inbounds")
+    if not isinstance(inbounds, list):
+        raise ValueError("Xray config must contain an inbounds list")
+
+    candidates: list[LocalSocksInbound] = []
+    for inbound in inbounds:
+        if not isinstance(inbound, dict) or inbound.get("protocol") != "socks":
+            continue
+        host = inbound.get("listen")
+        port = inbound.get("port")
+        if not isinstance(host, str) or not host.strip():
+            raise ValueError("SOCKS inbound must specify an explicit loopback listen address")
+        if host not in {"127.0.0.1", "::1", "localhost"}:
+            raise ValueError("SOCKS inbound must listen only on loopback")
+        if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+            raise ValueError("SOCKS inbound port must be an integer from 1 to 65535")
+        candidates.append(LocalSocksInbound(host, port))
+
+    if len(candidates) != 1:
+        raise ValueError("Xray config must define exactly one local SOCKS inbound")
+    return candidates[0]
 
 
 class XrayProcessRunner:
@@ -43,6 +79,15 @@ class XrayProcessRunner:
     def is_running(self) -> bool:
         return self._process is not None and self._process.poll() is None
 
+    def _read_config(self) -> dict:
+        try:
+            config = json.loads(self.config_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise ValueError("Xray config must be readable UTF-8 JSON") from exc
+        if not isinstance(config, dict):
+            raise ValueError("Xray config root must be a JSON object")
+        return config
+
     def _validate_inputs(self, profile: ConnectionProfile) -> None:
         if not isinstance(profile, ConnectionProfile):
             raise TypeError("profile must be a ConnectionProfile")
@@ -52,12 +97,22 @@ class XrayProcessRunner:
             raise FileNotFoundError(f"Xray executable not found: {self.executable}")
         if not self.config_path.is_file():
             raise FileNotFoundError(f"Xray config not found: {self.config_path}")
+        self._read_config()
+
+    def local_socks_inbound(self) -> LocalSocksInbound:
+        """Return the single explicitly configured loopback SOCKS endpoint."""
+        return inspect_local_socks_inbound(self._read_config())
+
+    def is_socks_ready(self, *, connect_timeout: float = 0.5) -> bool:
+        """Check local TCP listener availability, not remote tunnel health."""
+        inbound = self.local_socks_inbound()
         try:
-            config = json.loads(self.config_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-            raise ValueError("Xray config must be readable UTF-8 JSON") from exc
-        if not isinstance(config, dict):
-            raise ValueError("Xray config root must be a JSON object")
+            with socket.create_connection(
+                (inbound.host, inbound.port), timeout=connect_timeout
+            ):
+                return True
+        except OSError:
+            return False
 
     def validate(self, profile: ConnectionProfile) -> None:
         """Run Xray's config test; this does not establish network connectivity."""
@@ -84,7 +139,6 @@ class XrayProcessRunner:
         except OSError as exc:
             raise XrayProcessError("Could not execute Xray config validation") from exc
         if result.returncode != 0:
-            # Do not include raw engine output: it may contain server details.
             raise XrayProcessError(
                 f"Xray rejected the configuration (exit code {result.returncode})"
             )
@@ -100,12 +154,7 @@ class XrayProcessRunner:
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
         try:
             process = subprocess.Popen(
-                [
-                    str(self.executable),
-                    "run",
-                    "-c",
-                    str(self.config_path),
-                ],
+                [str(self.executable), "run", "-c", str(self.config_path)],
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
