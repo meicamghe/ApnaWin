@@ -15,18 +15,27 @@ Build a native Windows 10/11 client that offers a clear desktop workflow for tun
 
 ## Proposed layers
 
-1. Presentation (ui/): PySide6 windows, profile selection, connect/disconnect controls, status and logs.
-2. Application (application/): orchestration, validation, lifecycle and user-facing state.
-3. Domain (domain/): transport-neutral profiles, connection states and capability declarations.
-4. Engines (engines/): adapters for independently licensed Windows-compatible engines, after protocol/config compatibility is established.
-5. Platform (platform/): Windows service integration, process management, firewall/DNS and TUN adapter lifecycle.
-6. Diagnostics (diagnostics/): redacted logs, environment checks and support bundles.
+1. Presentation: PySide6 desktop window and profile editor.
+2. Application: profile lifecycle, validation, persistence and, later, connection orchestration.
+3. Domain: transport-neutral profiles, connection states and capability declarations.
+4. Engines: adapters for independently licensed Windows-compatible engines, after protocol/config compatibility is established.
+5. Platform: Windows service integration, process management, firewall/DNS and TUN adapter lifecycle.
+6. Diagnostics: redacted logs, environment checks and support bundles.
 
-## Initial milestones
+## Current implementation
 
-- M0: repository skeleton, coding conventions and architecture record.
-- M1: inspect APK metadata/resources and document observable features and protocols.
-- M2: define profile schema and a mock connection engine; build UI without privileged networking.
+- Native PySide6 application shell.
+- Add, edit, select and remove connection profiles.
+- Profile metadata is stored as UTF-8 JSON under the current user's application-data directory.
+- The profile format stores only name, transport, endpoint host and port. It does not store credentials or private keys.
+- Profile loading validates the stored schema and rejects unsupported format versions.
+- Connect remains disabled: no real Windows tunnel engine is integrated.
+
+## Milestones
+
+- M0: repository skeleton, coding conventions and architecture record — complete.
+- M1: inspect APK metadata/resources and document observable features and protocols — preliminary; reproducible verification remains.
+- M2: define profile schema, persistence, mock engine contract and desktop profile workflow — in progress.
 - M3: integrate one Windows engine end-to-end using a test server and documented configuration.
 - M4: implement elevation/service and TUN adapter lifecycle with rollback and cleanup.
 - M5: package, sign where possible, test on clean Windows 10/11 VMs and publish releases.
@@ -35,6 +44,6 @@ Build a native Windows 10/11 client that offers a clear desktop workflow for tun
 
 The APK's Android native libraries cannot be assumed to run on Windows. Use Windows builds of suitable engines, after verifying their license, architecture, command-line interface, configuration format and redistribution terms. Do not copy proprietary application code, assets, keys, or backend credentials. Implement independently and lawfully compatible behavior.
 
-## Current status
+## Verification status
 
-This repository is at M0. No working tunnel engine or server compatibility is claimed yet. The APK findings in apk-analysis.md are preliminary observations that still require reproducible verification.
+The Windows GitHub Actions workflow runs the Python test suite on Windows. Passing unit tests do not establish VPN connectivity, server compatibility, privileged networking behavior, or successful packaging on a clean machine.
