@@ -28,6 +28,8 @@ The current profile's host and port do not specify protocol, security, flow, cre
 
 `is_socks_protocol_ready()` performs the SOCKS5 greeting for the no-authentication method (`05 01 00`) and accepts only the matching no-auth response (`05 00`). It does not send credentials; a listener that selects username/password authentication is reported as not ready. This verifies SOCKS5 protocol negotiation with the local listener, but still does not issue a SOCKS CONNECT request or prove remote traffic forwarding.
 
+`socks_connect(destination_host, destination_port)` sends a SOCKS5 CONNECT request for the explicit destination supplied by the caller. It supports domain names, IPv4 and IPv6 literals, validates the destination port, parses the proxy's reply and returns true only for SOCKS5 success. It does not send credentials, so authenticated-only inbounds are unsupported by this probe. Use only a destination you are authorized to test. A successful CONNECT reply confirms that the proxy reports a connection to that destination; it does not exchange application payload or prove Windows system-wide routing.
+
 ## Safety behavior
 
 - Uses argument arrays and `shell=False`.
@@ -40,7 +42,7 @@ The current profile's host and port do not specify protocol, security, flow, cre
 ## Next acceptance steps
 
 1. Test with an authorized Xray config and a pinned Windows binary on a Windows 10/11 test machine.
-2. Add a SOCKS CONNECT test and remote traffic verification to an authorized test endpoint.
+2. Exchange a small application-level request through an authorized test endpoint and verify its response.
 3. Separately design and test TUN, DNS, route rollback and privilege boundaries.
 4. Only then implement a real `TunnelEngine` adapter and enable the Connect button.
 
