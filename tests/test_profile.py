@@ -14,6 +14,47 @@ def test_invalid_port_is_rejected(port):
         ConnectionProfile("Office", Transport.SOCKS, "localhost", port)
 
 
+@pytest.mark.parametrize("port", [True, False, 1080.0, "1080"])
+def test_non_integer_port_is_rejected(port):
+    with pytest.raises(TypeError, match="integer"):
+        ConnectionProfile("Office", Transport.SOCKS, "localhost", port)
+
+
 def test_empty_host_is_rejected():
     with pytest.raises(ValueError):
         ConnectionProfile("Office", Transport.SOCKS, " ", 1080)
+
+
+@pytest.mark.parametrize("host", [None, 123, ["localhost"]])
+def test_non_string_host_is_rejected(host):
+    with pytest.raises(TypeError, match="host must be a string"):
+        ConnectionProfile("Office", Transport.SOCKS, host, 1080)
+
+
+@pytest.mark.parametrize("host", ["host name", "host\\nname", "host\\tname"])
+def test_host_whitespace_is_rejected(host):
+    with pytest.raises(ValueError, match="whitespace"):
+        ConnectionProfile("Office", Transport.SOCKS, host, 1080)
+
+
+@pytest.mark.parametrize("name", [None, 123, []])
+def test_non_string_name_is_rejected(name):
+    with pytest.raises(TypeError, match="name must be a string"):
+        ConnectionProfile(name, Transport.SOCKS, "localhost", 1080)
+
+
+def test_name_with_only_whitespace_is_rejected():
+    with pytest.raises(ValueError, match="cannot be empty"):
+        ConnectionProfile("   ", Transport.SOCKS, "localhost", 1080)
+
+
+def test_non_enum_transport_is_rejected():
+    with pytest.raises(TypeError, match="Transport"):
+        ConnectionProfile("Office", "socks", "localhost", 1080)
+
+
+def test_oversized_profile_fields_are_rejected():
+    with pytest.raises(ValueError, match="128"):
+        ConnectionProfile("x" * 129, Transport.SOCKS, "localhost", 1080)
+    with pytest.raises(ValueError, match="253"):
+        ConnectionProfile("Office", Transport.SOCKS, "a" * 254, 1080)
