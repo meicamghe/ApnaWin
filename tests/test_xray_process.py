@@ -193,6 +193,51 @@ def test_socks_readiness_checks_configured_listener(monkeypatch, files):
     assert observed == [(("127.0.0.1", 10808), 0.2)]
 
 
+@pytest.mark.parametrize("reply, expected", [(bytes((5, 0)), True), (bytes((5, 2)), False), (bytes((4, 0)), False), (b"", False)])
+def test_socks_protocol_probe_negotiates_no_auth(monkeypatch, files, reply, expected):
+    _, config, _ = files
+    observed = {}
+
+    class FakeConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def settimeout(self, value):
+            observed["timeout"] = value
+
+        def sendall(self, payload):
+            observed["payload"] = payload
+
+        def recv(self, size):
+            observed["size"] = size
+            return reply
+
+    def fake_create_connection(address, timeout):
+        observed["address"] = address
+        observed["connect_timeout"] = timeout
+        return FakeConnection()
+
+    monkeypatch.setattr(socket, "create_connection", fake_create_connection)
+    runner = XrayProcessRunner("xray.exe", config)
+    assert runner.is_socks_protocol_ready(timeout=0.7) is expected
+    assert observed["address"] == ("127.0.0.1", 10808)
+    assert observed["payload"] == bytes((5, 1, 0))
+    assert observed["size"] == 2
+    assert observed["timeout"] == 0.7
+
+
+def test_socks_protocol_probe_returns_false_on_socket_error(monkeypatch, files):
+    _, config, _ = files
+
+    def unavailable(*args, **kwargs):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(socket, "create_connection", unavailable)
+    assert not XrayProcessRunner("xray.exe", config).is_socks_protocol_ready()
+
 def test_socks_readiness_returns_false_when_listener_is_unavailable(monkeypatch, files):
     _, config, _ = files
 
