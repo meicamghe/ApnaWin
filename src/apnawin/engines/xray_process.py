@@ -9,7 +9,6 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from typing import Sequence
 
 from apnawin.domain.profile import ConnectionProfile, Transport
 
@@ -63,13 +62,13 @@ class XrayProcessRunner:
     def validate(self, profile: ConnectionProfile) -> None:
         """Run Xray's config test; this does not establish network connectivity."""
         self._validate_inputs(profile)
-        command: Sequence[str] = (
+        command = [
             str(self.executable),
             "run",
             "-test",
             "-c",
             str(self.config_path),
-        )
+        ]
         try:
             result = subprocess.run(
                 command,
