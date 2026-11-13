@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from apnawin.domain.profile import ConnectionProfile, Transport
+from apnawin.engines.windows_job import WindowsJobProcess, WindowsJobError
 
 
 class XrayProcessError(RuntimeError):
@@ -77,7 +78,7 @@ class XrayProcessRunner:
         self.config_path = Path(config_path).expanduser()
         self.validation_timeout = float(validation_timeout)
         self.stop_timeout = float(stop_timeout)
-        self._process: subprocess.Popen[bytes] | None = None
+        self._process: subprocess.Popen[bytes] | WindowsJobProcess | None = None
 
     @property
     def is_running(self) -> bool:
@@ -326,22 +327,31 @@ class XrayProcessRunner:
             raise XrayProcessError("Xray is already running")
         self._validate_inputs(profile)
         self.validate(profile)
-        creationflags = 0
-        if os.name == "nt":
-            creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
         try:
-            process = subprocess.Popen(
-                [str(self.executable), "run", "-c", str(self.config_path)],
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                shell=False,
-                creationflags=creationflags,
-            )
-        except OSError as exc:
-            raise XrayProcessError("Could not start Xray") from exc
+            if os.name == "nt":
+                # Creation-time JOB_LIST assignment prevents descendants from
+                # escaping between process creation and later job assignment.
+                process = WindowsJobProcess.launch(
+                    str(self.executable), ["run", "-c", str(self.config_path)]
+                )
+            else:
+                process = subprocess.Popen(
+                    [str(self.executable), "run", "-c", str(self.config_path)],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    shell=False,
+                )
+        except (OSError, WindowsJobError) as exc:
+            raise XrayProcessError("Could not start contained Xray process") from exc
         self._process = process
         if process.poll() is not None:
+            if isinstance(process, WindowsJobProcess):
+                try:
+                    process.kill()
+                    process.wait(timeout=self.stop_timeout)
+                finally:
+                    process.close()
             self._process = None
             raise XrayProcessError(
                 f"Xray exited during startup (exit code {process.returncode})"
@@ -355,6 +365,22 @@ class XrayProcessRunner:
         """
         process = self._process
         if process is None:
+            return
+        if isinstance(process, WindowsJobProcess):
+            try:
+                # Terminate the root first, then require the whole job to drain.
+                process.terminate()
+                try:
+                    process.wait(timeout=self.stop_timeout)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=self.stop_timeout)
+            except (OSError, WindowsJobError, subprocess.TimeoutExpired) as exc:
+                raise XrayProcessError(
+                    "Could not confirm that the Xray Job Object process tree stopped"
+                ) from exc
+            process.close()
+            self._process = None
             return
         if process.poll() is not None:
             self._process = None
