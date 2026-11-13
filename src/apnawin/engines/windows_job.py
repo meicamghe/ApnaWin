@@ -160,9 +160,12 @@ def _raise_last_error(operation: str) -> None:
 class WindowsJobProcess:
     """Popen-like controller owning a root process and its complete job tree."""
 
-    def __init__(self, api: _Win32, process_handle, job_handle, pid: int) -> None:
+    def __init__(
+        self, api: _Win32, process_handle, job_handle, pid: int, thread_handle=None
+    ) -> None:
         self._api = api
         self._process_handle = process_handle
+        self._thread_handle = thread_handle
         self._job_handle = job_handle
         self.pid = pid
         self.returncode: int | None = None
@@ -230,8 +233,15 @@ class WindowsJobProcess:
         finally:
             if attribute_list_initialized:
                 k.DeleteProcThreadAttributeList(attribute_list)
-        k.CloseHandle(process_info.hThread)
-        return cls(api, process_info.hProcess, job, int(process_info.dwProcessId))
+        # Keep ownership if closing the initial thread handle fails; callers
+        # can retry through close() instead of silently leaking the handle.
+        thread_handle = process_info.hThread
+        if k.CloseHandle(thread_handle):
+            thread_handle = None
+        return cls(
+            api, process_info.hProcess, job, int(process_info.dwProcessId),
+            thread_handle,
+        )
 
     def _root_exit_code(self) -> int | None:
         if self._process_handle is None:
@@ -291,6 +301,10 @@ class WindowsJobProcess:
             if not k.CloseHandle(self._process_handle):
                 _raise_last_error("CloseHandle(process)")
             self._process_handle = None
+        if self._thread_handle:
+            if not k.CloseHandle(self._thread_handle):
+                _raise_last_error("CloseHandle(thread)")
+            self._thread_handle = None
         if self._job_handle:
             if not k.CloseHandle(self._job_handle):
                 _raise_last_error("CloseHandle(job)")
