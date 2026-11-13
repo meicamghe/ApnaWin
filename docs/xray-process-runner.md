@@ -39,7 +39,7 @@ The current profile's host and port do not specify protocol, security, flow, cre
 - Validates the config before launch.
 - Refuses duplicate starts.
 - Validates finite positive validation and stop timeouts at construction.
-- Stops the process and escalates after the configured timeout. On Windows, the forced-stop path first attempts `taskkill /T /F` for the supervised PID so Windows can include descendants, then falls back to the direct process handle if needed. The process handle is cleared only after exit is confirmed; termination, kill or wait failures raise `XrayProcessError` and retain the handle when the child may still be alive.
+- Stops the process and escalates after the configured timeout. On Windows, the forced-stop path first attempts `taskkill /T /F` for the supervised PID so Windows can include descendants. If `taskkill` is unavailable, times out, or returns a non-zero exit code, it falls back to the direct `Popen.kill()` handle. The process handle is cleared only after exit is confirmed; termination, kill or wait failures raise `XrayProcessError` and retain the handle when the child may still be alive. A successful `taskkill` exit code is followed by a wait on the supervised process, but does not independently prove that every descendant has exited.
 - The Windows tree-kill fallback is best-effort and only runs when the supervised process has not exited within the graceful-stop timeout. It is not a substitute for a Windows Job Object: if Xray exits gracefully while independently spawned descendants remain, this runner does not yet guarantee their cleanup.
 - Does not alter Windows routes, DNS, firewall or adapters.
 
