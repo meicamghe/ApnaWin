@@ -26,7 +26,10 @@ def test_job_object_contains_child_after_root_exits(tmp_path):
     )
     try:
         deadline = time.monotonic() + 5
-        while not child_pid_file.exists() and time.monotonic() < deadline:
+        while (
+            (not child_pid_file.exists() or child_pid_file.stat().st_size == 0)
+            and time.monotonic() < deadline
+        ):
             time.sleep(0.02)
         assert child_pid_file.exists(), "helper did not create its child process"
         child_pid = int(child_pid_file.read_text(encoding="ascii"))
