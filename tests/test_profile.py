@@ -31,7 +31,7 @@ def test_non_string_host_is_rejected(host):
         ConnectionProfile("Office", Transport.SOCKS, host, 1080)
 
 
-@pytest.mark.parametrize("host", ["host name", "host\\nname", "host\\tname"])
+@pytest.mark.parametrize("host", ["host name", "host\nname", "host\tname"])
 def test_host_whitespace_is_rejected(host):
     with pytest.raises(ValueError, match="whitespace"):
         ConnectionProfile("Office", Transport.SOCKS, host, 1080)
