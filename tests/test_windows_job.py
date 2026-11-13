@@ -188,3 +188,24 @@ def test_close_preserves_job_handle_when_job_close_fails_and_can_retry(monkeypat
     process.close()
     assert process._job_handle is None
     assert fake.closed == [10, 20, 20]
+
+
+
+def test_close_preserves_thread_handle_when_thread_close_fails_and_can_retry(monkeypatch):
+    fake = FakeLifecycleKernel32(close_failures=[30])
+    monkeypatch.setattr(windows_job.ctypes, "get_last_error", lambda: 5, raising=False)
+    process = windows_job.WindowsJobProcess(
+        windows_job._Win32(fake), 10, 20, 123, thread_handle=30
+    )
+
+    with pytest.raises(windows_job.WindowsJobError, match="CloseHandle\\(thread\\)"):
+        process.close()
+
+    assert process._process_handle is None
+    assert process._thread_handle == 30
+    assert process._job_handle == 20
+
+    process.close()
+    assert process._thread_handle is None
+    assert process._job_handle is None
+    assert fake.closed == [10, 30, 30, 20]
