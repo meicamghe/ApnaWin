@@ -26,6 +26,8 @@ The current profile's host and port do not specify protocol, security, flow, cre
 
 `is_socks_ready()` attempts a short TCP connection to that configured listener. A successful result means only that a local TCP listener accepted a connection; it does not prove authentication, proxy negotiation, remote reachability, or successful traffic forwarding.
 
+`is_socks_protocol_ready()` performs the SOCKS5 greeting for the no-authentication method (`05 01 00`) and accepts only the matching no-auth response (`05 00`). It does not send credentials; a listener that selects username/password authentication is reported as not ready. This verifies SOCKS5 protocol negotiation with the local listener, but still does not issue a SOCKS CONNECT request or prove remote traffic forwarding.
+
 ## Safety behavior
 
 - Uses argument arrays and `shell=False`.
@@ -38,7 +40,7 @@ The current profile's host and port do not specify protocol, security, flow, cre
 ## Next acceptance steps
 
 1. Test with an authorized Xray config and a pinned Windows binary on a Windows 10/11 test machine.
-2. Add controlled SOCKS protocol negotiation and remote traffic verification to an authorized test endpoint.
+2. Add a SOCKS CONNECT test and remote traffic verification to an authorized test endpoint.
 3. Separately design and test TUN, DNS, route rollback and privilege boundaries.
 4. Only then implement a real `TunnelEngine` adapter and enable the Connect button.
 
