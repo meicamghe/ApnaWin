@@ -477,3 +477,51 @@ def test_socks_exchange_localhost_integration_round_trip(files):
     finally:
         listener.close()
         worker.join(timeout=1)
+
+
+class FragmentedReplyConnection:
+    def __init__(self, data):
+        self.data = data
+
+    def recv(self, size):
+        chunk = self.data[: min(size, 2)]
+        self.data = self.data[len(chunk):]
+        return chunk
+
+
+@pytest.mark.parametrize(
+    "reply, expected",
+    [
+        (bytes((5, 0, 0, 1, 127, 0, 0, 1, 0, 80)), 0),
+        (bytes((5, 5, 0, 3, 3)) + b"abc" + bytes((0, 80)), 5),
+        (bytes((5, 0, 0, 4)) + bytes(16) + bytes((0, 80)), 0),
+    ],
+)
+def test_socks_reply_parser_accepts_fragmented_ipv4_domain_and_ipv6(reply, expected):
+    assert XrayProcessRunner._read_socks_reply(FragmentedReplyConnection(reply)) == expected
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        b"\x04\x00\x00\x01" + bytes(6),  # unsupported version
+        b"\x05\x00\x01\x01" + bytes(7),  # non-zero reserved byte
+        b"\x05\x00\x00\x09",  # unknown address type
+        b"\x05\x00\x00\x03\x00",  # empty domain
+        b"\x05\x00\x00\x01\x7f\x00",  # truncated IPv4 reply
+        b"\x05\x00\x00\x03\x05ab",  # truncated domain reply
+    ],
+)
+def test_socks_reply_parser_rejects_malformed_or_truncated_reply(reply):
+    with pytest.raises(OSError):
+        XrayProcessRunner._read_socks_reply(FragmentedReplyConnection(reply))
+
+
+@pytest.mark.parametrize("timeout", [0, -1, float("inf"), float("nan"), True, "1"])
+def test_socks_readiness_rejects_invalid_timeouts(files, timeout):
+    _, config, _ = files
+    runner = XrayProcessRunner("xray.exe", config)
+    with pytest.raises(ValueError, match="timeout"):
+        runner.is_socks_ready(connect_timeout=timeout)
+    with pytest.raises(ValueError, match="timeout"):
+        runner.is_socks_protocol_ready(timeout=timeout)
