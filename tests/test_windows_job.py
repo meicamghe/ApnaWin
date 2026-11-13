@@ -101,3 +101,83 @@ def test_launch_failure_cleans_job_and_attribute_resources(
 
     assert fake_kernel.closed == [100]
     assert len(fake_kernel.deleted_attribute_lists) == expected_deleted
+
+
+
+class FakeLifecycleKernel32:
+    def __init__(self, *, terminate_ok=True, query_ok=True, close_failures=()):
+        self.terminate_ok = terminate_ok
+        self.query_ok = query_ok
+        self.close_failures = list(close_failures)
+        self.closed = []
+        self.terminate_calls = []
+
+    def GetExitCodeProcess(self, _handle, code_pointer):
+        import ctypes
+
+        ctypes.cast(code_pointer, ctypes.POINTER(windows_job.wintypes.DWORD)).contents.value = (
+            windows_job._STILL_ACTIVE
+        )
+        return True
+
+    def TerminateProcess(self, handle, exit_code):
+        self.terminate_calls.append((handle, exit_code))
+        return self.terminate_ok
+
+    def QueryInformationJobObject(self, _job, _class, info_pointer, _size, _returned):
+        if not self.query_ok:
+            return False
+        info = ctypes.cast(
+            info_pointer,
+            ctypes.POINTER(windows_job._BASIC_ACCOUNTING_INFORMATION),
+        ).contents
+        info.ActiveProcesses = 1
+        return True
+
+    def CloseHandle(self, handle):
+        self.closed.append(handle)
+        if self.close_failures and self.close_failures[0] == handle:
+            self.close_failures.pop(0)
+            return False
+        return True
+
+
+def test_terminate_failure_is_reported_without_dropping_owned_handles(monkeypatch):
+    fake = FakeLifecycleKernel32(terminate_ok=False)
+    monkeypatch.setattr(windows_job.ctypes, "get_last_error", lambda: 5, raising=False)
+    process = windows_job.WindowsJobProcess(windows_job._Win32(fake), 10, 20, 123)
+
+    with pytest.raises(windows_job.WindowsJobError, match="TerminateProcess"):
+        process.terminate()
+
+    assert process._process_handle == 10
+    assert process._job_handle == 20
+    assert fake.terminate_calls == [(10, 1)]
+
+
+def test_active_process_query_failure_is_reported_and_handles_are_retained(monkeypatch):
+    fake = FakeLifecycleKernel32(query_ok=False)
+    monkeypatch.setattr(windows_job.ctypes, "get_last_error", lambda: 5, raising=False)
+    process = windows_job.WindowsJobProcess(windows_job._Win32(fake), 10, 20, 123)
+
+    with pytest.raises(windows_job.WindowsJobError, match="QueryInformationJobObject"):
+        process.poll()
+
+    assert process._process_handle == 10
+    assert process._job_handle == 20
+
+
+def test_close_preserves_job_handle_when_job_close_fails_and_can_retry(monkeypatch):
+    fake = FakeLifecycleKernel32(close_failures=[20])
+    monkeypatch.setattr(windows_job.ctypes, "get_last_error", lambda: 5, raising=False)
+    process = windows_job.WindowsJobProcess(windows_job._Win32(fake), 10, 20, 123)
+
+    with pytest.raises(windows_job.WindowsJobError, match="CloseHandle\\(job\\)"):
+        process.close()
+
+    assert process._process_handle is None
+    assert process._job_handle == 20
+
+    process.close()
+    assert process._job_handle is None
+    assert fake.closed == [10, 20, 20]
