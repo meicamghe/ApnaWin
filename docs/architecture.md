@@ -36,6 +36,7 @@ Build a native Windows 10/11 client that offers a clear desktop workflow for tun
 - M0: repository skeleton, coding conventions and architecture record — complete.
 - M1: inspect APK metadata/resources and document observable features and protocols — preliminary; reproducible verification remains.
 - M2: define profile schema, persistence, mock engine contract and desktop profile workflow — in progress.
+- M2a: add a safe Xray process runner and automated process-supervision tests — implemented; Windows CI verification pending.
 - M3: integrate one Windows engine end-to-end using a test server and documented configuration.
 - M4: implement elevation/service and TUN adapter lifecycle with rollback and cleanup.
 - M5: package, sign where possible, test on clean Windows 10/11 VMs and publish releases.
