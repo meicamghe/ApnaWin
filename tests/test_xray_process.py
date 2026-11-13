@@ -229,6 +229,89 @@ def test_socks_protocol_probe_negotiates_no_auth(monkeypatch, files, reply, expe
     assert observed["timeout"] == 0.7
 
 
+@pytest.mark.parametrize(
+    "destination_host, expected_address",
+    [
+        ("example.com", bytes((3, 11)) + b"example.com"),
+        ("192.0.2.10", bytes((1, 192, 0, 2, 10))),
+        ("2001:db8::1", bytes((4,)) + bytes.fromhex("20010db8000000000000000000000001")),
+    ],
+)
+def test_socks_connect_sends_correct_destination(monkeypatch, files, destination_host, expected_address):
+    _, config, _ = files
+    sent = []
+
+    class FakeConnection:
+        replies = [bytes((5, 0)), bytes((5, 0, 0, 1)), bytes((127, 0, 0, 1, 0x1F, 0x90))]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def settimeout(self, value):
+            self.timeout = value
+
+        def sendall(self, payload):
+            sent.append(payload)
+
+        def recv(self, size):
+            if not self.replies:
+                return b""
+            chunk = self.replies[0][:size]
+            self.replies[0] = self.replies[0][len(chunk):]
+            if not self.replies[0]:
+                self.replies.pop(0)
+            return chunk
+
+    monkeypatch.setattr(socket, "create_connection", lambda *a, **k: FakeConnection())
+    runner = XrayProcessRunner("xray.exe", config)
+    assert runner.socks_connect(destination_host, 8080)
+    assert sent == [bytes((5, 1, 0)), bytes((5, 1, 0)) + expected_address + (8080).to_bytes(2, "big")]
+
+
+def test_socks_connect_returns_false_for_rejected_destination(monkeypatch, files):
+    _, config, _ = files
+
+    class FakeConnection:
+        replies = [bytes((5, 0)), bytes((5, 5, 0, 1)), bytes((0, 0, 0, 0, 0, 0))]
+
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def settimeout(self, value): pass
+        def sendall(self, payload): pass
+        def recv(self, size):
+            chunk = self.replies[0][:size]
+            self.replies[0] = self.replies[0][len(chunk):]
+            if not self.replies[0]: self.replies.pop(0)
+            return chunk
+
+    monkeypatch.setattr(socket, "create_connection", lambda *a, **k: FakeConnection())
+    assert not XrayProcessRunner("xray.exe", config).socks_connect("example.com", 443)
+
+
+@pytest.mark.parametrize("port", [0, 65536, True, "443"])
+def test_socks_connect_rejects_invalid_destination_port(files, port):
+    _, config, _ = files
+    with pytest.raises(ValueError, match="destination_port"):
+        XrayProcessRunner("xray.exe", config).socks_connect("example.com", port)
+
+
+def test_socks_connect_rejects_auth_required(monkeypatch, files):
+    _, config, _ = files
+
+    class FakeConnection:
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def settimeout(self, value): pass
+        def sendall(self, payload): pass
+        def recv(self, size): return bytes((5, 2))
+
+    monkeypatch.setattr(socket, "create_connection", lambda *a, **k: FakeConnection())
+    assert not XrayProcessRunner("xray.exe", config).socks_connect("example.com", 443)
+
+
 def test_socks_protocol_probe_returns_false_on_socket_error(monkeypatch, files):
     _, config, _ = files
 
