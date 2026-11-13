@@ -65,3 +65,7 @@ Android ARM64 native libraries are not Windows binaries. The Windows client will
 ## Development direction
 
 The UI, application orchestration, transport-neutral domain model, engine adapters and Windows-specific privileged operations will remain separate. Credentials and private server configurations must not be committed.
+
+## Session continuity
+
+For the current project decisions, implementation boundaries, and next-session checklist, see [docs/SESSION-HANDOFF.md](docs/SESSION-HANDOFF.md).
