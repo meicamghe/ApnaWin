@@ -37,7 +37,7 @@ Build a native Windows 10/11 client that offers a clear desktop workflow for tun
 - M1: inspect APK metadata/resources and document observable features and protocols — preliminary; reproducible verification remains.
 - M2: define profile schema, persistence, mock engine contract and desktop profile workflow — in progress.
 - M2a: add a safe Xray process runner and automated process-supervision tests — implemented; recent Windows CI runs verify unit tests and packaged-app smoke test.
-- M2b: initial Windows Job Object process-tree launcher and Xray runner integration — implemented; Win32 lifecycle/integration verification and failure-injection coverage remain before marking complete. See [Windows Job Object implementation](windows-job-object-design.md).
+- M2b: initial Windows Job Object process-tree launcher and Xray runner integration — implemented; real Windows child/grandchild and final-handle-close integration tests pass. Win32 API failure-injection and full packaged-build verification remain. See [Windows Job Object implementation](windows-job-object-design.md).
 - M3: integrate one Windows engine end-to-end using a test server and documented configuration.
 - M4: implement elevation/service and TUN adapter lifecycle with rollback and cleanup.
 - M5: package, sign where possible, test on clean Windows 10/11 VMs and publish releases.
