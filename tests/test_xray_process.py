@@ -649,3 +649,40 @@ def test_windows_stop_uses_taskkill_tree_before_direct_kill(monkeypatch, files):
     assert calls[0][1]["shell"] is False
     assert process.killed
     assert runner._process is None
+
+
+
+def test_windows_stop_falls_back_when_taskkill_is_unavailable(monkeypatch, files):
+    import apnawin.engines.xray_process as xray_module
+
+    executable, config, _ = files
+
+    class TreeProcess(FakeProcess):
+        pid = 4322
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout=None):
+            if not self.killed:
+                raise subprocess.TimeoutExpired("xray", timeout)
+            self.returncode = -9
+            return self.returncode
+
+    process = TreeProcess()
+    commands = []
+
+    def unavailable(command, **kwargs):
+        commands.append(command)
+        raise FileNotFoundError("taskkill unavailable")
+
+    monkeypatch.setattr(xray_module.os, "name", "nt")
+    monkeypatch.setattr(subprocess, "run", unavailable)
+    runner = XrayProcessRunner(executable, config, stop_timeout=0.1)
+    runner._process = process
+
+    runner.stop()
+
+    assert commands == [["taskkill", "/PID", "4322", "/T", "/F"]]
+    assert process.killed
+    assert runner._process is None
