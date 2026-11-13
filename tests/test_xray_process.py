@@ -723,3 +723,33 @@ def test_windows_stop_falls_back_when_taskkill_returns_failure(monkeypatch, file
     assert commands[0][1]["shell"] is False
     assert process.killed
     assert runner._process is None
+
+
+@pytest.mark.parametrize(
+    "inbounds",
+    [
+        [{"listen": "0.0.0.0", "port": 10808, "protocol": "socks"}],
+        [{"listen": "::", "port": 10808, "protocol": "socks"}],
+        [],
+        [
+            {"listen": "127.0.0.1", "port": 10808, "protocol": "socks"},
+            {"listen": "127.0.0.1", "port": 10809, "protocol": "socks"},
+        ],
+    ],
+)
+def test_validate_rejects_unsafe_or_ambiguous_socks_inbound_before_execution(
+    monkeypatch, files, inbounds
+):
+    executable, config, profile = files
+    config.write_text(json.dumps({"inbounds": inbounds, "outbounds": []}), encoding="utf-8")
+    called = False
+
+    def unexpected_execution(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("Xray must not execute with an unsafe SOCKS bind")
+
+    monkeypatch.setattr(subprocess, "run", unexpected_execution)
+    with pytest.raises(ValueError):
+        XrayProcessRunner(executable, config).validate(profile)
+    assert not called
