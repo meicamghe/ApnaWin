@@ -610,3 +610,42 @@ def test_stop_clears_already_exited_process(files):
 
     assert runner._process is None
     assert not process.terminated
+
+
+def test_windows_stop_uses_taskkill_tree_before_direct_kill(monkeypatch, files):
+    import apnawin.engines.xray_process as xray_module
+
+    executable, config, _ = files
+
+    class TreeProcess(FakeProcess):
+        pid = 4321
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout=None):
+            if not self.killed:
+                raise subprocess.TimeoutExpired("xray", timeout)
+            self.returncode = -9
+            return self.returncode
+
+    process = TreeProcess()
+    calls = []
+    monkeypatch.setattr(xray_module.os, "name", "nt")
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda command, **kwargs: (
+            calls.append((command, kwargs))
+            or subprocess.CompletedProcess(command, 0, b"", b"")
+        ),
+    )
+    runner = XrayProcessRunner(executable, config, stop_timeout=0.1)
+    runner._process = process
+
+    runner.stop()
+
+    assert calls[0][0] == ["taskkill", "/PID", "4321", "/T", "/F"]
+    assert calls[0][1]["shell"] is False
+    assert process.killed
+    assert runner._process is None
