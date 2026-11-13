@@ -83,3 +83,26 @@ def test_profile_store_does_not_overwrite_on_invalid_input(tmp_path):
         save_profiles(path, ["not a profile"])
 
     assert path.read_text(encoding="utf-8") == "keep this"
+
+def test_profile_store_rejects_wrong_field_types(tmp_path):
+    path = tmp_path / "profiles.json"
+    path.write_text(
+        json.dumps(
+            {
+                "format_version": 1,
+                "profiles": [
+                    {
+                        "name": 123,
+                        "transport": "socks",
+                        "endpoint_host": "localhost",
+                        "endpoint_port": 1080,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="name must be a string"):
+        load_profiles(path)
+
