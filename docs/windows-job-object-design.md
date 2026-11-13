@@ -61,19 +61,30 @@ The legacy taskkill path remains only for the pre-existing generic process
 fallback/test-double path; production Windows launches use the Job Object
 controller.
 
-## Remaining verification before calling M2b complete
+## Verification completed and remaining work
+
+The Windows-only integration suite in
+`tests/test_windows_job_integration.py` now launches real Python helper
+processes under the Job Object. It verifies that a root process can exit while
+its child and grandchild remain contained, that `poll()` continues to report
+the process tree as active, that stop escalation drains the active-process
+count to zero, and that closing the final job handle activates
+`KILL_ON_JOB_CLOSE`. These integration tests passed in Windows CI run #75.
+
+Still required before calling M2b complete:
 
 1. Unit-test Win32 API call ordering, flags, structure sizes, handle ownership,
-   and cleanup for failures at every initialization/create/terminate step.
-2. Verify the created root process is in the job before it can execute.
-3. Use a Windows integration helper that spawns a child and grandchild; verify
-   both are terminated by explicit stop and by closing the final job handle.
-4. Verify bounded stop behavior, active-process-count confirmation, and
-   retained handles when termination/confirmation fails.
-5. Exercise launch under an existing Windows job, including hosted-runner
-   constraints. If assignment is rejected, fail closed with a useful error.
-6. Run the complete Windows tests, PyInstaller build, and packaged-app smoke
-   test, then inspect the resulting CI artifacts and logs.
+   and cleanup for failures at every initialization/create/terminate/close
+   step.
+2. Add explicit verification that the root is assigned to the job before its
+   initial thread executes (the implementation uses the documented creation-
+   time attribute, but this invariant needs a focused test).
+3. Verify retained handles and retry behavior when termination or active-count
+   confirmation fails.
+4. Keep exercising launch under the hosted Windows runner; incompatible outer
+   job constraints must remain fail-closed.
+5. Confirm the latest complete Windows test, PyInstaller build, packaged-app
+   smoke test, and artifact upload; inspect their CI results.
 
 Connect remains disabled. Process containment alone does not implement TUN,
 routes, DNS, rollback, privilege management, or a working VPN.
