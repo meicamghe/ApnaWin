@@ -1,5 +1,11 @@
 name: Windows tests and build
 
+# Keep only the newest CI run for each branch/ref; rapid commits should not
+# leave redundant Windows builds queued behind one another.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
