@@ -71,10 +71,12 @@ class XrayProcessRunner:
         validation_timeout: float = 10.0,
         stop_timeout: float = 5.0,
     ) -> None:
+        self._validate_timeout(validation_timeout, "validation_timeout")
+        self._validate_timeout(stop_timeout, "stop_timeout")
         self.executable = Path(executable).expanduser()
         self.config_path = Path(config_path).expanduser()
-        self.validation_timeout = validation_timeout
-        self.stop_timeout = stop_timeout
+        self.validation_timeout = float(validation_timeout)
+        self.stop_timeout = float(stop_timeout)
         self._process: subprocess.Popen[bytes] | None = None
 
     @property
@@ -342,15 +344,47 @@ class XrayProcessRunner:
             )
 
     def stop(self) -> None:
-        """Stop the supervised process; safe to call repeatedly."""
+        """Stop the process and confirm exit before releasing its reference.
+
+        If termination fails while the child is still alive, retain the process
+        handle so the caller can inspect/retry instead of reporting a false stop.
+        """
         process = self._process
         if process is None:
             return
-        if process.poll() is None:
+        if process.poll() is not None:
+            self._process = None
+            return
+
+        try:
             process.terminate()
+        except OSError as exc:
+            if process.poll() is None:
+                raise XrayProcessError("Could not request Xray termination") from exc
+
+        if process.poll() is None:
             try:
                 process.wait(timeout=self.stop_timeout)
             except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=self.stop_timeout)
-        self._process = None
+                try:
+                    process.kill()
+                except OSError as exc:
+                    if process.poll() is None:
+                        raise XrayProcessError("Could not force-stop Xray") from exc
+                try:
+                    process.wait(timeout=self.stop_timeout)
+                except subprocess.TimeoutExpired as exc:
+                    raise XrayProcessError(
+                        "Xray did not exit after the force-stop request"
+                    ) from exc
+                except OSError as exc:
+                    if process.poll() is None:
+                        raise XrayProcessError("Could not confirm Xray process exit") from exc
+            except OSError as exc:
+                if process.poll() is None:
+                    raise XrayProcessError("Could not wait for Xray to stop") from exc
+
+        if process.poll() is not None:
+            self._process = None
+        else:
+            raise XrayProcessError("Xray is still running after the stop request")
