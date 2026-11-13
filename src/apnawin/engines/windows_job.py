@@ -233,7 +233,7 @@ class WindowsJobProcess:
         k.CloseHandle(process_info.hThread)
         return cls(api, process_info.hProcess, job, int(process_info.dwProcessId))
 
-    def poll(self) -> int | None:
+    def _root_exit_code(self) -> int | None:
         if self._process_handle is None:
             return self.returncode
         code = wintypes.DWORD()
@@ -244,8 +244,20 @@ class WindowsJobProcess:
         self.returncode = int(code.value)
         return self.returncode
 
+    def poll(self) -> int | None:
+        # Keep the controller logically running while descendants remain,
+        # even if the original Xray process has already exited.
+        root_code = self._root_exit_code()
+        if root_code is None or self._active_processes() > 0:
+            return None
+        return root_code
+
     def terminate(self) -> None:
-        if self.poll() is None and not self._api.kernel32.TerminateProcess(self._process_handle, 1):
+        # Do not call TerminateProcess on an already-exited root; descendants
+        # may still be alive and are handled by the job-level kill escalation.
+        if self._root_exit_code() is None and not self._api.kernel32.TerminateProcess(
+            self._process_handle, 1
+        ):
             _raise_last_error("TerminateProcess")
 
     def kill(self) -> None:
