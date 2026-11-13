@@ -398,3 +398,78 @@ def test_socks_exchange_returns_none_when_proxy_rejects(monkeypatch, files):
     assert XrayProcessRunner("xray.exe", config).socks_exchange(
         "example.com", 80, b"request"
     ) is None
+
+
+@pytest.mark.parametrize("timeout", [0, -1, float("inf"), float("nan"), True, "1"])
+def test_socks_connect_rejects_invalid_timeout(files, timeout):
+    _, config, _ = files
+    with pytest.raises(ValueError, match="timeout"):
+        XrayProcessRunner("xray.exe", config).socks_connect(
+            "example.com", 443, timeout=timeout
+        )
+
+
+def test_socks_exchange_localhost_integration_round_trip(files):
+    import threading
+
+    executable, config, _ = files
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    port = listener.getsockname()[1]
+    config.write_text(json.dumps({
+        "inbounds": [{"listen": "127.0.0.1", "port": port, "protocol": "socks"}],
+        "outbounds": [],
+    }), encoding="utf-8")
+    received = {}
+    response = b"HTTP/1.1 200 OK\\r\\nContent-Length: 5\\r\\n\\r\\nhello"
+
+    def read_exact(connection, count):
+        data = bytearray()
+        while len(data) < count:
+            chunk = connection.recv(count - len(data))
+            if not chunk:
+                raise OSError("unexpected EOF")
+            data.extend(chunk)
+        return bytes(data)
+
+    def serve():
+        try:
+            connection, _ = listener.accept()
+            with connection:
+                received["greeting"] = read_exact(connection, 3)
+                connection.sendall(b"\\x05")
+                connection.sendall(b"\\x00")
+                header = read_exact(connection, 5)
+                assert header == bytes((5, 1, 0, 3, 11))
+                received["host"] = read_exact(connection, 11)
+                received["port"] = read_exact(connection, 2)
+                connection.sendall(bytes((5, 0, 0, 1, 127, 0, 0, 1, 0, 80)))
+                body = bytearray()
+                while True:
+                    chunk = connection.recv(4096)
+                    if not chunk:
+                        break
+                    body.extend(chunk)
+                received["payload"] = bytes(body)
+                connection.sendall(response)
+        finally:
+            listener.close()
+
+    worker = threading.Thread(target=serve, daemon=True)
+    worker.start()
+    try:
+        result = XrayProcessRunner(executable, config).socks_exchange(
+            "example.com", 80, b"GET / HTTP/1.0\\r\\nHost: example.com\\r\\n\\r\\n",
+            timeout=2.0, max_response_bytes=1024,
+        )
+        worker.join(timeout=3)
+        assert not worker.is_alive()
+        assert result == response
+        assert received["greeting"] == bytes((5, 1, 0))
+        assert received["host"] == b"example.com"
+        assert received["port"] == (80).to_bytes(2, "big")
+        assert received["payload"].startswith(b"GET / HTTP/1.0")
+    finally:
+        listener.close()
+        worker.join(timeout=1)
