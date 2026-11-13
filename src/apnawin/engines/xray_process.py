@@ -347,11 +347,7 @@ class XrayProcessRunner:
         self._process = process
         if process.poll() is not None:
             if isinstance(process, WindowsJobProcess):
-                try:
-                    process.kill()
-                    process.wait(timeout=self.stop_timeout)
-                finally:
-                    process.close()
+                process.close()
             self._process = None
             raise XrayProcessError(
                 f"Xray exited during startup (exit code {process.returncode})"
