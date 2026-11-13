@@ -86,8 +86,8 @@ Additional failure-path and creation-time tests have now been added:
   the root process's first Python user-code entry and asserts membership. This
   checks creation-time containment before the root starts spawning descendants.
 
-These new tests are pending Windows CI validation. Remaining work before
-calling M2b complete:
+All of the above tests passed in Windows CI run #89 (116 tests total).
+Remaining work before calling M2b complete:
 
 1. Verify all newly added failure-injection and first-entry membership tests
    pass on the hosted Windows runner.
@@ -96,8 +96,8 @@ calling M2b complete:
    operations fail-closed.
 3. Keep exercising launch under the hosted Windows runner; incompatible outer
    job constraints must remain fail-closed.
-4. Confirm the latest complete Windows test, PyInstaller build, packaged-app
-   smoke test, and artifact upload; inspect their CI results.
+4. Confirm the latest complete Windows PyInstaller build, packaged-app smoke
+   test, and artifact upload; inspect their CI results.
 
 Connect remains disabled. Process containment alone does not implement TUN,
 routes, DNS, rollback, privilege management, or a working VPN.
