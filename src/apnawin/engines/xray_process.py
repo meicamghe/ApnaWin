@@ -347,7 +347,11 @@ class XrayProcessRunner:
         self._process = process
         if process.poll() is not None:
             if isinstance(process, WindowsJobProcess):
-                process.close()
+                try:
+                    process.close()
+                except WindowsJobError as exc:
+                    self._process = process
+                    raise XrayProcessError("Could not release Xray process handles") from exc
             self._process = None
             raise XrayProcessError(
                 f"Xray exited during startup (exit code {process.returncode})"
@@ -375,7 +379,10 @@ class XrayProcessRunner:
                 raise XrayProcessError(
                     "Could not confirm that the Xray Job Object process tree stopped"
                 ) from exc
-            process.close()
+            try:
+                process.close()
+            except WindowsJobError as exc:
+                raise XrayProcessError("Could not release Xray process handles") from exc
             self._process = None
             return
         if process.poll() is not None:
