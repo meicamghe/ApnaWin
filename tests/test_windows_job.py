@@ -1,7 +1,5 @@
 """Platform-independent checks for the Windows Job Object boundary."""
 
-import os
-
 import pytest
 
 from apnawin.engines import windows_job
