@@ -105,8 +105,39 @@ class XrayProcessRunner:
         """Return the single explicitly configured loopback SOCKS endpoint."""
         return inspect_local_socks_inbound(self._read_config())
 
+    @staticmethod
+    def _validate_timeout(timeout: float, name: str = "timeout") -> None:
+        """Reject values that socket APIs cannot use as a bounded timeout."""
+        if (
+            not isinstance(timeout, (int, float))
+            or isinstance(timeout, bool)
+            or not math.isfinite(timeout)
+            or timeout <= 0
+        ):
+            raise ValueError(f"{name} must be a finite positive number")
+
+    @classmethod
+    def _read_socks_reply(cls, connection: socket.socket) -> int:
+        """Consume and validate a complete SOCKS5 CONNECT reply; return REP."""
+        version, reply, reserved, address_type = cls._recv_exact(connection, 4)
+        if version != 5 or reserved != 0:
+            raise OSError("malformed SOCKS5 reply header")
+        if address_type == 1:
+            address_length = 4
+        elif address_type == 4:
+            address_length = 16
+        elif address_type == 3:
+            address_length = cls._recv_exact(connection, 1)[0]
+            if address_length == 0:
+                raise OSError("malformed SOCKS5 domain reply")
+        else:
+            raise OSError("unsupported SOCKS5 reply address type")
+        cls._recv_exact(connection, address_length + 2)
+        return reply
+
     def is_socks_ready(self, *, connect_timeout: float = 0.5) -> bool:
         """Check local TCP listener availability, not remote tunnel health."""
+        self._validate_timeout(connect_timeout, "connect_timeout")
         inbound = self.local_socks_inbound()
         try:
             with socket.create_connection(
@@ -122,6 +153,7 @@ class XrayProcessRunner:
         Credentials are deliberately not read or sent by this diagnostic.
         A listener requiring username/password therefore returns False.
         """
+        self._validate_timeout(timeout)
         inbound = self.local_socks_inbound()
         try:
             with socket.create_connection(
@@ -157,8 +189,7 @@ class XrayProcessRunner:
             raise ValueError("destination_host must be a non-empty hostname or IP address")
         if isinstance(destination_port, bool) or not isinstance(destination_port, int) or not 1 <= destination_port <= 65535:
             raise ValueError("destination_port must be an integer from 1 to 65535")
-        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not math.isfinite(timeout) or timeout <= 0:
-            raise ValueError("timeout must be a finite positive number")
+        self._validate_timeout(timeout)
         host = destination_host.strip()
         try:
             address = ipaddress.ip_address(host)
@@ -184,20 +215,7 @@ class XrayProcessRunner:
                 if self._recv_exact(connection, 2) != bytes((5, 0)):
                     return False
                 connection.sendall(request)
-                header = self._recv_exact(connection, 4)
-                version, reply, reserved, address_type = header
-                if version != 5 or reserved != 0:
-                    return False
-                if address_type == 1:
-                    address_length = 4
-                elif address_type == 4:
-                    address_length = 16
-                elif address_type == 3:
-                    address_length = self._recv_exact(connection, 1)[0]
-                else:
-                    return False
-                self._recv_exact(connection, address_length + 2)
-                return reply == 0
+                return self._read_socks_reply(connection) == 0
         except OSError:
             return False
 
@@ -251,19 +269,7 @@ class XrayProcessRunner:
                 if self._recv_exact(connection, 2) != bytes((5, 0)):
                     return None
                 connection.sendall(request)
-                version, reply, reserved, address_type = self._recv_exact(connection, 4)
-                if version != 5 or reserved != 0:
-                    return None
-                if address_type == 1:
-                    address_length = 4
-                elif address_type == 4:
-                    address_length = 16
-                elif address_type == 3:
-                    address_length = self._recv_exact(connection, 1)[0]
-                else:
-                    return None
-                self._recv_exact(connection, address_length + 2)
-                if reply != 0:
+                if self._read_socks_reply(connection) != 0:
                     return None
                 if payload:
                     connection.sendall(payload)
