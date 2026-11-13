@@ -12,7 +12,7 @@ A native Windows 10/11 desktop client project inspired by the workflow of APNA T
 - A test-only mock engine that does not touch the network.
 - Windows GitHub Actions tests.
 
-The Connect button is intentionally disabled. No working tunnel engine, APNA TUNNEL server compatibility, or release installer is claimed yet.
+The Connect button is intentionally disabled. An Xray process runner now validates a supplied config and supervises the executable, but it is not yet a complete tunnel engine. No APNA TUNNEL server compatibility or release installer is claimed yet.
 
 ## Run from source
 
@@ -46,12 +46,13 @@ It does not store passwords, access tokens, private keys or other credentials. D
 
 - `src/apnawin/` — application package and desktop entry point
 - `src/apnawin/domain/` — transport-neutral domain models
-- `src/apnawin/engines/` — tunnel-engine contract and test-only mock
+- `src/apnawin/engines/` — tunnel-engine contract, test-only mock and Xray process runner
 - `src/apnawin/storage/` — profile persistence
 - `tests/` — automated tests, including desktop profile workflow checks
 - `docs/architecture.md` — architecture, milestones and security boundaries
 - `docs/apk-analysis.md` — preliminary APK observations and reproducible verification checklist
 - `docs/engine-contract.md` — requirements for production tunnel adapters
+- `docs/xray-process-runner.md` — scope and limitations of Xray process supervision
 
 ## Important compatibility note
 
