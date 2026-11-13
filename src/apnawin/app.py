@@ -156,7 +156,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Could not load profiles",
-                f"Profiles were not loaded. The file was left unchanged.\\n\\n{exc}",
+                f"Profiles were not loaded. The file was left unchanged.\n\n{exc}",
             )
             self.profiles = []
         self._refresh_profiles()
