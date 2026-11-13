@@ -10,9 +10,9 @@ A native Windows 10/11 desktop client project inspired by the workflow of APNA T
 - Local JSON persistence for non-secret profile metadata.
 - A transport-neutral profile model and tunnel-engine contract.
 - A test-only mock engine that does not touch the network.
-- Windows GitHub Actions tests.
+- Windows GitHub Actions tests and a PyInstaller build job that publishes a portable Windows x64 application-folder artifact (14-day retention).
 
-The Connect button is intentionally disabled. An Xray process runner now validates a supplied config and supervises the executable, but it is not yet a complete tunnel engine. No APNA TUNNEL server compatibility or release installer is claimed yet.
+The Connect button is intentionally disabled. An Xray process runner validates a supplied config and supervises the executable, but it is not yet a complete tunnel engine. The CI build artifact is an early portable application build, not a signed installer and not a VPN client with working tunnel connectivity. No APNA TUNNEL server compatibility is claimed.
 
 ## Run from source
 
@@ -25,6 +25,10 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 python -m apnawin
 ```
+
+## Build artifact
+
+On pushes to `main` and pull requests, the Windows workflow runs tests first, then builds the native desktop app with PyInstaller. On a successful run, download the `ApnaWin-Windows-x64` artifact from the workflow run's **Artifacts** section. Extract the ZIP and launch `ApnaWin.exe` from the extracted `ApnaWin` folder. The artifact is temporary CI output (14-day retention), not a signed installer.
 
 Run tests:
 
