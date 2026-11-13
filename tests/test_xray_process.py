@@ -329,3 +329,72 @@ def test_socks_readiness_returns_false_when_listener_is_unavailable(monkeypatch,
 
     monkeypatch.setattr(socket, "create_connection", unavailable)
     assert not XrayProcessRunner("xray.exe", config).is_socks_ready()
+
+
+class FakeExchangeConnection:
+    def __init__(self, response=b"HTTP/1.1 200 OK\\r\\n\\r\\nhello"):
+        self.replies = [bytes((5, 0)), bytes((5, 0, 0, 1)), bytes((127, 0, 0, 1, 0x1F, 0x90))]
+        self.response = response
+        self.sent = []
+        self.shutdown_how = None
+
+    def __enter__(self): return self
+    def __exit__(self, *args): return False
+    def settimeout(self, value): self.timeout = value
+    def sendall(self, payload): self.sent.append(payload)
+    def shutdown(self, how): self.shutdown_how = how
+    def recv(self, size):
+        if self.replies:
+            chunk = self.replies[0][:size]
+            self.replies[0] = self.replies[0][len(chunk):]
+            if not self.replies[0]: self.replies.pop(0)
+            return chunk
+        chunk = self.response[:size]
+        self.response = self.response[len(chunk):]
+        return chunk
+
+
+def test_socks_exchange_sends_payload_and_reads_response_to_eof(monkeypatch, files):
+    _, config, _ = files
+    connection = FakeExchangeConnection()
+    monkeypatch.setattr(socket, "create_connection", lambda *a, **k: connection)
+
+    result = XrayProcessRunner("xray.exe", config).socks_exchange(
+        "example.com", 80, b"GET / HTTP/1.0\\r\\nHost: example.com\\r\\n\\r\\n"
+    )
+
+    assert result == b"HTTP/1.1 200 OK\\r\\n\\r\\nhello"
+    assert connection.sent[0] == bytes((5, 1, 0))
+    assert connection.sent[1] == bytes((5, 1, 0, 3, 11)) + b"example.com" + (80).to_bytes(2, "big")
+    assert connection.sent[2].startswith(b"GET / HTTP/1.0")
+    assert connection.shutdown_how == socket.SHUT_WR
+
+
+def test_socks_exchange_rejects_response_over_limit(monkeypatch, files):
+    _, config, _ = files
+    connection = FakeExchangeConnection(response=b"0123456789")
+    monkeypatch.setattr(socket, "create_connection", lambda *a, **k: connection)
+
+    with pytest.raises(ValueError, match="max_response_bytes"):
+        XrayProcessRunner("xray.exe", config).socks_exchange(
+            "example.com", 80, b"request", max_response_bytes=5
+        )
+
+
+def test_socks_exchange_validates_payload_and_limit(files):
+    _, config, _ = files
+    runner = XrayProcessRunner("xray.exe", config)
+    with pytest.raises(TypeError, match="payload"):
+        runner.socks_exchange("example.com", 80, "not bytes")
+    with pytest.raises(ValueError, match="max_response_bytes"):
+        runner.socks_exchange("example.com", 80, b"x", max_response_bytes=0)
+
+
+def test_socks_exchange_returns_none_when_proxy_rejects(monkeypatch, files):
+    _, config, _ = files
+    connection = FakeExchangeConnection()
+    connection.replies = [bytes((5, 0)), bytes((5, 5, 0, 1)), bytes((0, 0, 0, 0, 0, 0))]
+    monkeypatch.setattr(socket, "create_connection", lambda *a, **k: connection)
+    assert XrayProcessRunner("xray.exe", config).socks_exchange(
+        "example.com", 80, b"request"
+    ) is None
