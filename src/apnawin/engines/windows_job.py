@@ -285,11 +285,13 @@ class WindowsJobProcess:
             time.sleep(0.02 if deadline is None else min(0.02, max(0, deadline - time.monotonic())))
 
     def close(self) -> None:
-        """Release ownership; KILL_ON_JOB_CLOSE is the final cleanup guard."""
+        """Release ownership; retain any handle whose close operation fails."""
         k = self._api.kernel32
         if self._process_handle:
-            k.CloseHandle(self._process_handle)
+            if not k.CloseHandle(self._process_handle):
+                _raise_last_error("CloseHandle(process)")
             self._process_handle = None
         if self._job_handle:
-            k.CloseHandle(self._job_handle)
+            if not k.CloseHandle(self._job_handle):
+                _raise_last_error("CloseHandle(job)")
             self._job_handle = None
