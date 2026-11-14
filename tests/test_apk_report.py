@@ -140,6 +140,7 @@ def test_combined_report_rejects_dex_count_disagreement():
         patch.object(apk_report, "inspect_apk", return_value=inventory),
         patch.object(apk_report, "inspect_apk_manifest", return_value=manifest),
         patch.object(apk_report, "inspect_apk_dex", return_value=dex),
+        patch.object(apk_report, "inspect_apk_native_libraries", return_value={"libraries": [], "libraries_inspected": 0, "jni_exported_library_count": 0, "jni_onload_library_count": 0, "skipped_library_count": 0, "bytes_read_in_memory": 0, "archive_members_written": False, "native_code_executed": False, "raw_symbol_names_included": False}),
         pytest.raises(ValueError, match="disagree on DEX file count"),
     ):
         apk_report.inspect_apk_report("sample.apk")
@@ -173,6 +174,7 @@ def test_combined_report_distinguishes_matched_missing_and_unresolved_services(s
         patch.object(apk_report, "inspect_apk", return_value=inventory),
         patch.object(apk_report, "inspect_apk_manifest", return_value=manifest),
         patch.object(apk_report, "inspect_apk_dex", return_value=dex),
+        patch.object(apk_report, "inspect_apk_native_libraries", return_value={"libraries": [], "libraries_inspected": 0, "jni_exported_library_count": 0, "jni_onload_library_count": 0, "skipped_library_count": 0, "bytes_read_in_memory": 0, "archive_members_written": False, "native_code_executed": False, "raw_symbol_names_included": False}),
     ):
         report = apk_report.inspect_apk_report("sample.apk")
     interpretation = report["interpretation"]
@@ -192,6 +194,7 @@ def test_combined_report_does_not_claim_native_service_linkage_without_candidate
         patch.object(apk_report, "inspect_apk", return_value=inventory),
         patch.object(apk_report, "inspect_apk_manifest", return_value=manifest),
         patch.object(apk_report, "inspect_apk_dex", return_value=dex),
+        patch.object(apk_report, "inspect_apk_native_libraries", return_value={"libraries": [], "libraries_inspected": 0, "jni_exported_library_count": 0, "jni_onload_library_count": 0, "skipped_library_count": 0, "bytes_read_in_memory": 0, "archive_members_written": False, "native_code_executed": False, "raw_symbol_names_included": False}),
     ):
         report = apk_report.inspect_apk_report("sample.apk")
     assert report["native"]["engine_candidates"] == []
@@ -215,6 +218,7 @@ def test_combined_report_includes_bounded_elf_analysis():
         patch.object(apk_report, "inspect_apk", return_value=inventory),
         patch.object(apk_report, "inspect_apk_manifest", return_value=manifest),
         patch.object(apk_report, "inspect_apk_dex", return_value=dex),
+        patch.object(apk_report, "inspect_apk_native_libraries", return_value={"libraries": [], "libraries_inspected": 0, "jni_exported_library_count": 0, "jni_onload_library_count": 0, "skipped_library_count": 0, "bytes_read_in_memory": 0, "archive_members_written": False, "native_code_executed": False, "raw_symbol_names_included": False}),
         patch.object(apk_report, "inspect_apk_native_libraries", return_value=elf) as inspect_elf,
     ):
         result = apk_report.inspect_apk_report("sample.apk")
