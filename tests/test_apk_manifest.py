@@ -146,3 +146,48 @@ def test_parser_does_not_infer_boolean_for_invalid_exported_value():
     </manifest>"""
     report = apk_manifest.parse_manifest_xml(xml)
     assert report["components"][0]["exported"] is None
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["", "   ", "Bad/Service", "Bad\\Service", "bad name", ".",
+     ".Bad/Service", "com.example.Bad/Service"],
+)
+def test_parser_ignores_invalid_component_class_names(name):
+    xml = f"""<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+        package="org.example">
+      <application>
+        <service android:name="{name}" android:permission="android.permission.BIND_VPN_SERVICE" />
+      </application>
+    </manifest>"""
+    report = apk_manifest.parse_manifest_xml(xml)
+    assert report["components"] == []
+    assert report["vpn_services"] == []
+
+
+def test_parser_rejects_invalid_package_for_relative_service_resolution():
+    xml = """<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+        package="org.example/invalid">
+      <application>
+        <service android:name=".TunnelService"
+          android:permission="android.permission.BIND_VPN_SERVICE" />
+      </application>
+    </manifest>"""
+    report = apk_manifest.parse_manifest_xml(xml)
+    assert report["package_name"] is None
+    assert report["vpn_services"] == [".TunnelService"]
+
+
+def test_parser_deduplicates_duplicate_vpn_service_names():
+    xml = """<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+        package="org.example">
+      <application>
+        <service android:name=".TunnelService"
+          android:permission="android.permission.BIND_VPN_SERVICE" />
+        <service android:name=".TunnelService"
+          android:permission="android.permission.BIND_VPN_SERVICE" />
+      </application>
+    </manifest>"""
+    report = apk_manifest.parse_manifest_xml(xml)
+    assert report["vpn_services"] == [".TunnelService"]
+    assert len(report["components"]) == 2

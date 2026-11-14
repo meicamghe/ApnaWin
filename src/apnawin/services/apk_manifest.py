@@ -6,6 +6,7 @@ returned, never arbitrary manifest text or resource values.
 """
 from __future__ import annotations
 
+import re
 import shutil
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -19,6 +20,13 @@ _MAX_APKANALYZER_TIMEOUT_SECONDS = 30
 _MAX_REPORTED_ITEMS = 512
 _COMPONENT_TAGS = ("activity", "activity-alias", "service", "receiver", "provider")
 _VPN_BIND_PERMISSION = "android.permission.BIND_VPN_SERVICE"
+_PACKAGE_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)*\Z")
+_CLASS_NAME = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*\Z")
+
+
+def _valid_component_name(value: str) -> bool:
+    candidate = value[1:] if value.startswith(".") else value
+    return bool(candidate and _CLASS_NAME.fullmatch(candidate))
 
 
 def _android_attr(element: ET.Element, name: str) -> str | None:
@@ -53,7 +61,11 @@ def parse_manifest_xml(xml_text: str) -> dict[str, Any]:
         raise ValueError("apkanalyzer output is not an Android manifest")
 
     package_name = root.attrib.get("package")
-    if not package_name or len(package_name) > 255:
+    if (
+        not package_name
+        or len(package_name) > 255
+        or not _PACKAGE_NAME.fullmatch(package_name)
+    ):
         package_name = None
     uses_sdk = root.find("uses-sdk")
     permissions: set[str] = set()
@@ -71,7 +83,7 @@ def parse_manifest_xml(xml_text: str) -> dict[str, Any]:
             if node.tag not in _COMPONENT_TAGS:
                 continue
             name = _android_attr(node, "name")
-            if not name or len(name) > 255:
+            if not name or len(name) > 255 or not _valid_component_name(name):
                 continue
             permission = _android_attr(node, "permission")
             exported_text = _android_attr(node, "exported")

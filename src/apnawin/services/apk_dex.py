@@ -20,6 +20,7 @@ _MAX_CLASSES = 100_000
 _MAX_RELEVANT_CLASSES = 2_000
 _DEX_NAME = re.compile(r"classes(?:[2-9]|[1-9][0-9]+)?\.dex\Z")
 _CLASS_NAME = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*\Z")
+_PACKAGE_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)*\Z")
 _SIGNAL = re.compile(
     r"(?:vpn|tunnel|tun2socks|tun|socks|xray|openvpn|wireguard|"
     r"dns|proxy|shadowsocks|v2ray|trojan|service|connectivity)",
@@ -101,10 +102,26 @@ def parse_defined_classes(output: str) -> tuple[int, list[str]]:
     return count, relevant
 
 
-def _resolve_manifest_class(name: str, package_name: str | None) -> str:
-    if name.startswith(".") and package_name:
+def _resolve_manifest_class(name: str, package_name: str | None) -> str | None:
+    """Resolve Android component names without guessing when package context is absent."""
+    if not isinstance(name, str) or not name or len(name) > 255:
+        raise ValueError("manifest service name is invalid")
+    if name.startswith("."):
+        suffix = name[1:]
+        if not _CLASS_NAME.fullmatch(suffix):
+            raise ValueError("manifest service name is invalid")
+        if not package_name:
+            return None
+        if not _PACKAGE_NAME.fullmatch(package_name):
+            raise ValueError("manifest package name is invalid")
         return package_name + name
-    if "." not in name and package_name:
+    if not _CLASS_NAME.fullmatch(name):
+        raise ValueError("manifest service name is invalid")
+    if "." not in name:
+        if not package_name:
+            return None
+        if not _PACKAGE_NAME.fullmatch(package_name):
+            raise ValueError("manifest package name is invalid")
         return package_name + "." + name
     return name
 
@@ -174,7 +191,7 @@ def inspect_apk_dex(
         service_matches.append({
             "manifest_name": service,
             "resolved_class_name": resolved_name,
-            "defined_in_dex": resolved_name in defined_classes,
+            "defined_in_dex": resolved_name in defined_classes if resolved_name else False,
         })
     reference_output = _run(resolved, ["dex", "references", apk], timeout)
     references = parse_reference_counts(reference_output)

@@ -151,3 +151,44 @@ def test_parse_defined_classes_rejects_duplicate_defined_class_names():
 def test_parse_defined_classes_ignores_valid_referenced_class_rows():
     output = "C r 0 1 30 android.net.VpnService\n"
     assert apk_dex.parse_defined_classes(output) == (0, [])
+
+
+
+def test_manifest_class_resolution_supports_nested_classes():
+    assert apk_dex._resolve_manifest_class(
+        ".vpn.Outer$TunnelService", "com.example"
+    ) == "com.example.vpn.Outer$TunnelService"
+    assert apk_dex._resolve_manifest_class(
+        "com.example.vpn.Outer$TunnelService", "com.example"
+    ) == "com.example.vpn.Outer$TunnelService"
+
+
+@pytest.mark.parametrize("name", ["", ".", "bad/name", "bad name", "bad\\Name"])
+def test_manifest_class_resolution_rejects_invalid_names(name):
+    with pytest.raises(ValueError, match="invalid"):
+        apk_dex._resolve_manifest_class(name, "com.example")
+
+
+@pytest.mark.parametrize("name", [".TunnelService", "TunnelService"])
+def test_relative_manifest_class_without_package_is_not_guessed(name):
+    assert apk_dex._resolve_manifest_class(name, None) is None
+
+
+def test_manifest_service_join_without_package_reports_unresolved_class(tmp_path, monkeypatch):
+    apk = tmp_path / "missing-package.apk"
+    apk.write_bytes(b"placeholder")
+    outputs = iter([
+        b"classes.dex\n",
+        b"C d 1 1 20 com.example.TunnelService\n",
+        b"classes.dex 10\n",
+    ])
+    monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
+    monkeypatch.setattr(apk_dex, "run_apkanalyzer", lambda *args: next(outputs))
+    report = apk_dex.inspect_apk_dex(
+        apk, manifest_services=[".TunnelService"], package_name=None
+    )
+    assert report["manifest_service_classes"] == [{
+        "manifest_name": ".TunnelService",
+        "resolved_class_name": None,
+        "defined_in_dex": False,
+    }]

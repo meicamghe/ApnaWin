@@ -24,3 +24,8 @@ Workflow #176 passed on commit `ee6fc420e5969555d143c6a9abd1c91ee756b791`. Workf
 ## Latest engineering change
 
 Native engine-name matching now uses token boundaries to reduce substring false positives, and the combined report exposes native-library counts per ABI. Tests cover positive/negative filename cases, inventory immutability, report correlation, ABI aggregation and DEX-count mismatch. No real APNA APK has yet been analyzed.
+
+
+## Manifest-to-DEX join hardening
+
+Manifest component class names are now allowlisted as dotted Java-style identifiers (including dollar signs for nested classes); malformed names are omitted before they can enter the join. Invalid package identifiers are not used as resolution context. DEX join resolution returns an unresolved value for relative/simple names when package context is absent instead of guessing. Tests cover invalid names, missing/invalid package context, duplicate VPN service declarations and nested-class names. A positive join still means only that the class is defined in DEX, not that Android instantiates or executes it.
