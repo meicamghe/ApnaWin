@@ -19,6 +19,21 @@ from apnawin.domain.profile import ConnectionProfile, Transport
 from apnawin.engines.windows_job import WindowsJobProcess, WindowsJobError
 
 
+def _unique_json_object(pairs: list[tuple[str, object]]) -> dict:
+    """Build a JSON object while rejecting ambiguous duplicate keys."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"Duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def _reject_json_constant(value: str) -> None:
+    """Reject JavaScript-style non-finite values accepted by json.loads by default."""
+    raise ValueError(f"Invalid JSON constant: {value}")
+
+
 class XrayProcessError(RuntimeError):
     """Raised when Xray cannot be validated or supervised."""
 
@@ -86,8 +101,12 @@ class XrayProcessRunner:
 
     def _read_config(self) -> dict:
         try:
-            config = json.loads(self.config_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            config = json.loads(
+                self.config_path.read_text(encoding="utf-8"),
+                object_pairs_hook=_unique_json_object,
+                parse_constant=_reject_json_constant,
+            )
+        except (OSError, UnicodeError, ValueError) as exc:
             raise ValueError("Xray config must be readable UTF-8 JSON") from exc
         if not isinstance(config, dict):
             raise ValueError("Xray config root must be a JSON object")
