@@ -71,7 +71,10 @@ class RemoteCatalogRefreshCoordinator:
         self._condition = Condition()
         self._refreshing = False
         self._generation = 0
-        self._last_result: RefreshResult | None = None
+        # Results are retained only while callers are waiting for that exact
+        # generation. A later refresh can therefore never overwrite their result.
+        self._waiters_by_generation: dict[int, int] = {}
+        self._completed_by_generation: dict[int, RefreshResult] = {}
         self._failure_count = 0
         self._next_retry_at = 0.0
 
@@ -82,18 +85,28 @@ class RemoteCatalogRefreshCoordinator:
             return None
 
     def refresh(self, *, force: bool = False) -> RefreshResult:
-        """Refresh once; concurrent callers share the in-flight attempt."""
+        """Refresh once; concurrent callers share the exact in-flight result."""
         if not isinstance(force, bool):
             raise TypeError("force must be a boolean")
 
         with self._condition:
             if self._refreshing:
                 generation = self._generation
-                self._condition.wait_for(
-                    lambda: not self._refreshing or self._generation != generation
+                self._waiters_by_generation[generation] = (
+                    self._waiters_by_generation.get(generation, 0) + 1
                 )
-                if self._last_result is not None:
-                    return self._last_result
+                try:
+                    self._condition.wait_for(
+                        lambda: generation in self._completed_by_generation
+                    )
+                    return self._completed_by_generation[generation]
+                finally:
+                    remaining = self._waiters_by_generation[generation] - 1
+                    if remaining:
+                        self._waiters_by_generation[generation] = remaining
+                    else:
+                        self._waiters_by_generation.pop(generation, None)
+                        self._completed_by_generation.pop(generation, None)
 
             now = self._monotonic()
             if not force and now < self._next_retry_at:
@@ -105,6 +118,7 @@ class RemoteCatalogRefreshCoordinator:
 
             self._refreshing = True
             self._generation += 1
+            generation = self._generation
 
         result: RefreshResult
         try:
@@ -127,8 +141,16 @@ class RemoteCatalogRefreshCoordinator:
             )
         finally:
             with self._condition:
-                if "result" in locals():
-                    self._last_result = result
+                if "result" not in locals():
+                    # Wake waiters even if this thread is interrupted by a
+                    # BaseException; the initiating caller still receives it.
+                    result = RefreshResult(
+                        status=RefreshStatus.FAILED,
+                        catalog=self._cached_catalog(),
+                        error_type="RefreshAborted",
+                    )
+                if self._waiters_by_generation.get(generation, 0):
+                    self._completed_by_generation[generation] = result
                 self._refreshing = False
                 self._condition.notify_all()
 

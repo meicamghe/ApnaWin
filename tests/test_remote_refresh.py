@@ -151,6 +151,13 @@ def test_concurrent_refresh_calls_share_one_provider_request(tmp_path):
     assert len(results) == 2
     assert results[0] == results[1]
     assert results[0].status is RefreshStatus.UPDATED
+    assert coordinator._waiters_by_generation == {}
+    assert coordinator._completed_by_generation == {}
+
+    provider.response = document("next-generation")
+    next_result = coordinator.refresh(force=True)
+    assert next_result.catalog.revision == "next-generation"
+    assert provider.calls == 2
 
 
 @pytest.mark.parametrize(

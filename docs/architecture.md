@@ -33,7 +33,7 @@ Build a native Windows 10/11 client that offers a clear desktop workflow for tun
 - Xray configuration parsing rejects duplicate JSON object keys and non-standard non-finite constants before any executable validation or launch.
 - Windows process-tree containment uses Job Objects and creation-time job assignment; the Xray runner fails closed rather than launching an uncontained Windows child process.
 - Remote catalog documents have a strict, bounded, provider-neutral schema; the local last-known-good cache uses atomic replacement and revalidation on load.
-- Remote refresh orchestration provides single-flight requests, bounded exponential backoff, forced refresh, cache fallback and redacted failure results.
+- Remote refresh orchestration provides generation-specific single-flight results, bounded exponential backoff, forced refresh, cache fallback and redacted failure results. Waiting callers cannot accidentally receive a later refresh generation's result.
 - A reusable HTTPS catalog transport accepts an explicitly configured URL, uses the platform's default certificate validation, rejects redirects and bounds response reads. It does not assume an APNA endpoint or authentication scheme.
 - Connect remains disabled: no real Windows tunnel engine is integrated.
 
@@ -47,6 +47,7 @@ Build a native Windows 10/11 client that offers a clear desktop workflow for tun
 - M2c: document the remote server/config refresh evidence plan and provider-neutral security architecture — implemented.
 - M2d: strict remote catalog model, atomic last-known-good cache and provider-neutral refresh coordinator — implemented and verified.
 - M2e: bounded HTTPS transport for an explicitly configured catalog provider — implemented; APNA endpoint, authentication and upstream schema remain unverified.
+- M2f: preserve exact refresh-generation results for concurrent waiters and cover result lifecycle — implemented; Windows CI verification pending.
 - M3: integrate one Windows engine end-to-end using an authorized test server and documented configuration. This is currently blocked on obtaining a compatible, authorized test configuration; no private server details or credentials will be inferred.
 - M4: implement elevation/service and TUN adapter lifecycle with rollback and cleanup.
 - M5: package, sign where possible, test on clean Windows 10/11 VMs and publish releases.
@@ -57,7 +58,7 @@ The APK's Android native libraries cannot be assumed to run on Windows. Use Wind
 
 ## Verification status
 
-The Windows GitHub Actions workflow runs the Python test suite on Windows and builds/smoke-tests the portable application folder. Workflow run [#143](https://github.com/meicamghe/ApnaWin/actions/runs/43568444127) passed both the test and Windows build/smoke-test jobs. Passing unit tests and a packaged-app smoke test do not establish VPN connectivity, server compatibility, privileged networking behavior, or successful operation on a clean machine. Connect remains disabled until the separate end-to-end networking acceptance criteria are met.
+The Windows GitHub Actions workflow runs the Python test suite on Windows and builds/smoke-tests the portable application folder. Workflow run [#144](https://github.com/meicamghe/ApnaWin/actions/runs/43568756016) passed both the test and Windows build/smoke-test jobs, including artifact upload. Passing unit tests and a packaged-app smoke test do not establish VPN connectivity, server compatibility, privileged networking behavior, or successful operation on a clean machine. Connect remains disabled until the separate end-to-end networking acceptance criteria are met.
 
 ## Profile text rendering
 
