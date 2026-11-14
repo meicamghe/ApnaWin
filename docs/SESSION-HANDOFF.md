@@ -19,7 +19,7 @@ The Android app is believed to refresh server information and connection behavio
 
 ## Latest verification
 
-Workflow run #173 failed in two Windows-specific test assertions (DEX fixture byte strings encoded literal backslash-n sequences, and stdout used CRLF). The implementation's bounded subprocess runner passed its other overflow/timeout tests; 322 tests passed and 2 failed. The fixtures/assertion are corrected in the follow-up commit. This does not indicate VPN connectivity or system-wide traffic tunneling.
+Workflow run #175 passed on commit `adc385a61299d2be096640183ed8d7bf20566544`, after correcting Windows newline handling and DEX test fixtures. The preceding #173 run had 322 passing tests and two fixture/assertion failures; the corrected run passed. CI verifies the configured tests only, not live VPN connectivity or APNA endpoint discovery.
 
 ## Latest engineering change
 

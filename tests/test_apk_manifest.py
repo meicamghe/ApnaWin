@@ -99,3 +99,50 @@ def test_inspector_redacts_tool_errors(tmp_path, monkeypatch):
 
     with pytest.raises(RuntimeError, match="failed to inspect"):
         apk_manifest.inspect_apk_manifest(apk)
+
+
+def test_parser_deduplicates_permissions_and_requires_exact_vpn_binding_permission():
+    xml = """<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+        package="org.example">
+      <uses-permission android:name="android.permission.INTERNET" />
+      <uses-permission android:name="android.permission.INTERNET" />
+      <application>
+        <service android:name=".Vpn" android:permission="android.permission.BIND_VPN_SERVICE" />
+        <service android:name=".Other" android:permission="android.permission.INTERNET" />
+      </application>
+    </manifest>"""
+    report = apk_manifest.parse_manifest_xml(xml)
+
+    assert report["permissions"] == ["android.permission.INTERNET"]
+    assert report["vpn_services"] == [".Vpn"]
+    assert [item["name"] for item in report["components"]] == [".Vpn", ".Other"]
+
+
+def test_parser_rejects_oversized_xml_before_parsing():
+    with pytest.raises(ValueError, match="allowed size"):
+        apk_manifest.parse_manifest_xml(
+            "<manifest />" + (" " * apk_manifest._MAX_APKANALYZER_OUTPUT)
+        )
+
+
+def test_parser_rejects_excessive_permission_names():
+    permissions = "".join(
+        f'<uses-permission xmlns:android="http://schemas.android.com/apk/res/android" android:name="permission.{i}" />'
+        for i in range(apk_manifest._MAX_REPORTED_ITEMS + 1)
+    )
+    xml = (
+        '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
+        f"{permissions}</manifest>"
+    )
+    with pytest.raises(ValueError, match="too many permissions"):
+        apk_manifest.parse_manifest_xml(xml)
+
+
+def test_parser_does_not_infer_boolean_for_invalid_exported_value():
+    xml = """<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+      <application>
+        <activity android:name=".Main" android:exported="yes" />
+      </application>
+    </manifest>"""
+    report = apk_manifest.parse_manifest_xml(xml)
+    assert report["components"][0]["exported"] is None
