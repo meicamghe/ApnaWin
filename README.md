@@ -4,10 +4,10 @@ A native Windows 10/11 desktop client project inspired by the workflow of APNA T
 
 ## Current status
 
-**Milestone M2 is in progress.** The repository includes:
+**Milestones M2a/M2b are implemented; M2 profile workflow hardening remains in progress.** The repository includes:
 - A native PySide6 desktop application.
 - Add, edit, select and remove connection profiles.
-- Local JSON persistence for non-secret profile metadata.
+- Strict local JSON persistence for non-secret profile metadata, with unique same-directory atomic temp files, flush/fsync, duplicate-key/schema validation and duplicate-name rejection.
 - A transport-neutral profile model and tunnel-engine contract.
 - A test-only mock engine that does not touch the network.
 - Windows GitHub Actions tests and a PyInstaller build job that publishes a portable Windows x64 application-folder artifact (14-day retention).
@@ -38,7 +38,7 @@ python -m pytest
 
 ## Profile storage
 
-Profiles are saved under the current user's application-data directory in `profiles.json`. The current schema stores only:
+Profiles are saved under the current user's application-data directory in `profiles.json`. Writes use a unique temporary file in the same directory and atomic replacement; malformed JSON, duplicate keys, unsupported schema versions, unexpected fields and duplicate profile names are rejected. The current schema stores only:
 - Profile name
 - Transport selection (Xray, OpenVPN or SOCKS)
 - Server host
@@ -54,6 +54,7 @@ It does not store passwords, access tokens, private keys or other credentials. D
 - `src/apnawin/storage/` — profile persistence
 - `tests/` — automated tests, including desktop profile workflow checks
 - `docs/architecture.md` — architecture, milestones and security boundaries
+- `docs/SESSION-HANDOFF.md` — durable implementation status and next engineering steps
 - `docs/apk-analysis.md` — preliminary APK observations and reproducible verification checklist
 - `docs/engine-contract.md` — requirements for production tunnel adapters
 - `docs/xray-process-runner.md` — scope and limitations of Xray process supervision
