@@ -226,3 +226,17 @@ must not exceed the number of entries, and the linked string table must begin
 with its required NUL byte. Invalid references or bounds cause that ELF
 member to be classified as invalid; static symbol names are not emitted or
 counted as JNI exports.
+
+
+## ELF relocation-section metadata
+
+Before interpreting dynamic symbols, the ELF parser validates relocation
+section metadata for both ELF32 and ELF64. REL and RELA sections must reference
+an in-range static or dynamic symbol-table section, identify an in-range target
+section index, use an entry size at least as large as the class-specific
+standard record, have a section size divisible by that entry size, and keep
+the relocation bytes within the file. The target index may be zero, as used by
+some dynamic relocation sections. Relocation records themselves are not
+decoded: their architecture-specific symbol indexes, relocation types, and
+addends are outside this metadata-only inspection. Passing these checks does
+not establish that relocations can be applied or that the library is loadable.

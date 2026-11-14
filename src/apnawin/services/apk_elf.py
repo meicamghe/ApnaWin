@@ -92,6 +92,33 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             alignment = section[8]
             if alignment > 1 and alignment & (alignment - 1):
                 raise ValueError("ELF section alignment is not a power of two")
+        # Relocation sections reference a symbol table and, for relocatable
+        # objects, the section receiving the relocations. Validate metadata
+        # without interpreting architecture-specific relocation records.
+        relocation_entry_sizes = (
+            {4: 24, 9: 16} if elf_class == 2 else {4: 12, 9: 8}
+        )
+        for section in sections:
+            relocation_type = section[1]
+            if relocation_type not in relocation_entry_sizes:
+                continue
+            relocation_offset, relocation_size = section[4], section[5]
+            symbol_index, target_index, entry_size = section[6], section[7], section[9]
+            if (
+                symbol_index >= len(sections)
+                or sections[symbol_index][1] not in (2, 11)
+            ):
+                raise ValueError("ELF relocation section has an invalid symbol-table reference")
+            if target_index >= len(sections):
+                raise ValueError("ELF relocation section has an invalid target-section reference")
+            minimum_entry_size = relocation_entry_sizes[relocation_type]
+            if entry_size < minimum_entry_size or relocation_size % entry_size:
+                raise ValueError("ELF relocation section entry metadata is invalid")
+            if (
+                relocation_offset > len(data)
+                or relocation_size > len(data) - relocation_offset
+            ):
+                raise ValueError("ELF relocation section data is out of bounds")
         # Validate section references and bounds for both static and dynamic
         # symbol tables before interpreting any dynamic symbols.
         for section in sections:

@@ -420,3 +420,68 @@ def test_inspect_elf_bytes_rejects_malformed_symbol_table_metadata(
     struct.pack_into(format_code, data, dynsym_header + field_offset, value)
     with pytest.raises(ValueError, match=message):
         inspect_elf_bytes(bytes(data))
+
+
+def _elf_with_relocation_section(payload, elf_class):
+    data = bytearray(payload)
+    if elf_class == 64:
+        section_offset = struct.unpack_from("<Q", data, 40)[0]
+        header_offset = section_offset + 3 * 64
+        struct.pack_into("<I", data, header_offset + 4, 4)  # SHT_RELA
+        struct.pack_into("<Q", data, header_offset + 16, 64)
+        struct.pack_into("<Q", data, header_offset + 24, 24)
+        struct.pack_into("<I", data, header_offset + 40, 2)
+        struct.pack_into("<I", data, header_offset + 44, 1)
+        struct.pack_into("<Q", data, header_offset + 48, 8)
+        struct.pack_into("<Q", data, header_offset + 56, 24)
+    else:
+        section_offset = struct.unpack_from("<I", data, 32)[0]
+        header_offset = section_offset + 3 * 40
+        struct.pack_into("<I", data, header_offset + 4, 4)  # SHT_RELA
+        struct.pack_into("<I", data, header_offset + 16, 52)
+        struct.pack_into("<I", data, header_offset + 20, 12)
+        struct.pack_into("<I", data, header_offset + 24, 2)
+        struct.pack_into("<I", data, header_offset + 28, 1)
+        struct.pack_into("<I", data, header_offset + 32, 4)
+        struct.pack_into("<I", data, header_offset + 36, 12)
+    return data, header_offset
+
+
+@pytest.mark.parametrize(
+    ("elf_class", "payload"),
+    [(64, _elf64_with_jni_exports()), (32, _elf32_with_jni_exports())],
+)
+def test_inspect_elf_bytes_accepts_valid_relocation_section(elf_class, payload):
+    data, _ = _elf_with_relocation_section(payload, elf_class)
+    assert inspect_elf_bytes(bytes(data))["inspection_status"] == "complete"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("link", 99, "invalid symbol-table reference"),
+        ("info", 99, "invalid target-section reference"),
+        ("entsize", 1, "entry metadata is invalid"),
+        ("size", 23, "entry metadata is invalid"),
+        ("offset", 0xFFFFFFFF, "data is out of bounds"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("elf_class", "payload"),
+    [(64, _elf64_with_jni_exports()), (32, _elf32_with_jni_exports())],
+)
+def test_inspect_elf_bytes_rejects_malformed_relocation_metadata(
+    elf_class, payload, field, value, message
+):
+    data, header_offset = _elf_with_relocation_section(payload, elf_class)
+    offsets = (
+        {"link": (40, "<I"), "info": (44, "<I"), "entsize": (56, "<Q"),
+         "size": (24, "<Q"), "offset": (16, "<Q")}
+        if elf_class == 64 else
+        {"link": (24, "<I"), "info": (28, "<I"), "entsize": (36, "<I"),
+         "size": (20, "<I"), "offset": (16, "<I")}
+    )
+    field_offset, format_code = offsets[field]
+    struct.pack_into(format_code, data, header_offset + field_offset, value)
+    with pytest.raises(ValueError, match=message):
+        inspect_elf_bytes(bytes(data))
