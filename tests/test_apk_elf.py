@@ -382,3 +382,41 @@ def test_inspect_elf_bytes_validates_names_even_for_null_local_symbols():
     struct.pack_into("<I", data, dynsym_offset, 0xFFFFFFFF)
     with pytest.raises(ValueError, match="symbol name offset is invalid"):
         inspect_elf_bytes(bytes(data))
+
+
+
+@pytest.mark.parametrize(
+    ("field_offset", "value", "message"),
+    [
+        (40, 9, "symbol table metadata is invalid"),
+        (40, 2, "symbol string table has an invalid section type"),
+    ],
+)
+def test_inspect_elf_bytes_rejects_invalid_symbol_table_string_references(
+    field_offset, value, message
+):
+    data = bytearray(_elf64_with_jni_exports())
+    section_offset = struct.unpack_from("<Q", data, 40)[0]
+    dynsym_header = section_offset + 2 * 64
+    struct.pack_into("<I", data, dynsym_header + field_offset, value)
+    with pytest.raises(ValueError, match=message):
+        inspect_elf_bytes(bytes(data))
+
+
+@pytest.mark.parametrize(
+    ("field_offset", "format_code", "value", "message"),
+    [
+        (24, "<Q", 0xFFFFFFFF, "symbol table is out of bounds"),
+        (32, "<Q", 95, "symbol table metadata is invalid"),
+        (44, "<I", 99, "local-symbol boundary is invalid"),
+    ],
+)
+def test_inspect_elf_bytes_rejects_malformed_symbol_table_metadata(
+    field_offset, format_code, value, message
+):
+    data = bytearray(_elf64_with_jni_exports())
+    section_offset = struct.unpack_from("<Q", data, 40)[0]
+    dynsym_header = section_offset + 2 * 64
+    struct.pack_into(format_code, data, dynsym_header + field_offset, value)
+    with pytest.raises(ValueError, match=message):
+        inspect_elf_bytes(bytes(data))

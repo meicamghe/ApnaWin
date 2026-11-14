@@ -212,3 +212,17 @@ entries, and that every symbol's name offset is in range and NUL-terminated.
 These checks include local or otherwise non-exported entries excluded from
 JNI counting. Malformed metadata is rejected instead of being silently
 ignored because the affected symbol would not contribute to the report.
+
+
+
+## ELF symbol-table section references
+
+Before counting JNI-style exports, the parser validates section metadata for
+both static and dynamic symbol tables. Each symbol table must link to an
+in-range string-table section, use a nonzero entry size large enough for the
+ELF class, have a section size divisible by that entry size, and keep its
+symbol data and linked strings within the file. The local-symbol boundary
+must not exceed the number of entries, and the linked string table must begin
+with its required NUL byte. Invalid references or bounds cause that ELF
+member to be classified as invalid; static symbol names are not emitted or
+counted as JNI exports.

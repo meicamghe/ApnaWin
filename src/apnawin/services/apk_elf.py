@@ -92,6 +92,32 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             alignment = section[8]
             if alignment > 1 and alignment & (alignment - 1):
                 raise ValueError("ELF section alignment is not a power of two")
+        # Validate section references and bounds for both static and dynamic
+        # symbol tables before interpreting any dynamic symbols.
+        for section in sections:
+            if section[1] not in (2, 11):  # SHT_SYMTAB / SHT_DYNSYM
+                continue
+            symbol_offset, symbol_size = section[4], section[5]
+            string_index, local_boundary, entry_size = section[6], section[7], section[9]
+            if (
+                string_index >= len(sections)
+                or entry_size < expected_symbol
+                or symbol_size % entry_size
+            ):
+                raise ValueError("ELF symbol table metadata is invalid")
+            if symbol_offset > len(data) or symbol_size > len(data) - symbol_offset:
+                raise ValueError("ELF symbol table is out of bounds")
+            symbol_count = symbol_size // entry_size
+            if local_boundary > symbol_count:
+                raise ValueError("ELF symbol table local-symbol boundary is invalid")
+            string_section = sections[string_index]
+            if string_section[1] != 3:  # SHT_STRTAB
+                raise ValueError("ELF symbol string table has an invalid section type")
+            string_offset, string_size = string_section[4], string_section[5]
+            if string_offset > len(data) or string_size > len(data) - string_offset:
+                raise ValueError("ELF symbol string table is out of bounds")
+            if not string_size or data[string_offset] != 0:
+                raise ValueError("ELF symbol string table is missing its leading NUL")
     else:
         if section_count:
             raise ValueError("ELF section table offset is missing")
