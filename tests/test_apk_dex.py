@@ -209,6 +209,7 @@ def test_manifest_service_join_includes_only_numeric_class_metadata(tmp_path, mo
     outputs = iter([
         b"classes.dex\n",
         b"C d 7 3 256 com.example.TunnelService\nC d 1 0 40 com.example.Other\n",
+        b".class public Lcom/example/TunnelService;\n.method private static native start()V\n.end method\n",
         b"classes.dex 100\n",
     ])
     monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
@@ -224,6 +225,8 @@ def test_manifest_service_join_includes_only_numeric_class_metadata(tmp_path, mo
             "defined_method_count": 7,
             "referenced_method_count": 3,
             "byte_count": 256,
+            "native_method_count": 1,
+            "native_method_inspection_completed": True,
         },
         {
             "manifest_name": ".Missing",
