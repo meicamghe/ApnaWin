@@ -62,7 +62,7 @@ def inspect_local_socks_inbound(config: dict) -> LocalSocksInbound:
         raise ValueError("Xray's single inbound must use the SOCKS protocol")
 
     host = inbound.get("listen")
-        port = inbound.get("port")
+    port = inbound.get("port")
     if not isinstance(host, str) or not host.strip():
         raise ValueError("SOCKS inbound must specify an explicit loopback listen address")
     if host not in {"127.0.0.1", "::1", "localhost"}:
