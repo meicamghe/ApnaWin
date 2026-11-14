@@ -4,16 +4,19 @@ A native Windows 10/11 desktop client project inspired by the workflow of APNA T
 
 ## Current status
 
-**Milestones M2a/M2b are implemented; M2 profile workflow hardening remains in progress.** The repository includes:
+**M2 profile workflow and M2a/M2b engine-process foundations are implemented; M2c remote-configuration discovery is documented but awaits APK/runtime evidence.** The repository includes:
 - A native PySide6 desktop application.
 - Add, edit, select and remove connection profiles.
 - Strict local JSON persistence for non-secret profile metadata, with unique same-directory atomic temp files, flush/fsync, duplicate-key/schema validation and duplicate-name rejection.
 - Strict Xray config parsing that rejects duplicate JSON keys and non-finite constants before execution.
 - A transport-neutral profile model and tunnel-engine contract.
 - A test-only mock engine that does not touch the network.
+- Windows Job Object process-tree containment for the Xray runner.
 - Windows GitHub Actions tests and a PyInstaller build job that publishes a portable Windows x64 application-folder artifact (14-day retention).
 
 The Connect button is intentionally disabled. An Xray process runner validates a supplied config and supervises the executable, but it is not yet a complete tunnel engine. The CI build artifact is an early portable application build, not a signed installer and not a VPN client with working tunnel connectivity. No APNA TUNNEL server compatibility is claimed.
+
+The Android app may refresh its server catalog and connection parameters remotely. This is a first-class requirement for the Windows product, but the actual API, schema, authentication and refresh policy have not yet been verified. See [remote configuration discovery](docs/remote-configuration.md); no guessed backend endpoint or static replacement server list will be shipped.
 
 ## Run from source
 
@@ -57,6 +60,7 @@ It does not store passwords, access tokens, private keys or other credentials. D
 - `docs/architecture.md` — architecture, milestones and security boundaries
 - `docs/SESSION-HANDOFF.md` — durable implementation status and next engineering steps
 - `docs/apk-analysis.md` — preliminary APK observations and reproducible verification checklist
+- `docs/remote-configuration.md` — evidence plan and security contract for Android-style server/config refresh
 - `docs/engine-contract.md` — requirements for production tunnel adapters
 - `docs/profile-storage.md` — schema, atomic-write behavior and credential boundary
 - `docs/xray-process-runner.md` — scope and limitations of Xray process supervision

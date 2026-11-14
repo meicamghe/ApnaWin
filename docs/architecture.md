@@ -31,15 +31,17 @@ Build a native Windows 10/11 client that offers a clear desktop workflow for tun
 - Profile loading validates strict JSON/schema types, rejects duplicate JSON keys and duplicate case-insensitive profile names, and rejects unsupported format versions or unexpected fields.
 - Profile writes use unique same-directory temporary files, flush/fsync before atomic replacement, and clean up temporary files on failure.
 - Xray configuration parsing rejects duplicate JSON object keys and non-standard non-finite constants before any executable validation or launch.
+- Windows process-tree containment uses Job Objects and creation-time job assignment; the Xray runner fails closed rather than launching an uncontained Windows child process.
 - Connect remains disabled: no real Windows tunnel engine is integrated.
 
 ## Milestones
 
 - M0: repository skeleton, coding conventions and architecture record — complete.
 - M1: inspect APK metadata/resources and document observable features and protocols — preliminary; reproducible verification remains.
-- M2: define profile schema, persistence, mock engine contract and desktop profile workflow — core implementation present; workflow and failure-path coverage is being expanded.
+- M2: define profile schema, persistence, mock engine contract and desktop profile workflow — core implementation and security/failure-path coverage present.
 - M2a: add a safe Xray process runner and automated process-supervision tests — implemented.
-- M2b: Windows Job Object process-tree launcher and Xray runner integration — implemented and verified in Windows CI. Real child/grandchild containment, creation-time root membership, final-handle-close cleanup, and targeted Win32 failure/handle-retention tests pass. The latest full Windows test job, PyInstaller build, packaged GUI smoke test, and portable-folder artifact upload succeeded in workflow run [#99](https://github.com/meicamghe/ApnaWin/actions/runs/43512207741). See [Windows Job Object implementation](windows-job-object-design.md).
+- M2b: Windows Job Object process-tree launcher and Xray runner integration — implemented and verified in Windows CI. Real child/grandchild containment, creation-time root membership, final-handle-close cleanup, and targeted Win32 failure/handle-retention tests pass. The latest full Windows test job, PyInstaller build, packaged GUI smoke test, and portable-folder artifact upload succeeded in workflow run [#130](https://github.com/meicamghe/ApnaWin/actions/runs/43564101918).
+- M2c: document the remote server/config refresh evidence plan and provider-neutral security architecture — documented; actual provider integration awaits a reproducible APK/runtime trace.
 - M3: integrate one Windows engine end-to-end using an authorized test server and documented configuration. This is currently blocked on obtaining a compatible, authorized test configuration; no private server details or credentials will be inferred.
 - M4: implement elevation/service and TUN adapter lifecycle with rollback and cleanup.
 - M5: package, sign where possible, test on clean Windows 10/11 VMs and publish releases.
@@ -50,17 +52,11 @@ The APK's Android native libraries cannot be assumed to run on Windows. Use Wind
 
 ## Verification status
 
-The Windows GitHub Actions workflow runs the Python test suite on Windows and builds/smoke-tests the portable application folder. Passing unit tests and a packaged-app smoke test do not establish VPN connectivity, server compatibility, privileged networking behavior, or successful operation on a clean machine. Connect remains disabled until the separate end-to-end networking acceptance criteria are met.
-
+The Windows GitHub Actions workflow runs the Python test suite on Windows and builds/smoke-tests the portable application folder. Workflow run [#130](https://github.com/meicamghe/ApnaWin/actions/runs/43564101918) passed both the test and Windows build/smoke-test jobs. Passing unit tests and a packaged-app smoke test do not establish VPN connectivity, server compatibility, privileged networking behavior, or successful operation on a clean machine. Connect remains disabled until the separate end-to-end networking acceptance criteria are met.
 
 ## Profile text rendering
 
-Profile fields originate from imported or user-edited local data. The profile
-details label is explicitly configured for plain-text rendering, so values
-resembling Qt rich text are displayed literally rather than interpreted as
-markup. The profile name inserted into the remove-confirmation dialog is
-HTML-escaped before being passed to Qt's auto-detecting message text.
-
+Profile fields originate from imported or user-edited local data. The profile details label is explicitly configured for plain-text rendering, so values resembling Qt rich text are displayed literally rather than interpreted as markup. The profile name inserted into the remove-confirmation dialog is HTML-escaped before being passed to Qt's auto-detecting message text.
 
 ## Remote server configuration
 
