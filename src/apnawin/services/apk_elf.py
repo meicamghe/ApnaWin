@@ -113,6 +113,10 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
         if string_offset > len(data) or string_size > len(data) - string_offset:
             raise ValueError("ELF dynamic string table is out of bounds")
         strings = data[string_offset:string_offset + string_size]
+        # ELF string-table index zero is the empty string. A dynamic symbol
+        # table must reference a non-empty string table with that NUL byte.
+        if not strings or strings[0] != 0:
+            raise ValueError("ELF dynamic string table is missing its leading NUL")
         count = symbol_size // entry_size
         if section[7] > count:
             raise ValueError("ELF dynamic symbol local-symbol boundary is invalid")

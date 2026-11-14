@@ -198,9 +198,10 @@ assumed offsets. This is a structural consistency check; it does not establish
 that a library is accepted by an Android loader.
 
 
-Dynamic symbol-table validation also checks that the local-symbol boundary
-(sh_info) does not exceed the number of entries and validates every symbol's
-string-table name offset and NUL termination, including local or otherwise
-non-exported entries that are excluded from JNI counting. Malformed metadata
-is rejected instead of being silently ignored because the affected symbol
-would not contribute to the report.
+Dynamic symbol-table validation also checks that its linked string table is
+non-empty and begins with the required NUL byte (the empty string at index
+zero), that the local-symbol boundary (sh_info) does not exceed the number of
+entries, and that every symbol's name offset is in range and NUL-terminated.
+These checks include local or otherwise non-exported entries excluded from
+JNI counting. Malformed metadata is rejected instead of being silently
+ignored because the affected symbol would not contribute to the report.

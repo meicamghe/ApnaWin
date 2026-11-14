@@ -322,6 +322,22 @@ def test_inspect_elf_bytes_rejects_invalid_header_size_or_version(
         inspect_elf_bytes(bytes(data))
 
 
+
+def test_inspect_elf_bytes_rejects_empty_dynamic_string_table():
+    data = bytearray(_elf64_with_jni_exports())
+    section_offset = struct.unpack_from("<Q", data, 40)[0]
+    dynstr_header = section_offset + 64
+    struct.pack_into("<Q", data, dynstr_header + 32, 0)
+    with pytest.raises(ValueError, match="missing its leading NUL"):
+        inspect_elf_bytes(bytes(data))
+
+
+def test_inspect_elf_bytes_rejects_dynamic_string_table_without_initial_nul():
+    data = bytearray(_elf64_with_jni_exports())
+    data[64] = ord("X")
+    with pytest.raises(ValueError, match="missing its leading NUL"):
+        inspect_elf_bytes(bytes(data))
+
 def test_inspect_elf_bytes_rejects_invalid_dynamic_symbol_local_boundary():
     data = bytearray(_elf64_with_jni_exports())
     section_offset = struct.unpack_from("<Q", data, 40)[0]
