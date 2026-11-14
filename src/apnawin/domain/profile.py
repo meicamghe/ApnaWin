@@ -1,13 +1,43 @@
 """Validated, transport-neutral connection profile model."""
 
+import ipaddress
+import re
 from dataclasses import dataclass
-from enum import Enum
 from unicodedata import category
 
 
 def _contains_control_characters(value: str) -> bool:
     """Return whether a string contains any Unicode control character."""
     return any(category(character) == "Cc" for character in value)
+
+
+def _validate_endpoint_host(host: str) -> None:
+    """Accept IP literals or DNS names, never URLs or host:port strings."""
+    candidate = host[1:-1] if host.startswith("[") and host.endswith("]") else host
+    try:
+        ipaddress.ip_address(candidate)
+        return
+    except ValueError:
+        pass
+
+    # A colon is not valid in a DNS name; this also rejects malformed IPv6
+    # literals and accidental host:port / URL input.
+    if ":" in candidate or any(char in candidate for char in "/\\@?#"):
+        raise ValueError("Endpoint host must be an IP address or DNS hostname, not a URL")
+
+    try:
+        ascii_host = candidate.encode("idna").decode("ascii")
+    except UnicodeError as exc:
+        raise ValueError("Endpoint host must be a valid DNS hostname") from exc
+
+    # Permit a fully-qualified DNS name with one terminal dot.
+    normalized = ascii_host[:-1] if ascii_host.endswith(".") else ascii_host
+    if not normalized or len(normalized) > 253:
+        raise ValueError("Endpoint host must be a valid DNS hostname")
+    labels = normalized.split(".")
+    label_pattern = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
+    if any(not label_pattern.fullmatch(label) for label in labels):
+        raise ValueError("Endpoint host must be a valid DNS hostname")
 
 
 class Transport(str, Enum):
@@ -47,6 +77,7 @@ class ConnectionProfile:
             or _contains_control_characters(self.endpoint_host)
         ):
             raise ValueError("Endpoint host cannot contain whitespace or control characters")
+        _validate_endpoint_host(self.endpoint_host)
 
         if isinstance(self.endpoint_port, bool) or not isinstance(self.endpoint_port, int):
             raise TypeError("Endpoint port must be an integer")

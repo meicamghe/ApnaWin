@@ -8,6 +8,37 @@ def test_valid_profile_is_constructed():
     assert profile.endpoint_port == 1080
 
 
+@pytest.mark.parametrize("host", [
+    "localhost",
+    "vpn.example.test",
+    "vpn.example.test.",
+    "192.0.2.10",
+    "2001:db8::1",
+    "[2001:db8::1]",
+    "münchen.example",
+])
+def test_valid_ip_and_dns_hosts_are_accepted(host):
+    profile = ConnectionProfile("Office", Transport.SOCKS, host, 1080)
+    assert profile.endpoint_host == host
+
+
+@pytest.mark.parametrize("host", [
+    "https://vpn.example.test",
+    "vpn.example.test:443",
+    "user@vpn.example.test",
+    "vpn.example.test/path",
+    "bad..example.test",
+    "-bad.example.test",
+    "bad-.example.test",
+    ".",
+    "a" * 64 + ".example",
+    "2001:db8:::1",
+])
+def test_invalid_host_syntax_is_rejected(host):
+    with pytest.raises(ValueError):
+        ConnectionProfile("Office", Transport.SOCKS, host, 1080)
+
+
 @pytest.mark.parametrize("port", [0, -1, 65536])
 def test_invalid_port_is_rejected(port):
     with pytest.raises(ValueError):
