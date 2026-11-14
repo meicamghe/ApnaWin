@@ -12,7 +12,7 @@ _MAX_ZIP_ENTRIES = 100_000
 _MAX_ENTRY_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
 _MAX_TOTAL_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
 _MAX_COMPRESSION_RATIO = 1_000
-_ABI_RE = re.compile(r"^lib/([^/]+)/[^/]+\\.so$")
+_ABI_RE = re.compile(r"^lib/([^/]+)/[^/]+[.]so$")
 _WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:")
 
 
@@ -22,8 +22,8 @@ def _validate_entry(info: zipfile.ZipInfo) -> None:
     path = PurePosixPath(name)
     if (
         not name
-        or "\\\\" in name
-        or "\\x00" in name
+        or chr(92) in name
+        or chr(0) in name
         or name.startswith("/")
         or _WINDOWS_DRIVE_RE.match(name)
         or any(part in {".", ".."} for part in name.split("/"))
@@ -81,7 +81,7 @@ def inspect_apk(path: str | Path) -> dict[str, Any]:
             for name in names:
                 if name == "AndroidManifest.xml":
                     has_manifest = True
-                if re.fullmatch(r"classes(?:[0-9]+)?\\.dex", name):
+                if re.fullmatch(r"classes(?:[0-9]+)?[.]dex", name):
                     dex_count += 1
                 match = _ABI_RE.fullmatch(name)
                 if match:

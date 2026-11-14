@@ -53,7 +53,10 @@ def test_inventory_rejects_duplicate_zip_entry_names(tmp_path):
         inspect_apk(apk)
 
 
-@pytest.mark.parametrize("name", ["../escape", "/absolute", "C:/drive", "assets\\\\escape"])
+@pytest.mark.parametrize(
+    "name",
+    ["../escape", "/absolute", "C:/drive", "assets" + chr(92) + "escape"],
+)
 def test_inventory_rejects_unsafe_member_paths(tmp_path, name):
     apk = tmp_path / "unsafe.apk"
     with zipfile.ZipFile(apk, "w") as archive:
@@ -93,11 +96,7 @@ def test_inventory_enforces_per_entry_uncompressed_size(tmp_path, monkeypatch):
 
 
 def test_inventory_rejects_encrypted_entry_metadata(tmp_path):
-    apk = tmp_path / "encrypted.apk"
-    with zipfile.ZipFile(apk, "w") as archive:
-        archive.writestr("encrypted.bin", b"data")
-    with zipfile.ZipFile(apk, "r") as archive:
-        info = archive.infolist()[0]
+    info = zipfile.ZipInfo("encrypted.bin")
     info.flag_bits |= 0x1
     with pytest.raises(ValueError, match="encrypted ZIP entry"):
         apk_inventory._validate_entry(info)
