@@ -16,7 +16,7 @@ def test_runner_captures_bounded_output_from_both_streams():
         "timed out",
         "too large",
     )
-    assert output.replace(b"\\r\\n", b"\\n") == b"ok\\n"
+    assert output.replace(b"\r\n", b"\n") == b"ok\n"
 
 
 def test_runner_terminates_process_when_stdout_exceeds_limit():
