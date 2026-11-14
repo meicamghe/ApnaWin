@@ -5,6 +5,8 @@ be handled by a dedicated secure store and must never be added to this format.
 """
 
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Iterable
 
@@ -15,8 +17,21 @@ _FORMAT_VERSION = 1
 _REQUIRED_KEYS = {"name", "transport", "endpoint_host", "endpoint_port"}
 
 
+def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"Duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def _reject_nonstandard_constant(value: str) -> None:
+    raise ValueError(f"Invalid JSON constant: {value}")
+
+
 def save_profiles(path: str | Path, profiles: Iterable[ConnectionProfile]) -> None:
-    """Atomically save profiles as UTF-8 JSON."""
+    """Atomically save profiles as UTF-8 JSON using a unique same-directory temp file."""
     destination = Path(path)
     items = []
     for profile in profiles:
@@ -33,36 +48,49 @@ def save_profiles(path: str | Path, profiles: Iterable[ConnectionProfile]) -> No
 
     payload = {"format_version": _FORMAT_VERSION, "profiles": items}
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_name(destination.name + ".tmp")
+
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.",
+        suffix=".tmp",
+        dir=destination.parent,
+    )
+    temporary = Path(temporary_name)
     try:
-        temporary.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
         temporary.replace(destination)
     finally:
-        if temporary.exists():
-            temporary.unlink()
+        temporary.unlink(missing_ok=True)
 
 
 def load_profiles(path: str | Path) -> list[ConnectionProfile]:
-    """Load profiles, rejecting unknown versions and malformed records."""
+    """Load profiles, rejecting unknown versions, duplicate keys and malformed records."""
     source = Path(path)
     try:
-        payload = json.loads(source.read_text(encoding="utf-8"))
+        payload = json.loads(
+            source.read_text(encoding="utf-8"),
+            object_pairs_hook=_reject_duplicate_keys,
+            parse_constant=_reject_nonstandard_constant,
+        )
     except json.JSONDecodeError as exc:
         raise ValueError(f"Invalid profile JSON: {exc.msg}") from exc
 
     if not isinstance(payload, dict):
         raise ValueError("Profile document must be a JSON object")
-    if payload.get("format_version") != _FORMAT_VERSION:
+    version = payload.get("format_version")
+    if isinstance(version, bool) or not isinstance(version, int) or version != _FORMAT_VERSION:
         raise ValueError("Unsupported profile format version")
+    if set(payload) != {"format_version", "profiles"}:
+        raise ValueError("Profile document has an invalid schema")
 
     records = payload.get("profiles")
     if not isinstance(records, list):
         raise ValueError("'profiles' must be a JSON array")
 
     profiles: list[ConnectionProfile] = []
+    seen_names: set[str] = set()
     for index, record in enumerate(records):
         if not isinstance(record, dict) or set(record) != _REQUIRED_KEYS:
             raise ValueError(f"Profile at index {index} has an invalid schema")
@@ -84,6 +112,11 @@ def load_profiles(path: str | Path) -> list[ConnectionProfile]:
             )
         except (TypeError, ValueError) as exc:
             raise ValueError(f"Invalid profile at index {index}: {exc}") from exc
+
+        normalized_name = profile.name.casefold()
+        if normalized_name in seen_names:
+            raise ValueError(f"Duplicate profile name at index {index}")
+        seen_names.add(normalized_name)
         profiles.append(profile)
 
     return profiles
