@@ -320,3 +320,22 @@ def test_inspect_elf_bytes_rejects_invalid_header_size_or_version(
     struct.pack_into("<H" if offset in (52, 40) else "<I", data, offset, bad_value)
     with pytest.raises(ValueError, match=message):
         inspect_elf_bytes(bytes(data))
+
+
+def test_inspect_elf_bytes_rejects_invalid_dynamic_symbol_local_boundary():
+    data = bytearray(_elf64_with_jni_exports())
+    section_offset = struct.unpack_from("<Q", data, 40)[0]
+    dynsym_header = section_offset + 2 * 64
+    struct.pack_into("<I", data, dynsym_header + 44, 5)
+    with pytest.raises(ValueError, match="local-symbol boundary"):
+        inspect_elf_bytes(bytes(data))
+
+
+def test_inspect_elf_bytes_validates_names_even_for_null_local_symbols():
+    data = bytearray(_elf64_with_jni_exports())
+    section_offset = struct.unpack_from("<Q", data, 40)[0]
+    dynsym_header = section_offset + 2 * 64
+    dynsym_offset = struct.unpack_from("<Q", data, dynsym_header + 24)[0]
+    struct.pack_into("<I", data, dynsym_offset, 0xFFFFFFFF)
+    with pytest.raises(ValueError, match="symbol name offset is invalid"):
+        inspect_elf_bytes(bytes(data))

@@ -114,6 +114,8 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             raise ValueError("ELF dynamic string table is out of bounds")
         strings = data[string_offset:string_offset + string_size]
         count = symbol_size // entry_size
+        if section[7] > count:
+            raise ValueError("ELF dynamic symbol local-symbol boundary is invalid")
         for index in range(count):
             symbol = struct.unpack_from(symbol_fmt, data, symbol_offset + index * entry_size)
             if elf_class == 2:
@@ -121,15 +123,15 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             else:
                 name_offset, _value, _size, info, other, section_index = symbol
             dynamic_symbols += 1
-            binding, symbol_type, visibility = info >> 4, info & 0x0F, other & 0x3
-            if not section_index or binding not in (1, 2) or visibility not in (0, 3):
-                continue
             if name_offset >= len(strings):
                 raise ValueError("ELF symbol name offset is invalid")
             end = strings.find(b"\x00", name_offset)
             if end < 0:
                 raise ValueError("ELF symbol name is not terminated")
             name = strings[name_offset:end]
+            binding, symbol_type, visibility = info >> 4, info & 0x0F, other & 0x3
+            if not section_index or binding not in (1, 2) or visibility not in (0, 3):
+                continue
             # JNI entry points are functions; a data object with a Java_-like
             # name is not a callable JNI export.
             if symbol_type != 2:  # STT_FUNC
