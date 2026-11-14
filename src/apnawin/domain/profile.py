@@ -2,6 +2,12 @@
 
 from dataclasses import dataclass
 from enum import Enum
+from unicodedata import category
+
+
+def _contains_control_characters(value: str) -> bool:
+    """Return whether a string contains any Unicode control character."""
+    return any(category(character) == "Cc" for character in value)
 
 
 class Transport(str, Enum):
@@ -24,7 +30,7 @@ class ConnectionProfile:
             raise ValueError("Profile name cannot be empty")
         if len(self.name) > 128:
             raise ValueError("Profile name cannot exceed 128 characters")
-        if any(ord(character) < 32 or ord(character) == 127 for character in self.name):
+        if _contains_control_characters(self.name):
             raise ValueError("Profile name cannot contain control characters")
 
         if not isinstance(self.transport, Transport):
@@ -36,8 +42,10 @@ class ConnectionProfile:
             raise ValueError("Endpoint host cannot be empty")
         if len(self.endpoint_host) > 253:
             raise ValueError("Endpoint host cannot exceed 253 characters")
-        if any(character.isspace() or ord(character) < 32 or ord(character) == 127
-               for character in self.endpoint_host):
+        if (
+            any(character.isspace() for character in self.endpoint_host)
+            or _contains_control_characters(self.endpoint_host)
+        ):
             raise ValueError("Endpoint host cannot contain whitespace or control characters")
 
         if isinstance(self.endpoint_port, bool) or not isinstance(self.endpoint_port, int):
