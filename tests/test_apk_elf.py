@@ -451,6 +451,11 @@ def _elf_with_relocation_section(payload, elf_class):
     ("elf_class", "payload"),
     [(64, _elf64_with_jni_exports()), (32, _elf32_with_jni_exports())],
 )
+def test_inspect_elf_bytes_accepts_valid_relocation_section(elf_class, payload):
+    data, _ = _elf_with_relocation_section(payload, elf_class)
+    assert inspect_elf_bytes(bytes(data))["inspection_status"] == "complete"
+
+
 def test_inspect_elf_bytes_accepts_zero_target_for_dynamic_relocation_section():
     data, header_offset = _elf_with_relocation_section(_elf64_with_jni_exports(), 64)
     struct.pack_into("<I", data, header_offset + 44, 0)
