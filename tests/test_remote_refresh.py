@@ -1,6 +1,7 @@
 import json
 import threading
 import time
+from datetime import datetime, timezone
 
 import pytest
 
@@ -11,18 +12,23 @@ from apnawin.services.remote_refresh import (
 from apnawin.storage.remote_catalog_store import RemoteCatalogStore
 
 
-def document(revision="r1"):
+def document(revision="r1", *, generated_at="2099-11-14T06:00:00Z",
+             expires_at="2099-11-14T07:00:00Z"):
     return json.dumps(
         {
             "format_version": 1,
             "revision": revision,
-            "generated_at": "2026-11-14T06:00:00Z",
-            "expires_at": "2026-11-14T07:00:00Z",
+            "generated_at": generated_at,
+            "expires_at": expires_at,
             "servers": [
                 {"id": "eu-1", "name": "Europe", "region": "EU", "available": True}
             ],
         }
     )
+
+
+def fixed_clock():
+    return lambda: datetime(2099, 11, 14, 6, 30, tzinfo=timezone.utc)
 
 
 class FakeProvider:
@@ -41,7 +47,8 @@ class FakeProvider:
 def test_refresh_fetches_validates_and_persists_catalog(tmp_path):
     provider = FakeProvider(document("fresh-r2"))
     coordinator = RemoteCatalogRefreshCoordinator(
-        provider, RemoteCatalogStore(tmp_path / "catalog.json")
+        provider, RemoteCatalogStore(tmp_path / "catalog.json"),
+        wall_clock=fixed_clock(),
     )
     result = coordinator.refresh()
     assert result.status is RefreshStatus.UPDATED
@@ -49,11 +56,37 @@ def test_refresh_fetches_validates_and_persists_catalog(tmp_path):
     assert provider.calls == 1
 
 
+@pytest.mark.parametrize(
+    "response",
+    [
+        document("expired", generated_at="2099-11-14T04:00:00Z",
+                 expires_at="2099-11-14T05:00:00Z"),
+        document("not-yet-valid", generated_at="2099-11-14T08:00:00Z",
+                 expires_at="2099-11-14T09:00:00Z"),
+    ],
+)
+def test_out_of_window_catalog_does_not_replace_last_known_good(tmp_path, response):
+    store = RemoteCatalogStore(tmp_path / "catalog.json")
+    store.save(document("last-good"))
+    coordinator = RemoteCatalogRefreshCoordinator(
+        FakeProvider(response=response), store, wall_clock=fixed_clock()
+    )
+
+    result = coordinator.refresh()
+
+    assert result.status is RefreshStatus.FAILED
+    assert result.error_type == "ValueError"
+    assert result.catalog.revision == "last-good"
+    assert store.load().revision == "last-good"
+
+
 def test_failed_refresh_returns_last_known_good_catalog(tmp_path):
     store = RemoteCatalogStore(tmp_path / "catalog.json")
     store.save(document("last-good"))
     provider = FakeProvider(error=TimeoutError("sensitive detail must not escape"))
-    coordinator = RemoteCatalogRefreshCoordinator(provider, store)
+    coordinator = RemoteCatalogRefreshCoordinator(
+        provider, store, wall_clock=fixed_clock()
+    )
     result = coordinator.refresh()
     assert result.status is RefreshStatus.FAILED
     assert result.catalog.revision == "last-good"
@@ -70,6 +103,7 @@ def test_failed_refresh_uses_exponential_backoff_and_force_bypasses_it(tmp_path)
         base_backoff_seconds=5,
         max_backoff_seconds=12,
         monotonic=lambda: now[0],
+        wall_clock=fixed_clock(),
     )
     first = coordinator.refresh()
     assert first.status is RefreshStatus.FAILED
@@ -94,6 +128,7 @@ def test_backoff_is_capped_and_success_resets_failure_count(tmp_path):
         base_backoff_seconds=4,
         max_backoff_seconds=6,
         monotonic=lambda: now[0],
+        wall_clock=fixed_clock(),
     )
     coordinator.refresh()
     now[0] = 4
@@ -113,7 +148,9 @@ def test_invalid_remote_document_cannot_replace_cache(tmp_path):
     store = RemoteCatalogStore(tmp_path / "catalog.json")
     store.save(document("last-good"))
     provider = FakeProvider('{"format_version":1,"bad":true}')
-    coordinator = RemoteCatalogRefreshCoordinator(provider, store)
+    coordinator = RemoteCatalogRefreshCoordinator(
+        provider, store, wall_clock=fixed_clock()
+    )
     result = coordinator.refresh()
     assert result.status is RefreshStatus.FAILED
     assert result.catalog.revision == "last-good"
@@ -133,7 +170,8 @@ def test_concurrent_refresh_calls_share_one_provider_request(tmp_path):
 
     provider = BlockingProvider(response=document("single-flight"))
     coordinator = RemoteCatalogRefreshCoordinator(
-        provider, RemoteCatalogStore(tmp_path / "catalog.json")
+        provider, RemoteCatalogStore(tmp_path / "catalog.json"),
+        wall_clock=fixed_clock(),
     )
     results = []
     first = threading.Thread(target=lambda: results.append(coordinator.refresh()))
@@ -181,7 +219,8 @@ def test_invalid_backoff_configuration_is_rejected(tmp_path, kwargs):
 
 def test_force_must_be_boolean(tmp_path):
     coordinator = RemoteCatalogRefreshCoordinator(
-        FakeProvider(), RemoteCatalogStore(tmp_path / "catalog.json")
+        FakeProvider(), RemoteCatalogStore(tmp_path / "catalog.json"),
+        wall_clock=fixed_clock(),
     )
     with pytest.raises(TypeError, match="boolean"):
         coordinator.refresh(force=1)

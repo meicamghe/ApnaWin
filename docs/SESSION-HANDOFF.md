@@ -8,11 +8,9 @@ The native Windows application shell, profile management, Xray process runner, W
 
 The Android app is believed to refresh server information and connection behavior, but the APK/network evidence has not yet been supplied. No APNA endpoint, authentication scheme, signature format, or upstream response schema is known. Do not invent any of these. See [remote-configuration.md](remote-configuration.md).
 
-
-
 ## Latest verification
 
-Workflow run [#144](https://github.com/meicamghe/ApnaWin/actions/runs/43568756016) passed:
+Workflow run [#146](https://github.com/meicamghe/ApnaWin/actions/runs/43569366650) passed:
 - Python unit tests
 - Windows portable build
 - Packaged-app smoke test
@@ -22,4 +20,4 @@ This verifies the desktop package starts in CI; it does not verify VPN connectiv
 
 ## Latest engineering change
 
-The refresh coordinator now retains a result per in-flight generation while that generation has waiting callers. A subsequent refresh cannot overwrite the result observed by callers that joined the earlier attempt. Waiting-result entries are removed after the final waiter consumes them. The new lifecycle assertions and the full Windows workflow are pending verification on the latest commit.
+The refresh coordinator now validates the server-declared catalog validity window against an injectable UTC clock before persisting a response. Expired and not-yet-valid responses are rejected without replacing the last-known-good cache. Regression tests cover both cases and the existing retry/concurrency behavior.

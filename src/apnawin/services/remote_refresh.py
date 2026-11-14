@@ -8,11 +8,12 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
 from threading import Condition
 from typing import Callable, Protocol
 
-from apnawin.domain.remote_catalog import RemoteCatalog
+from apnawin.domain.remote_catalog import RemoteCatalog, parse_remote_catalog
 from apnawin.storage.remote_catalog_store import RemoteCatalogStore
 
 
@@ -41,7 +42,7 @@ class RefreshResult:
 
 
 class RemoteCatalogRefreshCoordinator:
-    """Serialize refreshes, apply bounded exponential backoff and retain cache."""
+    """Serialize refreshes, enforce freshness, back off and retain the last good cache."""
 
     def __init__(
         self,
@@ -51,6 +52,7 @@ class RemoteCatalogRefreshCoordinator:
         base_backoff_seconds: float = 5.0,
         max_backoff_seconds: float = 300.0,
         monotonic: Callable[[], float] = time.monotonic,
+        wall_clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
         for name, value in (
             ("base_backoff_seconds", base_backoff_seconds),
@@ -62,12 +64,15 @@ class RemoteCatalogRefreshCoordinator:
                 raise ValueError(f"{name} must be a finite positive number")
         if max_backoff_seconds < base_backoff_seconds:
             raise ValueError("max_backoff_seconds must be >= base_backoff_seconds")
+        if not callable(monotonic) or not callable(wall_clock):
+            raise ValueError("clock providers must be callable")
 
         self._provider = provider
         self._store = store
         self._base_backoff = float(base_backoff_seconds)
         self._max_backoff = float(max_backoff_seconds)
         self._monotonic = monotonic
+        self._wall_clock = wall_clock
         self._condition = Condition()
         self._refreshing = False
         self._generation = 0
@@ -123,7 +128,12 @@ class RemoteCatalogRefreshCoordinator:
         result: RefreshResult
         try:
             document = self._provider.fetch_catalog()
-            catalog = self._store.save(document)
+            # Validate the freshness window before writing. An expired or
+            # not-yet-valid response must never replace the last-known-good cache.
+            catalog = parse_remote_catalog(document)
+            if not catalog.is_fresh(now=self._wall_clock()):
+                raise ValueError("Remote catalog is outside its validity window")
+            self._store.save(document)
             result = RefreshResult(status=RefreshStatus.UPDATED, catalog=catalog)
             with self._condition:
                 self._failure_count = 0
