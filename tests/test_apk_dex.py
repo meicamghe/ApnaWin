@@ -234,8 +234,8 @@ def test_manifest_service_join_includes_only_numeric_class_metadata(tmp_path, mo
 
 def test_defined_class_metadata_keeps_referenced_rows_out_of_join():
     output = (
-        "C d 4 2 128 com.example.TunnelService\\n"
-        "C r 99 99 999 com.example.ReferencedOnly\\n"
+        "C d 4 2 128 com.example.TunnelService\n"
+        "C r 99 99 999 com.example.ReferencedOnly\n"
     )
     count, candidates, metadata = apk_dex._parse_defined_class_metadata(output)
     assert count == 1
