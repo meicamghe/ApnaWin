@@ -73,6 +73,30 @@ def test_inspect_elf_bytes_reports_no_dynamic_symbol_table():
 
 
 @pytest.mark.parametrize("payload", [b"", b"not-elf", b"\x7fELF"])
+def test_inspect_elf_bytes_supports_extended_section_count():
+    ident = b"\\x7fELF" + bytes([2, 1, 1]) + bytes(9)
+    section = struct.pack("<IIQQQQIIQQ", 0, 0, 0, 0, 0, 1, 0, 0, 0, 0)
+    header = struct.pack(
+        "<16sHHIQQQIHHHHHH",
+        ident, 3, 183, 1, 0, 0, 64, 0, 64, 0, 0, 64, 0, 0,
+    )
+    result = inspect_elf_bytes(header + section)
+    assert result["elf_valid"] is True
+    assert result["dynamic_symbol_table_present"] is False
+    assert result["inspection_status"] == "no_dynamic_symbol_table"
+
+
+def test_inspect_elf_bytes_rejects_invalid_extended_section_count():
+    ident = b"\\x7fELF" + bytes([2, 1, 1]) + bytes(9)
+    section = struct.pack("<IIQQQQIIQQ", 0, 0, 0, 0, 0, 4097, 0, 0, 0, 0)
+    header = struct.pack(
+        "<16sHHIQQQIHHHHHH",
+        ident, 3, 183, 1, 0, 0, 64, 0, 64, 0, 0, 64, 0, 0,
+    )
+    with pytest.raises(ValueError, match="extended section count"):
+        inspect_elf_bytes(header + section)
+
+
 def test_inspect_elf_bytes_rejects_non_elf_or_truncated_input(payload):
     with pytest.raises(ValueError):
         inspect_elf_bytes(payload)

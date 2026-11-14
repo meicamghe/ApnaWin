@@ -147,7 +147,9 @@ exported function symbols using the JNI-style `Java_...` naming convention and a
 Raw symbol names, symbol values, addresses, and binary contents are never
 included in the report. Per-library reads are capped at 64 MiB, aggregate
 reads at 256 MiB, analysis at 256 libraries, and each dynamic symbol table
-at 16 MiB. Dynamic symbol tables must link to a valid ELF string-table section.
+at 16 MiB. ELF extended section numbering is supported with the same
+section-count and bounds limits. Dynamic symbol tables must link to a valid
+ELF string-table section.
 
 A matching exported `Java_...` name is evidence of a JNI-style export, not
 proof that a particular DEX native method resolves to it. An exported

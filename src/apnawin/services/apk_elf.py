@@ -59,16 +59,32 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
     header = struct.unpack_from(header_fmt, data, 0)
     elf_type, machine = header[1], header[2]
     section_offset, section_entry_size, section_count = header[6], header[11], header[12]
-    if section_count > _MAX_SECTION_HEADERS:
+    if section_count and section_count > _MAX_SECTION_HEADERS:
         raise ValueError("ELF has too many section headers")
-    if section_count and section_entry_size < expected_section:
-        raise ValueError("ELF section header size is invalid")
-    if section_offset > len(data) or section_count * section_entry_size > len(data) - section_offset:
-        raise ValueError("ELF section header table is out of bounds")
-    sections = [
-        struct.unpack_from(section_fmt, data, section_offset + index * section_entry_size)
-        for index in range(section_count)
-    ]
+    if section_offset:
+        if section_entry_size < expected_section:
+            raise ValueError("ELF section header size is invalid")
+        if section_offset > len(data) or section_entry_size > len(data) - section_offset:
+            raise ValueError("ELF section header table is out of bounds")
+        # ELF extended numbering stores the real section count in sh_size
+        # of section header zero when e_shnum is zero.
+        first_section = struct.unpack_from(section_fmt, data, section_offset)
+        if section_count == 0:
+            section_count = first_section[5]
+            if section_count == 0 or section_count > _MAX_SECTION_HEADERS:
+                raise ValueError("ELF extended section count is invalid or exceeds the analysis limit")
+        if section_count > _MAX_SECTION_HEADERS:
+            raise ValueError("ELF has too many section headers")
+        if section_count * section_entry_size > len(data) - section_offset:
+            raise ValueError("ELF section header table is out of bounds")
+        sections = [
+            struct.unpack_from(section_fmt, data, section_offset + index * section_entry_size)
+            for index in range(section_count)
+        ]
+    else:
+        if section_count:
+            raise ValueError("ELF section table offset is missing")
+        sections = []
     dynamic_symbols = 0
     jni_symbols = 0
     jni_onload = False
