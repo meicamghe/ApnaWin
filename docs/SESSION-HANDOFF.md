@@ -56,8 +56,8 @@ The Xray runner's exact limitations are documented in \`docs/xray-process-runner
 1. Check the newest GitHub Actions run for workflow **Windows tests and build** on every status-check request. Report status, run number, branch, commit and timestamp; do not reuse stale status.
 2. If CI is red, inspect the failing job and logs, reproduce the failure, fix the root cause and rerun tests. If green, continue the next focused task rather than repeatedly rechecking without a reason.
 3. Continue strict domain validation for profile names, transport values, endpoint hosts and ports; preserve valid schema-v1 profile compatibility.
-4. Verify strict JSON persistence: unique same-directory atomic temp files, duplicate JSON key and duplicate profile rejection, fsync/replace failure handling, and compatibility with existing schema-v1 files.
-5. Expand UI workflow tests for add/edit/select/remove, duplicate handling, persistence failures and metadata-only storage.
+4. Verify strict JSON persistence: unique same-directory atomic temp files, duplicate JSON key and duplicate profile rejection, fsync/replace failure handling, and compatibility with existing schema-v1 files. See `docs/profile-storage.md`.
+5. Expand UI workflow tests for add/edit/select/remove, duplicate handling, removal cancellation, persistence failures and metadata-only storage. The current test additions are queued for Windows CI verification.
 6. Test the Xray process runner on Windows 10/11 with fake-process tests and then a separately installed, pinned binary plus an authorized test config.
 7. Verify an application-level request through the authorized test endpoint; a SOCKS greeting alone is insufficient.
 8. Design the production tunnel adapter only after configuration/protocol and engine licensing are established.
