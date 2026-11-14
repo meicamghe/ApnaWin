@@ -513,7 +513,7 @@ def test_inspect_elf_bytes_rejects_malformed_relocation_metadata(
 
 
 
-def _elf_with_group_section(payload, elf_class, group_words=(1, 4)):
+def _elf_with_group_section(payload, elf_class, group_words=(1, 6)):
     data = bytearray(payload)
     section_offset_field = 40 if elf_class == 64 else 32
     section_offset_fmt = "<Q" if elf_class == 64 else "<I"
@@ -523,20 +523,22 @@ def _elf_with_group_section(payload, elf_class, group_words=(1, 4)):
     section_offset = struct.unpack_from(section_offset_fmt, data, section_offset_field)[0]
     # ET_REL is required for SHT_GROUP and SHF_GROUP.
     struct.pack_into("<H", data, 16, 1)
-    member_header_offset = section_offset + 4 * section_size
     group_header_offset = section_offset + 5 * section_size
-    member_header = struct.pack(
-        section_fmt, 0, 1, 0x200, 0, len(data), 4, 0, 0, 4, 0
-    )
+    member_header_offset = section_offset + 6 * section_size
     group_data = struct.pack("<" + "I" * len(group_words), *group_words)
     group_payload_offset = len(data) + 2 * section_size
+    member_payload_offset = group_payload_offset + len(group_data)
     group_header = struct.pack(
         section_fmt, 0, 17, 0, 0, group_payload_offset, len(group_data), 2, 1, 4, 4
     )
-    struct.pack_into("<H", data, count_offset, 6)
-    data.extend(member_header)
+    member_header = struct.pack(
+        section_fmt, 0, 1, 0x200, 0, member_payload_offset, 4, 0, 0, 4, 0
+    )
+    struct.pack_into("<H", data, count_offset, 7)
     data.extend(group_header)
+    data.extend(member_header)
     data.extend(group_data)
+    data.extend(bytes(4))
     return bytes(data)
 
 
@@ -562,7 +564,7 @@ def test_inspect_elf_rejects_group_member_without_shf_group(payload, elf_class):
     struct.pack_into(
         "<Q" if elf_class == 64 else "<I",
         data,
-        section_offset + 4 * section_size + 8,
+        section_offset + 6 * section_size + 8,
         0,
     )
     with pytest.raises(ValueError, match="member is missing SHF_GROUP"):
@@ -577,6 +579,7 @@ def test_inspect_elf_rejects_group_member_without_shf_group(payload, elf_class):
         ((1, 0), "member index is invalid"),
         ((1, 99), "member index is invalid"),
         ((1, 5), "member index is invalid"),
+        ((1, 4), "member index is invalid"),
         ((1, 1, 1), "member index is invalid"),
     ],
 )
@@ -773,6 +776,6 @@ def test_inspect_elf_rejects_nonzero_group_header_flags(payload, elf_class):
 )
 def test_inspect_elf_accepts_os_and_processor_group_flag_masks(payload, elf_class):
     result = inspect_elf_bytes(
-        _elf_with_group_section(payload, elf_class, (0x1FF00001, 4))
+        _elf_with_group_section(payload, elf_class, (0x1FF00001, 6))
     )
     assert result["inspection_status"] == "complete"
