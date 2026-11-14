@@ -15,8 +15,11 @@ contents. It never extracts or executes archive members.
 The inventory treats ZIP metadata as untrusted. It rejects duplicate names,
 unsafe absolute/traversal/Windows-style paths, symbolic links, encrypted
 entries, excessive entry counts, oversized individual or aggregate expanded
-content, and suspicious compression ratios. The limits are defensive metadata
-checks; no member is decompressed to inspect its contents.
+content, and suspicious compression ratios. It also caps the compressed APK
+file at 2 GiB. The input is opened once: the same file descriptor is used for
+hashing and ZIP metadata inspection, with file identity/size/timestamps checked
+before and after analysis to detect ordinary concurrent mutation. No member is
+decompressed to inspect its contents.
 
 The inventory is intentionally not a manifest decoder. Android manifests are
 usually binary XML; a positive `manifest_present` result proves only that the

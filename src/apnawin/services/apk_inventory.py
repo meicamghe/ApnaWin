@@ -8,6 +8,7 @@ import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+_MAX_APK_FILE_BYTES = 2 * 1024 * 1024 * 1024
 _MAX_ZIP_ENTRIES = 100_000
 _MAX_ENTRY_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
 _MAX_TOTAL_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
@@ -45,52 +46,90 @@ def _validate_entry(info: zipfile.ZipInfo) -> None:
         raise ValueError("APK contains a suspiciously compressed ZIP entry")
 
 
-def inspect_apk(path: str | Path) -> dict[str, Any]:
-    """Return a minimal, non-content APK inventory suitable for reproducible analysis."""
-    apk_path = Path(path)
-    if not apk_path.is_file():
-        raise ValueError("APK path must refer to an existing regular file")
+def _same_file_snapshot(before: os.stat_result, after: os.stat_result) -> bool:
+    """Detect ordinary concurrent replacement or mutation of the opened file."""
+    return (
+        before.st_dev,
+        before.st_ino,
+        before.st_size,
+        before.st_mtime_ns,
+        before.st_ctime_ns,
+    ) == (
+        after.st_dev,
+        after.st_ino,
+        after.st_size,
+        after.st_mtime_ns,
+        after.st_ctime_ns,
+    )
 
-    digest = hashlib.sha256()
-    with apk_path.open("rb") as stream:
+
+def inspect_apk(path: str | Path) -> dict[str, Any]:
+    """Return minimal non-content APK metadata from one stable open file descriptor."""
+    import os
+
+    apk_path = Path(path)
+    try:
+        stream = apk_path.open("rb")
+    except OSError as exc:
+        raise ValueError("APK path must refer to an existing regular file") from exc
+
+    with stream:
+        before = os.fstat(stream.fileno())
+        if not stat.S_ISREG(before.st_mode):
+            raise ValueError("APK path must refer to an existing regular file")
+        if before.st_size > _MAX_APK_FILE_BYTES:
+            raise ValueError("APK file exceeds the allowed size")
+
+        digest = hashlib.sha256()
         file_size = 0
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             file_size += len(chunk)
+            if file_size > _MAX_APK_FILE_BYTES:
+                raise ValueError("APK file exceeds the allowed size")
             digest.update(chunk)
+        if file_size != before.st_size:
+            raise ValueError("APK file changed while it was being inspected")
 
-    try:
-        with zipfile.ZipFile(apk_path) as archive:
-            entries = archive.infolist()
-            if len(entries) > _MAX_ZIP_ENTRIES:
-                raise ValueError("APK contains too many ZIP entries")
-            names: list[str] = []
-            total_uncompressed = 0
-            for entry in entries:
-                _validate_entry(entry)
-                total_uncompressed += entry.file_size
-                if total_uncompressed > _MAX_TOTAL_UNCOMPRESSED_BYTES:
-                    raise ValueError("APK expands beyond the allowed aggregate size")
-                names.append(entry.filename)
-            if len(names) != len(set(names)):
-                raise ValueError("APK contains duplicate ZIP entry names")
+        stream.seek(0)
+        try:
+            with zipfile.ZipFile(stream) as archive:
+                entries = archive.infolist()
+                if len(entries) > _MAX_ZIP_ENTRIES:
+                    raise ValueError("APK contains too many ZIP entries")
+                names: list[str] = []
+                total_uncompressed = 0
+                for entry in entries:
+                    _validate_entry(entry)
+                    total_uncompressed += entry.file_size
+                    if total_uncompressed > _MAX_TOTAL_UNCOMPRESSED_BYTES:
+                        raise ValueError("APK expands beyond the allowed aggregate size")
+                    names.append(entry.filename)
+                if len(names) != len(set(names)):
+                    raise ValueError("APK contains duplicate ZIP entry names")
 
-            native_abis: set[str] = set()
-            dex_count = 0
-            signature_file_count = 0
-            has_manifest = False
-            for name in names:
-                if name == "AndroidManifest.xml":
-                    has_manifest = True
-                if re.fullmatch(r"classes(?:[0-9]+)?[.]dex", name):
-                    dex_count += 1
-                match = _ABI_RE.fullmatch(name)
-                if match:
-                    native_abis.add(match.group(1))
-                upper = name.upper()
-                if upper.startswith("META-INF/") and upper.endswith((".RSA", ".DSA", ".EC")):
-                    signature_file_count += 1
-    except (zipfile.BadZipFile, OSError, RuntimeError) as exc:
-        raise ValueError("APK is not a readable ZIP archive") from exc
+                native_abis: set[str] = set()
+                dex_count = 0
+                signature_file_count = 0
+                has_manifest = False
+                for name in names:
+                    if name == "AndroidManifest.xml":
+                        has_manifest = True
+                    if re.fullmatch(r"classes(?:[0-9]+)?[.]dex", name):
+                        dex_count += 1
+                    match = _ABI_RE.fullmatch(name)
+                    if match:
+                        native_abis.add(match.group(1))
+                    upper = name.upper()
+                    if upper.startswith("META-INF/") and upper.endswith(
+                        (".RSA", ".DSA", ".EC")
+                    ):
+                        signature_file_count += 1
+        except (zipfile.BadZipFile, OSError, RuntimeError) as exc:
+            raise ValueError("APK is not a readable ZIP archive") from exc
+
+        after = os.fstat(stream.fileno())
+        if not _same_file_snapshot(before, after):
+            raise ValueError("APK file changed while it was being inspected")
 
     return {
         "format": "apnawin-apk-inventory-v1",

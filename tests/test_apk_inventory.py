@@ -1,6 +1,7 @@
 import json
 import stat
 import zipfile
+from pathlib import Path
 
 import pytest
 
@@ -35,6 +36,38 @@ def test_inventory_reports_only_safe_static_metadata(tmp_path):
 def test_inventory_rejects_missing_path(tmp_path):
     with pytest.raises(ValueError, match="existing regular file"):
         inspect_apk(tmp_path / "missing.apk")
+
+
+def test_inventory_rejects_non_regular_path(tmp_path):
+    with pytest.raises(ValueError, match="existing regular file"):
+        inspect_apk(tmp_path)
+
+
+def test_inventory_rejects_oversized_apk_file(tmp_path, monkeypatch):
+    apk = tmp_path / "oversized.apk"
+    apk.write_bytes(b"12345678")
+    monkeypatch.setattr(apk_inventory, "_MAX_APK_FILE_BYTES", 7)
+    with pytest.raises(ValueError, match="file exceeds the allowed size"):
+        inspect_apk(apk)
+
+
+def test_inventory_uses_one_open_file_for_hash_and_zip(tmp_path, monkeypatch):
+    apk = tmp_path / "single-open.apk"
+    with zipfile.ZipFile(apk, "w") as archive:
+        archive.writestr("classes.dex", b"dex")
+
+    original_open = Path.open
+    opened_paths = []
+
+    def tracked_open(path, *args, **kwargs):
+        opened_paths.append(path)
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", tracked_open)
+    result = inspect_apk(apk)
+
+    assert result["dex_file_count"] == 1
+    assert opened_paths == [apk]
 
 
 def test_inventory_rejects_non_zip_file(tmp_path):
