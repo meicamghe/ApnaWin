@@ -180,3 +180,23 @@ def test_native_library_report_includes_abi_compatibility_counts(tmp_path):
         "compatible": 1, "mismatch": 1, "unknown_abi": 1, "not_checked": 1
     }
     assert result["abi_mismatch_count"] == 1
+
+
+def _elf32_minimal(machine):
+    ident = b"\x7fELF" + bytes([1, 1, 1]) + bytes(9)
+    return struct.pack(
+        "<16sHHIIIIIHHHHHH",
+        ident, 3, machine, 1, 0, 0, 0, 0, 52, 0, 0, 40, 0, 0,
+    )
+
+
+@pytest.mark.parametrize(("abi", "machine"), [("armeabi-v7a", 40), ("x86", 3)])
+def test_inspect_real_elf32_identity_matches_32_bit_android_abi(abi, machine):
+    from apnawin.services.apk_elf import _abi_compatibility
+
+    parsed = inspect_elf_bytes(_elf32_minimal(machine))
+    assert parsed["elf_class"] == 32
+    assert parsed["machine"] == machine
+    assert _abi_compatibility(abi, parsed) == {
+        "abi_compatible": True, "abi_compatibility_status": "compatible"
+    }
