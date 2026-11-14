@@ -2,7 +2,7 @@
 
 ## Current repository state
 
-The native Windows application shell, profile management, Xray process runner, Windows Job Object supervision, remote catalog schema/cache, refresh coordinator and bounded HTTPS transport are implemented. The Connect button remains intentionally disabled because a verified Windows tunnel/TUN integration and authorized end-to-end server configuration are not yet available.
+The native Windows application shell, profile management, Xray process runner, Windows Job Object supervision, remote catalog schema/cache, refresh coordinator, bounded HTTPS transport and privacy-conscious APK inventory are implemented. The inventory is metadata-only and rejects unsafe ZIP structures before reporting. The Connect button remains intentionally disabled because a verified Windows tunnel/TUN integration and authorized end-to-end server configuration are not yet available.
 
 ## Remote configuration
 
@@ -10,7 +10,7 @@ The Android app is believed to refresh server information and connection behavio
 
 ## Latest verification
 
-Workflow run [#146](https://github.com/meicamghe/ApnaWin/actions/runs/43569366650) passed:
+Workflow run #155 passed:
 - Python unit tests
 - Windows portable build
 - Packaged-app smoke test
@@ -20,4 +20,4 @@ This verifies the desktop package starts in CI; it does not verify VPN connectiv
 
 ## Latest engineering change
 
-The refresh coordinator now validates the server-declared catalog validity window against an injectable UTC clock before persisting a response. Expired and not-yet-valid responses are rejected without replacing the last-known-good cache. Regression tests cover both cases and the existing retry/concurrency behavior.
+The APK inventory now validates ZIP entry paths and metadata before reporting: duplicate names, traversal/absolute/Windows-style paths, symbolic links, encrypted members, excessive entry counts, oversized entries, aggregate expansion and suspicious compression ratios are rejected. No archive member is extracted or executed. Regression tests cover the defensive checks.

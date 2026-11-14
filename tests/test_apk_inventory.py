@@ -1,8 +1,10 @@
 import json
+import stat
 import zipfile
 
 import pytest
 
+from apnawin.services import apk_inventory
 from apnawin.services.apk_inventory import inspect_apk
 
 
@@ -49,3 +51,53 @@ def test_inventory_rejects_duplicate_zip_entry_names(tmp_path):
         archive.writestr("classes.dex", b"two")
     with pytest.raises(ValueError, match="duplicate ZIP entry"):
         inspect_apk(apk)
+
+
+@pytest.mark.parametrize("name", ["../escape", "/absolute", "C:/drive", "assets\\\\escape"])
+def test_inventory_rejects_unsafe_member_paths(tmp_path, name):
+    apk = tmp_path / "unsafe.apk"
+    with zipfile.ZipFile(apk, "w") as archive:
+        archive.writestr(name, b"data")
+    with pytest.raises(ValueError, match="unsafe ZIP entry path"):
+        inspect_apk(apk)
+
+
+def test_inventory_rejects_symbolic_link_entries(tmp_path):
+    apk = tmp_path / "symlink.apk"
+    info = zipfile.ZipInfo("assets/link")
+    info.create_system = 3
+    info.external_attr = (stat.S_IFLNK | 0o777) << 16
+    with zipfile.ZipFile(apk, "w") as archive:
+        archive.writestr(info, b"target")
+    with pytest.raises(ValueError, match="symbolic-link"):
+        inspect_apk(apk)
+
+
+def test_inventory_enforces_aggregate_uncompressed_size(tmp_path, monkeypatch):
+    apk = tmp_path / "large.apk"
+    with zipfile.ZipFile(apk, "w") as archive:
+        archive.writestr("one.bin", b"1234")
+        archive.writestr("two.bin", b"5678")
+    monkeypatch.setattr(apk_inventory, "_MAX_TOTAL_UNCOMPRESSED_BYTES", 7)
+    with pytest.raises(ValueError, match="aggregate size"):
+        inspect_apk(apk)
+
+
+def test_inventory_enforces_per_entry_uncompressed_size(tmp_path, monkeypatch):
+    apk = tmp_path / "entry-large.apk"
+    with zipfile.ZipFile(apk, "w") as archive:
+        archive.writestr("large.bin", b"12345678")
+    monkeypatch.setattr(apk_inventory, "_MAX_ENTRY_UNCOMPRESSED_BYTES", 7)
+    with pytest.raises(ValueError, match="oversized ZIP entry"):
+        inspect_apk(apk)
+
+
+def test_inventory_rejects_encrypted_entry_metadata(tmp_path):
+    apk = tmp_path / "encrypted.apk"
+    with zipfile.ZipFile(apk, "w") as archive:
+        archive.writestr("encrypted.bin", b"data")
+    with zipfile.ZipFile(apk, "r") as archive:
+        info = archive.infolist()[0]
+    info.flag_bits |= 0x1
+    with pytest.raises(ValueError, match="encrypted ZIP entry"):
+        apk_inventory._validate_entry(info)
