@@ -280,3 +280,25 @@ def test_inspect_elf32_bytes_counts_exported_jni_function_symbols():
     assert "Java_org_example_Tunnel_start" not in str(result)
     assert "JNI_OnLoad" not in str(result)
 
+
+
+def test_inspect_elf_bytes_rejects_undersized_section_header_entry():
+    data = bytearray(_elf64_with_jni_exports())
+    struct.pack_into("<H", data, 58, 32)
+    with pytest.raises(ValueError, match="section header size is invalid"):
+        inspect_elf_bytes(bytes(data))
+
+
+def test_inspect_elf_bytes_rejects_out_of_bounds_dynamic_string_table():
+    data = bytearray(_elf64_with_jni_exports())
+    section_offset = struct.unpack_from("<Q", data, 40)[0]
+    dynstr_header = section_offset + 64
+    struct.pack_into("<Q", data, dynstr_header + 32, len(data) + 1)
+    with pytest.raises(ValueError, match="dynamic string table is out of bounds"):
+        inspect_elf_bytes(bytes(data))
+
+
+def test_inspect_elf32_bytes_rejects_truncated_header():
+    data = _elf32_minimal(3)[:51]
+    with pytest.raises(ValueError, match="ELF header is truncated"):
+        inspect_elf_bytes(data)
