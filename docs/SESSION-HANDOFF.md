@@ -98,3 +98,11 @@ append without overwriting existing entries and fail atomically on any
 case-insensitive name collision. The existing bounded JSON loader/writer is
 reused, so import/export does not introduce a second parsing or serialization
 path. Credentials and private keys remain outside the profile format.
+
+
+## Import error handling follow-up
+
+Import failures now present the underlying validation or I/O detail with actual
+line breaks rather than literal backslash-n sequences. Regression coverage
+verifies malformed imports leave both the in-memory profile list and existing
+destination file untouched, and cancelling the file picker is a no-op.

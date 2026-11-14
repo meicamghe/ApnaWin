@@ -391,3 +391,57 @@ def test_export_profiles_writes_non_secret_profile_file(tmp_path, qapp, monkeypa
     assert load_profiles(destination) == [profile]
     assert window.export_button.isEnabled()
     window.close()
+
+
+
+def test_import_profiles_malformed_file_keeps_existing_profiles(tmp_path, qapp, monkeypatch):
+    import apnawin.app as app_module
+
+    existing = ConnectionProfile("Existing", Transport.SOCKS, "localhost", 1080)
+    source = tmp_path / "malformed.json"
+    destination = tmp_path / "profiles.json"
+    source.write_text('{"format_version": 1, "profiles": [', encoding="utf-8")
+    save_profiles(destination, [existing])
+    original = destination.read_bytes()
+    warnings = []
+    monkeypatch.setattr(
+        app_module.QFileDialog,
+        "getOpenFileName",
+        lambda *_args, **_kwargs: (str(source), "JSON"),
+    )
+    monkeypatch.setattr(
+        app_module.QMessageBox,
+        "warning",
+        lambda *_args, **kwargs: warnings.append(kwargs.get("text", _args[2] if len(_args) > 2 else "")),
+    )
+    window = MainWindow(profiles_path=destination)
+
+    window._import_profiles()
+
+    assert window.profiles == [existing]
+    assert destination.read_bytes() == original
+    assert warnings
+    assert "\\n\\n" not in warnings[0]
+    assert "\n\n" in warnings[0]
+    window.close()
+
+
+def test_import_profiles_dialog_cancellation_is_noop(tmp_path, qapp, monkeypatch):
+    import apnawin.app as app_module
+
+    existing = ConnectionProfile("Existing", Transport.SOCKS, "localhost", 1080)
+    destination = tmp_path / "profiles.json"
+    save_profiles(destination, [existing])
+    original = destination.read_bytes()
+    monkeypatch.setattr(
+        app_module.QFileDialog,
+        "getOpenFileName",
+        lambda *_args, **_kwargs: ("", ""),
+    )
+    window = MainWindow(profiles_path=destination)
+
+    window._import_profiles()
+
+    assert window.profiles == [existing]
+    assert destination.read_bytes() == original
+    window.close()

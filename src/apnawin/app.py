@@ -266,7 +266,7 @@ class MainWindow(QMainWindow):
         try:
             imported = load_profiles(filename)
         except (OSError, ValueError) as exc:
-            QMessageBox.warning(self, "Import failed", f"Profiles were not imported.\\n\\n{exc}")
+            QMessageBox.warning(self, "Import failed", f"Profiles were not imported.\n\n{exc}")
             return
 
         existing_names = {profile.name.casefold() for profile in self.profiles}
