@@ -9,7 +9,7 @@ Optional Android SDK-backed inspection covers manifest and DEX metadata. Its sha
 - DEX decoder: DEX filenames, defined-class count, per-DEX method-reference counts and heuristic candidate VPN/network class names.
 - Native inventory: allowlisted `.so` basenames, ABI labels and sizes; combined report emits token-boundary filename-only engine candidates and per-ABI counts. Android `.so` files are not assumed to be Windows DLLs.
 
-The combined report correlates manifest VPN service names with defined DEX classes and rejects DEX-count disagreement between ZIP inventory and APK Analyzer. It does not claim runtime behavior or discover APNA endpoints.
+The combined report correlates manifest VPN service names with defined DEX classes and rejects DEX-count disagreement between ZIP inventory and APK Analyzer. DEX class rows are checked for expected shape, numeric metadata, valid dotted class names and duplicate definitions before joining. It does not claim runtime behavior or discover APNA endpoints.
 
 The Connect button remains intentionally disabled because a verified Windows tunnel/TUN integration and authorized end-to-end server configuration are not yet available.
 
@@ -19,7 +19,7 @@ The Android app is believed to refresh server information and connection behavio
 
 ## Latest verification
 
-Workflow run #175 passed on commit `adc385a61299d2be096640183ed8d7bf20566544`, after correcting Windows newline handling and DEX test fixtures. The preceding #173 run had 322 passing tests and two fixture/assertion failures; the corrected run passed. CI verifies the configured tests only, not live VPN connectivity or APNA endpoint discovery.
+Workflow run #175 passed on commit `adc385a61299d2be096640183ed8d7bf20566544`, after correcting Windows newline handling and DEX test fixtures. Workflow #176 for `ee6fc420e5969555d143c6a9abd1c91ee756b791` was observed in progress; its final result must be checked before treating that commit as verified. CI verifies the configured tests only, not live VPN connectivity or APNA endpoint discovery.
 
 ## Latest engineering change
 

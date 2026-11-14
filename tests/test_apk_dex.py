@@ -122,3 +122,32 @@ def test_no_dex_report_still_includes_manifest_service_join(tmp_path, monkeypatc
         "resolved_class_name": "com.example.TunnelService",
         "defined_in_dex": False,
     }]
+
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        "C d nope 1 20 com.example.TunnelService",
+        "C d 1 1 20 com/example/TunnelService",
+        "C x 1 1 20 com.example.TunnelService",
+        "C d 1 1 20 com.example.TunnelService extra",
+    ],
+)
+def test_parse_defined_classes_rejects_malformed_class_rows(row):
+    with pytest.raises(ValueError, match="unexpected|invalid"):
+        apk_dex.parse_defined_classes(row)
+
+
+def test_parse_defined_classes_rejects_duplicate_defined_class_names():
+    output = (
+        "C d 1 1 20 com.example.TunnelService\\n"
+        "C d 2 1 30 com.example.TunnelService\\n"
+    )
+    with pytest.raises(ValueError, match="duplicate defined class"):
+        apk_dex.parse_defined_classes(output)
+
+
+def test_parse_defined_classes_ignores_valid_referenced_class_rows():
+    output = "C r 0 1 30 android.net.VpnService\\n"
+    assert apk_dex.parse_defined_classes(output) == (0, [])

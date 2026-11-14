@@ -73,11 +73,17 @@ def _parse_defined_class_details(output: str) -> tuple[int, list[str], set[str]]
         if not fields or fields[0] != "C":
             continue
         # Documented format: C d <defined-methods> <referenced-methods> <bytes> <name>
-        if len(fields) != 6 or fields[1] != "d":
-            continue
+        if len(fields) != 6 or fields[1] not in {"d", "r"}:
+            raise ValueError("apkanalyzer returned an unexpected class row")
+        if any(not value.isdigit() for value in fields[2:5]):
+            raise ValueError("apkanalyzer returned invalid class metadata")
         name = fields[5]
         if not _CLASS_NAME.fullmatch(name):
             raise ValueError("apkanalyzer returned an unexpected class name")
+        if fields[1] != "d":
+            continue
+        if name in defined:
+            raise ValueError("apkanalyzer returned a duplicate defined class")
         count += 1
         if count > _MAX_CLASSES:
             raise ValueError("APK contains too many defined classes")
