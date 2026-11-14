@@ -62,13 +62,15 @@ def parse_dex_file_list(output: str) -> list[str]:
     return names
 
 
-def _parse_defined_class_details(output: str) -> tuple[int, list[str], set[str]]:
-    """Parse defined classes, retaining names internally for exact manifest joins."""
+def _parse_defined_class_metadata(
+    output: str,
+) -> tuple[int, list[str], dict[str, dict[str, int]]]:
+    """Parse defined classes and bounded numeric metadata for exact manifest joins."""
     if len(output.encode("utf-8")) > _MAX_OUTPUT_BYTES:
         raise ValueError("DEX class listing exceeds the allowed size")
     count = 0
     relevant: set[str] = set()
-    defined: set[str] = set()
+    defined: dict[str, dict[str, int]] = {}
     for line in output.splitlines():
         fields = line.split()
         if not fields or fields[0] != "C":
@@ -88,12 +90,24 @@ def _parse_defined_class_details(output: str) -> tuple[int, list[str], set[str]]
         count += 1
         if count > _MAX_CLASSES:
             raise ValueError("APK contains too many defined classes")
-        defined.add(name)
+        defined[name] = {
+            "defined_method_count": int(fields[2]),
+            "referenced_method_count": int(fields[3]),
+            "byte_count": int(fields[4]),
+        }
         if _SIGNAL.search(name):
             relevant.add(name)
     if len(relevant) > _MAX_RELEVANT_CLASSES:
         raise ValueError("too many potentially relevant class names")
     return count, sorted(relevant), defined
+
+
+def _parse_defined_class_details(
+    output: str,
+) -> tuple[int, list[str], set[str]]:
+    """Compatibility helper retaining the exact set of defined class names."""
+    count, relevant, metadata = _parse_defined_class_metadata(output)
+    return count, relevant, set(metadata)
 
 
 def parse_defined_classes(output: str) -> tuple[int, list[str]]:
@@ -176,6 +190,9 @@ def inspect_apk_dex(
                     "manifest_name": service,
                     "resolved_class_name": _resolve_manifest_class(service, package_name),
                     "defined_in_dex": False,
+                    "defined_method_count": None,
+                    "referenced_method_count": None,
+                    "byte_count": None,
                 }
                 for service in (manifest_services or [])
             ],
@@ -184,14 +201,18 @@ def inspect_apk_dex(
         }
 
     class_output = _run(resolved, ["dex", "packages", "--defined-only", apk], timeout)
-    class_count, candidates, defined_classes = _parse_defined_class_details(class_output)
+    class_count, candidates, class_metadata = _parse_defined_class_metadata(class_output)
     service_matches = []
     for service in manifest_services or []:
         resolved_name = _resolve_manifest_class(service, package_name)
+        evidence = class_metadata.get(resolved_name) if resolved_name else None
         service_matches.append({
             "manifest_name": service,
             "resolved_class_name": resolved_name,
-            "defined_in_dex": resolved_name in defined_classes if resolved_name else False,
+            "defined_in_dex": evidence is not None,
+            "defined_method_count": evidence["defined_method_count"] if evidence else None,
+            "referenced_method_count": evidence["referenced_method_count"] if evidence else None,
+            "byte_count": evidence["byte_count"] if evidence else None,
         })
     reference_output = _run(resolved, ["dex", "references", apk], timeout)
     references = parse_reference_counts(reference_output)

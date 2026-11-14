@@ -121,6 +121,9 @@ def test_no_dex_report_still_includes_manifest_service_join(tmp_path, monkeypatc
         "manifest_name": ".TunnelService",
         "resolved_class_name": "com.example.TunnelService",
         "defined_in_dex": False,
+        "defined_method_count": None,
+        "referenced_method_count": None,
+        "byte_count": None,
     }]
 
 
@@ -191,4 +194,57 @@ def test_manifest_service_join_without_package_reports_unresolved_class(tmp_path
         "manifest_name": ".TunnelService",
         "resolved_class_name": None,
         "defined_in_dex": False,
+        "defined_method_count": None,
+        "referenced_method_count": None,
+        "byte_count": None,
     }]
+
+def test_manifest_service_join_includes_only_numeric_class_metadata(tmp_path, monkeypatch):
+    apk = tmp_path / "service-evidence.apk"
+    apk.write_bytes(b"placeholder")
+    outputs = iter([
+        b"classes.dex\n",
+        b"C d 7 3 256 com.example.TunnelService\nC d 1 0 40 com.example.Other\n",
+        b"classes.dex 100\n",
+    ])
+    monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
+    monkeypatch.setattr(apk_dex, "run_apkanalyzer", lambda *args: next(outputs))
+    report = apk_dex.inspect_apk_dex(
+        apk, manifest_services=[".TunnelService", ".Missing"], package_name="com.example"
+    )
+    assert report["manifest_service_classes"] == [
+        {
+            "manifest_name": ".TunnelService",
+            "resolved_class_name": "com.example.TunnelService",
+            "defined_in_dex": True,
+            "defined_method_count": 7,
+            "referenced_method_count": 3,
+            "byte_count": 256,
+        },
+        {
+            "manifest_name": ".Missing",
+            "resolved_class_name": "com.example.Missing",
+            "defined_in_dex": False,
+            "defined_method_count": None,
+            "referenced_method_count": None,
+            "byte_count": None,
+        },
+    ]
+
+
+def test_defined_class_metadata_keeps_referenced_rows_out_of_join():
+    output = (
+        "C d 4 2 128 com.example.TunnelService\\n"
+        "C r 99 99 999 com.example.ReferencedOnly\\n"
+    )
+    count, candidates, metadata = apk_dex._parse_defined_class_metadata(output)
+    assert count == 1
+    assert candidates == ["com.example.TunnelService"]
+    assert metadata == {
+        "com.example.TunnelService": {
+            "defined_method_count": 4,
+            "referenced_method_count": 2,
+            "byte_count": 128,
+        }
+    }
+

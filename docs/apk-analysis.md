@@ -97,3 +97,11 @@ inferred.
 
 
 The combined interpretation also reports counts of VPN service classes matched in DEX, resolvable-but-missing classes, and unresolved service names. `vpn_service_class_resolution_complete` is false whenever a service could not be resolved because package context was unavailable; this prevents an incomplete join from being presented as a definitive negative result.
+
+
+For each exact manifest-service-to-defined-class match, the DEX report also
+includes the APK Analyzer numeric metadata for that class: defined-method
+count, referenced-method count, and reported byte count. These values are
+class-level structural metadata, not method names or bytecode. They are null
+when the service class cannot be resolved or is not present among defined
+classes. Referenced-only DEX rows are not treated as class definitions.
