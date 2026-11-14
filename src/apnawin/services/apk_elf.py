@@ -89,8 +89,10 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             for index in range(section_count)
         ]
         section_name_index = header[13]
-        if section_name_index == 0xFFFF:  # SHN_XINDEX: actual index is sh_link of section zero.
-            section_name_index = sections[0][6]
+        # SHN_XINDEX is reserved for indexes >= 0xFF00. This parser caps
+        # section headers at 4096, so such an index cannot be represented.
+        if section_name_index == 0xFFFF:
+            raise ValueError("ELF extended section-name index exceeds the analysis limit")
         if section_name_index:
             if section_name_index >= len(sections):
                 raise ValueError("ELF section-name string-table index is out of bounds")
@@ -105,7 +107,7 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                 raise ValueError("ELF section-name string table is missing its leading NUL")
             for section in sections:
                 name_index = section[0]
-                if name_index >= len(names) or names.find(b"\\x00", name_index) < 0:
+                if name_index >= len(names) or names.find(b"\x00", name_index) < 0:
                     raise ValueError("ELF section name offset or termination is invalid")
         elif header[13] not in (0, 0xFFFF):
             raise ValueError("ELF section-name string-table index is invalid")
@@ -197,6 +199,8 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
     else:
         if section_count:
             raise ValueError("ELF section table offset is missing")
+        if header[13] != 0:
+            raise ValueError("ELF section-name index requires a section table")
         sections = []
     dynamic_symbols = 0
     jni_symbols = 0

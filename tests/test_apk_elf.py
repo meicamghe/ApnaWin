@@ -593,19 +593,39 @@ def test_inspect_elf_rejects_invalid_section_name_offset(
 
 
 @pytest.mark.parametrize(
-    ("payload", "section_offset_field", "entry_size", "index_offset", "link_offset"),
+    ("payload", "index_offset"),
+    [(_elf64_with_jni_exports(), 62), (_elf32_with_jni_exports(), 50)],
+)
+def test_inspect_elf_rejects_extended_section_name_index_over_analysis_limit(
+    payload, index_offset
+):
+    data = bytearray(payload)
+    struct.pack_into("<H", data, index_offset, 0xFFFF)
+    with pytest.raises(ValueError, match="extended section-name index exceeds the analysis limit"):
+        inspect_elf_bytes(bytes(data))
+
+
+@pytest.mark.parametrize(
+    ("payload", "section_offset_field", "entry_size", "name_table_offset"),
     [
-        (_elf64_with_jni_exports(), 40, 64, 62, 40),
-        (_elf32_with_jni_exports(), 32, 40, 50, 24),
+        (_elf64_with_jni_exports(), 40, 64, 62),
+        (_elf32_with_jni_exports(), 32, 40, 50),
     ],
 )
-def test_inspect_elf_supports_extended_section_name_table_index(
-    payload, section_offset_field, entry_size, index_offset, link_offset
+def test_inspect_elf_rejects_unterminated_section_name(
+    payload, section_offset_field, entry_size, name_table_offset
 ):
     data = bytearray(payload)
     section_offset = struct.unpack_from(
         "<Q" if entry_size == 64 else "<I", data, section_offset_field
     )[0]
-    struct.pack_into("<H", data, index_offset, 0xFFFF)
-    struct.pack_into("<I", data, section_offset + link_offset, 3)
-    assert inspect_elf_bytes(bytes(data))["inspection_status"] == "complete"
+    name_section = section_offset + 3 * entry_size
+    name_offset = struct.unpack_from(
+        "<Q" if entry_size == 64 else "<I", data, name_section + (24 if entry_size == 64 else 16)
+    )[0]
+    name_size = struct.unpack_from(
+        "<Q" if entry_size == 64 else "<I", data, name_section + (32 if entry_size == 64 else 20)
+    )[0]
+    data[name_offset + name_size - 1] = ord("X")
+    with pytest.raises(ValueError, match="section name offset or termination"):
+        inspect_elf_bytes(bytes(data))
