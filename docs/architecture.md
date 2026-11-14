@@ -30,6 +30,7 @@ Build a native Windows 10/11 client that offers a clear desktop workflow for tun
 - The profile format stores only name, transport, endpoint host and port. It does not store credentials or private keys.
 - Profile loading validates strict JSON/schema types, rejects duplicate JSON keys and duplicate case-insensitive profile names, and rejects unsupported format versions or unexpected fields.
 - Profile writes use unique same-directory temporary files, flush/fsync before atomic replacement, and clean up temporary files on failure.
+- Xray configuration parsing rejects duplicate JSON object keys and non-standard non-finite constants before any executable validation or launch.
 - Connect remains disabled: no real Windows tunnel engine is integrated.
 
 ## Milestones
