@@ -134,7 +134,7 @@ def test_remote_catalog_rejects_oversized_bytes_before_parsing():
 
 def test_remote_catalog_rejects_invalid_utf8():
     with pytest.raises(ValueError, match="UTF-8"):
-        parse_remote_catalog(b"\\xff")
+        parse_remote_catalog(b"\xff")
 
 
 def test_remote_catalog_rejects_non_string_input():
