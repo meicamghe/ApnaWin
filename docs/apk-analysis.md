@@ -85,4 +85,4 @@ OpenVPN, WireGuard, Shadowsocks or sing-box). These are leads only: filenames
 can be misleading, libraries can be statically linked or obfuscated, and a
 match does not establish that code is loaded or used. Android ABI libraries
 (such as `arm64-v8a`) are not Windows DLLs and are not treated as reusable
-Windows binaries. No Windows binary compatibility is inferred.
+Windows binaries. No Windows binary compatibility is inferred. Native-library size metadata is resolved through a single ZIP-entry index rather than rescanning the archive for each library.

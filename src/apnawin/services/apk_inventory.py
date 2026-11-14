@@ -110,6 +110,7 @@ def inspect_apk(path: str | Path) -> dict[str, Any]:
 
                 native_abis: set[str] = set()
                 native_libraries: list[dict[str, Any]] = []
+                entry_sizes = {entry.filename: entry.file_size for entry in entries}
                 dex_count = 0
                 signature_file_count = 0
                 has_manifest = False
@@ -126,10 +127,7 @@ def inspect_apk(path: str | Path) -> dict[str, Any]:
                         native_libraries.append({
                             "abi": match.group(1),
                             "library_name": match.group(2),
-                            "file_size_bytes": next(
-                                entry.file_size for entry in entries
-                                if entry.filename == name
-                            ),
+                            "file_size_bytes": entry_sizes[name],
                         })
                     upper = name.upper()
                     if upper.startswith("META-INF/") and upper.endswith(

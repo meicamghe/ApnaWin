@@ -7,7 +7,7 @@ The native Windows application shell, profile management, Xray process runner, W
 Optional Android SDK-backed inspection now covers manifest and DEX metadata; ZIP inventory also records bounded native-library metadata:
 - Manifest decoder: selected package/version/SDK, permissions, component declarations and VPN-binding services.
 - DEX decoder: DEX filenames, defined-class count, per-DEX method-reference counts and heuristic candidate VPN/network class names.
-- Native inventory: allowlisted `.so` basenames, ABI labels and sizes; combined report emits filename-only engine candidates with explicit `candidate_only` status. Android `.so` files are not assumed to be Windows DLLs.
+- Native inventory: allowlisted `.so` basenames, ABI labels and sizes; combined report emits filename-only engine candidates with explicit `candidate_only` status. Native ZIP metadata lookup uses a precomputed entry-size index to avoid repeated linear scans. Android `.so` files are not assumed to be Windows DLLs.
 
 Both tools use apkanalyzer without a shell, enforce timeouts and output-size checks, and omit raw XML/DEX output, methods, fields, bytecode, URLs and credentials. Neither tool extracts or executes archive members. The Connect button remains intentionally disabled because a verified Windows tunnel/TUN integration and authorized end-to-end server configuration are not yet available.
 
