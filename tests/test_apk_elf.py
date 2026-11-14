@@ -428,8 +428,8 @@ def _elf_with_relocation_section(payload, elf_class):
         section_offset = struct.unpack_from("<Q", data, 40)[0]
         header_offset = section_offset + 3 * 64
         struct.pack_into("<I", data, header_offset + 4, 4)  # SHT_RELA
-        struct.pack_into("<Q", data, header_offset + 16, 64)
-        struct.pack_into("<Q", data, header_offset + 24, 24)
+        struct.pack_into("<Q", data, header_offset + 24, 64)
+        struct.pack_into("<Q", data, header_offset + 32, 24)
         struct.pack_into("<I", data, header_offset + 40, 2)
         struct.pack_into("<I", data, header_offset + 44, 1)
         struct.pack_into("<Q", data, header_offset + 48, 8)
@@ -476,7 +476,7 @@ def test_inspect_elf_bytes_rejects_malformed_relocation_metadata(
     data, header_offset = _elf_with_relocation_section(payload, elf_class)
     offsets = (
         {"link": (40, "<I"), "info": (44, "<I"), "entsize": (56, "<Q"),
-         "size": (24, "<Q"), "offset": (16, "<Q")}
+         "size": (32, "<Q"), "offset": (24, "<Q")}
         if elf_class == 64 else
         {"link": (24, "<I"), "info": (28, "<I"), "entsize": (36, "<I"),
          "size": (20, "<I"), "offset": (16, "<I")}
