@@ -1,0 +1,145 @@
+"""Bounded, metadata-only ELF and JNI export inspection for APK libraries."""
+from __future__ import annotations
+import struct
+import zipfile
+from pathlib import Path
+from typing import Any
+
+_MAX_ELF_BYTES = 64 * 1024 * 1024
+_MAX_TOTAL_ELF_BYTES = 256 * 1024 * 1024
+_MAX_ANALYZED_LIBRARIES = 256
+_MAX_SECTION_HEADERS = 4096
+_MACHINE_NAMES = {3: "x86", 40: "arm", 62: "x86_64", 183: "aarch64", 243: "riscv"}
+
+
+def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
+    """Read ELF identity and exported JNI symbol counts; never return symbol names."""
+    if len(data) < 16 or data[:4] != b"\x7fELF":
+        raise ValueError("native library is not an ELF file")
+    elf_class, encoding, ident_version = data[4], data[5], data[6]
+    if elf_class not in (1, 2) or encoding not in (1, 2) or ident_version != 1:
+        raise ValueError("ELF identification fields are unsupported")
+    endian = "<" if encoding == 1 else ">"
+    if elf_class == 2:
+        header_fmt, section_fmt, symbol_fmt = endian + "16sHHIQQQIHHHHHH", endian + "IIQQQQIIQQ", endian + "IBBHQQ"
+        expected_header, expected_section, expected_symbol = 64, 64, 24
+    else:
+        header_fmt, section_fmt, symbol_fmt = endian + "16sHHIIIIIHHHHHH", endian + "IIIIIIIIII", endian + "IIIBBH"
+        expected_header, expected_section, expected_symbol = 52, 40, 16
+    if len(data) < expected_header:
+        raise ValueError("ELF header is truncated")
+    header = struct.unpack_from(header_fmt, data, 0)
+    elf_type, machine = header[1], header[2]
+    section_offset, section_entry_size, section_count = header[6], header[11], header[12]
+    if section_count > _MAX_SECTION_HEADERS:
+        raise ValueError("ELF has too many section headers")
+    if section_count and section_entry_size < expected_section:
+        raise ValueError("ELF section header size is invalid")
+    if section_offset > len(data) or section_count * section_entry_size > len(data) - section_offset:
+        raise ValueError("ELF section header table is out of bounds")
+    sections = [
+        struct.unpack_from(section_fmt, data, section_offset + index * section_entry_size)
+        for index in range(section_count)
+    ]
+    dynamic_symbols = 0
+    jni_symbols = 0
+    jni_onload = False
+    dynsym_found = False
+    for section in sections:
+        if section[1] != 11:
+            continue
+        dynsym_found = True
+        symbol_offset, symbol_size, string_index, entry_size = section[4], section[5], section[6], section[9]
+        if string_index >= len(sections) or entry_size < expected_symbol:
+            raise ValueError("ELF dynamic symbol metadata is invalid")
+        if symbol_offset > len(data) or symbol_size > len(data) - symbol_offset:
+            raise ValueError("ELF dynamic symbol table is out of bounds")
+        if symbol_size % entry_size:
+            raise ValueError("ELF dynamic symbol table has an invalid size")
+        string_section = sections[string_index]
+        string_offset, string_size = string_section[4], string_section[5]
+        if string_offset > len(data) or string_size > len(data) - string_offset:
+            raise ValueError("ELF dynamic string table is out of bounds")
+        strings = data[string_offset:string_offset + string_size]
+        count = symbol_size // entry_size
+        for index in range(count):
+            symbol = struct.unpack_from(symbol_fmt, data, symbol_offset + index * entry_size)
+            if elf_class == 2:
+                name_offset, info, other, section_index = symbol[:4]
+            else:
+                name_offset, _value, _size, info, other, section_index = symbol
+            dynamic_symbols += 1
+            binding, visibility = info >> 4, other & 0x3
+            if not section_index or binding not in (1, 2) or visibility not in (0, 3):
+                continue
+            if name_offset >= len(strings):
+                raise ValueError("ELF symbol name offset is invalid")
+            end = strings.find(b"\x00", name_offset)
+            if end < 0:
+                raise ValueError("ELF symbol name is not terminated")
+            name = strings[name_offset:end]
+            if name == b"JNI_OnLoad":
+                jni_onload = True
+            elif name.startswith(b"Java_"):
+                jni_symbols += 1
+    return {
+        "elf_valid": True,
+        "elf_class": 64 if elf_class == 2 else 32,
+        "endianness": "little" if encoding == 1 else "big",
+        "machine": machine,
+        "machine_name": _MACHINE_NAMES.get(machine, "unknown"),
+        "file_type": elf_type,
+        "dynamic_symbol_table_present": dynsym_found,
+        "dynamic_symbol_count": dynamic_symbols if dynsym_found else None,
+        "jni_exported_symbol_count": jni_symbols if dynsym_found else None,
+        "jni_onload_exported": jni_onload if dynsym_found else None,
+        "inspection_status": "complete" if dynsym_found else "no_dynamic_symbol_table",
+    }
+
+
+def inspect_apk_native_libraries(apk_path: str | Path, libraries: list[dict[str, Any]]) -> dict[str, Any]:
+    """Inspect bounded .so bytes in memory; do not write or execute archive members."""
+    results = []
+    total_bytes = 0
+    skipped = 0
+    try:
+        archive = zipfile.ZipFile(apk_path)
+    except (OSError, zipfile.BadZipFile) as exc:
+        raise ValueError("APK is not a readable ZIP archive") from exc
+    with archive:
+        for item in libraries:
+            if len(results) >= _MAX_ANALYZED_LIBRARIES:
+                skipped += 1
+                continue
+            name = f"lib/{item['abi']}/{item['library_name']}"
+            size = item.get("file_size_bytes")
+            base = {"abi": item["abi"], "library_name": item["library_name"]}
+            if not isinstance(size, int) or size < 0 or size > _MAX_ELF_BYTES:
+                results.append({**base, "inspection_status": "skipped_size_limit"})
+                skipped += 1
+                continue
+            if total_bytes + size > _MAX_TOTAL_ELF_BYTES:
+                results.append({**base, "inspection_status": "skipped_total_size_limit"})
+                skipped += 1
+                continue
+            try:
+                with archive.open(name, "r") as member:
+                    data = member.read(_MAX_ELF_BYTES + 1)
+                if len(data) > _MAX_ELF_BYTES or len(data) != size:
+                    raise ValueError("native library size does not match bounded metadata")
+                total_bytes += len(data)
+                results.append({**base, **inspect_elf_bytes(data)})
+            except (KeyError, OSError, RuntimeError, ValueError, zipfile.BadZipFile):
+                results.append({**base, "inspection_status": "invalid_or_unreadable"})
+                skipped += 1
+    return {
+        "libraries": results,
+        "libraries_inspected": sum(item.get("inspection_status") in ("complete", "no_dynamic_symbol_table") for item in results),
+        "jni_exported_library_count": sum((item.get("jni_exported_symbol_count") or 0) > 0 for item in results),
+        "jni_onload_library_count": sum(item.get("jni_onload_exported") is True for item in results),
+        "skipped_library_count": skipped,
+        "bytes_read_in_memory": total_bytes,
+        "archive_members_written": False,
+        "native_code_executed": False,
+        "raw_symbol_names_included": False,
+    }

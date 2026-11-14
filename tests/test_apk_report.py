@@ -200,3 +200,23 @@ def test_combined_report_does_not_claim_native_service_linkage_without_candidate
     assert report["interpretation"]["native_engine_candidates_present"] is False
     assert report["interpretation"]["vpn_service_and_native_engine_candidates_co_present"] is False
     assert report["interpretation"]["native_service_linkage_verified"] is False
+
+
+def test_combined_report_includes_bounded_elf_analysis():
+    inventory, manifest, dex = _report_fixtures()
+    elf = {
+        "libraries": [], "libraries_inspected": 0,
+        "jni_exported_library_count": 0, "jni_onload_library_count": 0,
+        "skipped_library_count": 0, "bytes_read_in_memory": 0,
+        "archive_members_written": False, "native_code_executed": False,
+        "raw_symbol_names_included": False,
+    }
+    with (
+        patch.object(apk_report, "inspect_apk", return_value=inventory),
+        patch.object(apk_report, "inspect_apk_manifest", return_value=manifest),
+        patch.object(apk_report, "inspect_apk_dex", return_value=dex),
+        patch.object(apk_report, "inspect_apk_native_libraries", return_value=elf) as inspect_elf,
+    ):
+        result = apk_report.inspect_apk_report("sample.apk")
+    inspect_elf.assert_called_once_with("sample.apk", inventory["native_libraries"])
+    assert result["native"]["elf_analysis"] == elf

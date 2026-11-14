@@ -8,6 +8,7 @@ from typing import Any
 from apnawin.services.apk_dex import inspect_apk_dex
 from apnawin.services.apk_inventory import inspect_apk
 from apnawin.services.apk_manifest import inspect_apk_manifest
+from apnawin.services.apk_elf import inspect_apk_native_libraries
 
 _NATIVE_ENGINE_MARKERS = {
     "xray": ("xray",),
@@ -91,6 +92,7 @@ def inspect_apk_report(
     unresolved_services = sum(item["resolved_class_name"] is None for item in service_matches)
     unmatched_services = len(service_matches) - matched_services - unresolved_services
     engine_candidates = _native_engine_candidates(inventory["native_libraries"])
+    elf_analysis = inspect_apk_native_libraries(apk_path, inventory["native_libraries"])
     engine_candidate_counts: dict[str, int] = {}
     engine_candidate_abi_counts: dict[str, dict[str, int]] = {}
     for candidate in engine_candidates:
@@ -117,6 +119,7 @@ def inspect_apk_report(
                 engine: dict(sorted(counts.items()))
                 for engine, counts in sorted(engine_candidate_abi_counts.items())
             },
+            "elf_analysis": elf_analysis,
             "windows_binary_reuse_verified": False,
         },
         "interpretation": {

@@ -134,3 +134,28 @@ evidence, not proof of native-service linkage or runtime behavior.
 
 The command and smali output format are documented by the
 [Android APK Analyzer reference](https://developer.android.com/tools/apkanalyzer).
+
+
+## ELF identity and JNI export metadata
+
+The combined report reads selected native-library members in bounded memory
+(no archive member is written to disk and no native code is executed). It
+parses ELF identification and section metadata for supported 32-bit and
+64-bit, little- or big-endian ELF layouts. It records machine architecture,
+file type, whether a dynamic symbol table is available, and counts of
+exported JNI-style `Java_...` symbols and an exported `JNI_OnLoad` symbol.
+Raw symbol names, symbol values, addresses, and binary contents are never
+included in the report. Per-library reads are capped at 64 MiB, aggregate
+reads at 256 MiB, and analysis at 256 libraries.
+
+A matching exported `Java_...` name is evidence of a JNI-style export, not
+proof that a particular DEX native method resolves to it. An exported
+`JNI_OnLoad` can be used for explicit `RegisterNatives` registration, but
+its presence alone does not prove which methods are registered. Conversely,
+a stripped or section-header-free library, hidden symbols, or registration
+performed through another mechanism can make static symbol counts
+incomplete. The report therefore never upgrades these observations to
+verified service-to-library linkage or runtime behavior.
+
+The parsing approach follows the Android NDK JNI guidance on dynamic lookup
+and `RegisterNatives`: [JNI tips](https://developer.android.com/ndk/guides/jni-tips).
