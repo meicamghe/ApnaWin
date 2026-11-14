@@ -57,6 +57,7 @@ It does not store passwords, access tokens, private keys or other credentials. D
 - `docs/SESSION-HANDOFF.md` — durable implementation status and next engineering steps
 - `docs/apk-analysis.md` — preliminary APK observations and reproducible verification checklist
 - `docs/engine-contract.md` — requirements for production tunnel adapters
+- `docs/profile-storage.md` — schema, atomic-write behavior and credential boundary
 - `docs/xray-process-runner.md` — scope and limitations of Xray process supervision
 
 ## Important compatibility note
