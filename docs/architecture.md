@@ -28,16 +28,17 @@ Build a native Windows 10/11 client that offers a clear desktop workflow for tun
 - Add, edit, select and remove connection profiles.
 - Profile metadata is stored as UTF-8 JSON under the current user's application-data directory.
 - The profile format stores only name, transport, endpoint host and port. It does not store credentials or private keys.
-- Profile loading validates the stored schema and rejects unsupported format versions.
+- Profile loading validates strict JSON/schema types, rejects duplicate JSON keys and duplicate case-insensitive profile names, and rejects unsupported format versions or unexpected fields.
+- Profile writes use unique same-directory temporary files, flush/fsync before atomic replacement, and clean up temporary files on failure.
 - Connect remains disabled: no real Windows tunnel engine is integrated.
 
 ## Milestones
 
 - M0: repository skeleton, coding conventions and architecture record — complete.
 - M1: inspect APK metadata/resources and document observable features and protocols — preliminary; reproducible verification remains.
-- M2: define profile schema, persistence, mock engine contract and desktop profile workflow — in progress.
+- M2: define profile schema, persistence, mock engine contract and desktop profile workflow — core implementation present; workflow and failure-path coverage is being expanded.
 - M2a: add a safe Xray process runner and automated process-supervision tests — implemented.
-- M2b: Windows Job Object process-tree launcher and Xray runner integration — implemented and verified in Windows CI. Real child/grandchild containment, creation-time root membership, final-handle-close cleanup, and targeted Win32 failure/handle-retention tests pass. The latest full Windows test job, PyInstaller build, packaged GUI smoke test, and portable-folder artifact upload all succeeded in workflow run [#91](https://github.com/meicamghe/ApnaWin/actions/runs/43511327269). See [Windows Job Object implementation](windows-job-object-design.md).
+- M2b: Windows Job Object process-tree launcher and Xray runner integration — implemented and verified in Windows CI. Real child/grandchild containment, creation-time root membership, final-handle-close cleanup, and targeted Win32 failure/handle-retention tests pass. The latest full Windows test job, PyInstaller build, packaged GUI smoke test, and portable-folder artifact upload succeeded in workflow run [#99](https://github.com/meicamghe/ApnaWin/actions/runs/43512207741). See [Windows Job Object implementation](windows-job-object-design.md).
 - M3: integrate one Windows engine end-to-end using an authorized test server and documented configuration. This is currently blocked on obtaining a compatible, authorized test configuration; no private server details or credentials will be inferred.
 - M4: implement elevation/service and TUN adapter lifecycle with rollback and cleanup.
 - M5: package, sign where possible, test on clean Windows 10/11 VMs and publish releases.
