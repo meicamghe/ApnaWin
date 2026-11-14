@@ -146,7 +146,8 @@ file type, whether a dynamic symbol table is available, and counts of
 exported JNI-style `Java_...` symbols and an exported `JNI_OnLoad` symbol.
 Raw symbol names, symbol values, addresses, and binary contents are never
 included in the report. Per-library reads are capped at 64 MiB, aggregate
-reads at 256 MiB, and analysis at 256 libraries.
+reads at 256 MiB, analysis at 256 libraries, and each dynamic symbol table
+at 16 MiB. Dynamic symbol tables must link to a valid ELF string-table section.
 
 A matching exported `Java_...` name is evidence of a JNI-style export, not
 proof that a particular DEX native method resolves to it. An exported

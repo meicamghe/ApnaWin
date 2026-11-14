@@ -105,3 +105,21 @@ def test_inspect_apk_native_libraries_marks_non_elf_as_unreadable(tmp_path):
     assert result["libraries_inspected"] == 0
     assert result["skipped_library_count"] == 1
     assert result["jni_exported_library_count"] == 0
+
+
+def test_inspect_elf_bytes_rejects_oversized_dynamic_symbol_table():
+    data = bytearray(_elf64_with_jni_exports())
+    section_offset = struct.unpack_from("<Q", data, 40)[0]
+    dynsym_header = section_offset + 2 * 64
+    struct.pack_into("<Q", data, dynsym_header + 32, 16 * 1024 * 1024 + 24)
+    with pytest.raises(ValueError, match="exceeds the analysis limit"):
+        inspect_elf_bytes(bytes(data))
+
+
+def test_inspect_elf_bytes_rejects_non_string_dynamic_symbol_link():
+    data = bytearray(_elf64_with_jni_exports())
+    section_offset = struct.unpack_from("<Q", data, 40)[0]
+    dynsym_header = section_offset + 2 * 64
+    struct.pack_into("<I", data, dynsym_header + 40, 2)
+    with pytest.raises(ValueError, match="invalid section type"):
+        inspect_elf_bytes(bytes(data))

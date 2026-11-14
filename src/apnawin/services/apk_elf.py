@@ -9,6 +9,7 @@ _MAX_ELF_BYTES = 64 * 1024 * 1024
 _MAX_TOTAL_ELF_BYTES = 256 * 1024 * 1024
 _MAX_ANALYZED_LIBRARIES = 256
 _MAX_SECTION_HEADERS = 4096
+_MAX_DYNAMIC_SYMBOL_TABLE_BYTES = 16 * 1024 * 1024
 _MACHINE_NAMES = {3: "x86", 40: "arm", 62: "x86_64", 183: "aarch64", 243: "riscv"}
 
 
@@ -52,11 +53,15 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
         symbol_offset, symbol_size, string_index, entry_size = section[4], section[5], section[6], section[9]
         if string_index >= len(sections) or entry_size < expected_symbol:
             raise ValueError("ELF dynamic symbol metadata is invalid")
+        if symbol_size > _MAX_DYNAMIC_SYMBOL_TABLE_BYTES:
+            raise ValueError("ELF dynamic symbol table exceeds the analysis limit")
         if symbol_offset > len(data) or symbol_size > len(data) - symbol_offset:
             raise ValueError("ELF dynamic symbol table is out of bounds")
         if symbol_size % entry_size:
             raise ValueError("ELF dynamic symbol table has an invalid size")
         string_section = sections[string_index]
+        if string_section[1] != 3:  # SHT_STRTAB
+            raise ValueError("ELF dynamic symbol string table has an invalid section type")
         string_offset, string_size = string_section[4], string_section[5]
         if string_offset > len(data) or string_size > len(data) - string_offset:
             raise ValueError("ELF dynamic string table is out of bounds")
