@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import stat
 import zipfile
@@ -65,8 +66,6 @@ def _same_file_snapshot(before: os.stat_result, after: os.stat_result) -> bool:
 
 def inspect_apk(path: str | Path) -> dict[str, Any]:
     """Return minimal non-content APK metadata from one stable open file descriptor."""
-    import os
-
     apk_path = Path(path)
     try:
         stream = apk_path.open("rb")
