@@ -1,7 +1,5 @@
 
 
-## Remote refresh coordinator milestone
+## HTTPS catalog transport milestone
 
-A provider-neutral `RemoteCatalogRefreshCoordinator` now provides single-flight refresh execution, an injectable provider and monotonic clock, bounded exponential retry backoff, explicit forced refresh, last-known-good cache fallback and failure-message redaction. The strict catalog parser and atomic cache reject malformed, oversized or invalid-UTF-8 data without replacing the previous valid cache. Tests cover concurrency, retry timing, recovery, malformed provider documents and invalid policy values.
-
-The Windows Actions run [#142](https://github.com/meicamghe/ApnaWin/actions/runs/43568039087) passed the full test job and the Windows PyInstaller build plus packaged-application smoke test. The coordinator is intentionally not connected to a network provider or UI timer: the Android APK/runtime evidence needed to establish APNA's real endpoint, response schema, authentication and refresh policy is not yet available. Do not add a speculative endpoint or enable Connect based on catalog availability.
+A reusable `HttpsCatalogProvider` now fetches an explicitly configured catalog URL using Python's default HTTPS certificate validation. It rejects non-HTTPS URLs, embedded URL credentials, fragments, malformed hosts and redirects; response reads are capped at the normalized catalog size limit, and the request has a finite timeout. HTTP error bodies are not surfaced by the provider. This is a generic transport adapter only: no APNA endpoint, authentication mechanism, or upstream response schema has been inferred.
