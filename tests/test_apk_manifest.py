@@ -1,5 +1,3 @@
-import subprocess
-
 import pytest
 
 from apnawin.services import apk_manifest
@@ -67,25 +65,21 @@ def test_inspector_uses_argv_without_shell_and_parses_output(tmp_path, monkeypat
     apk.write_bytes(b"placeholder apk")
     calls = {}
 
-    class Completed:
-        returncode = 0
-        stdout = MANIFEST.encode()
-        stderr = b""
-
-    def fake_run(args, **kwargs):
-        calls["args"] = args
-        calls["kwargs"] = kwargs
-        return Completed()
+    def fake_run(executable, args, timeout, limit, failure, timed_out, overflow):
+        calls["args"] = [executable, *args]
+        calls["timeout"] = timeout
+        calls["limit"] = limit
+        return MANIFEST.encode()
 
     monkeypatch.setattr(apk_manifest.shutil, "which", lambda _: "/sdk/apkanalyzer")
-    monkeypatch.setattr(apk_manifest.subprocess, "run", fake_run)
+    monkeypatch.setattr(apk_manifest, "run_apkanalyzer", fake_run)
 
     report = apk_manifest.inspect_apk_manifest(apk)
 
     assert report["package_name"] == "org.example.client"
     assert calls["args"][:3] == ["/sdk/apkanalyzer", "manifest", "print"]
-    assert calls["kwargs"]["shell"] is False
-    assert calls["kwargs"]["stdin"] is subprocess.DEVNULL
+    assert calls["timeout"] == 30
+    assert calls["limit"] == apk_manifest._MAX_APKANALYZER_OUTPUT
 
 
 def test_inspector_reports_missing_sdk_tool(tmp_path, monkeypatch):
@@ -100,13 +94,8 @@ def test_inspector_redacts_tool_errors(tmp_path, monkeypatch):
     apk = tmp_path / "sample.apk"
     apk.write_bytes(b"placeholder")
 
-    class Failed:
-        returncode = 1
-        stdout = b""
-        stderr = b"private path and token"
-
     monkeypatch.setattr(apk_manifest.shutil, "which", lambda _: "/sdk/apkanalyzer")
-    monkeypatch.setattr(apk_manifest.subprocess, "run", lambda *a, **k: Failed())
+    monkeypatch.setattr(apk_manifest, "run_apkanalyzer", lambda *a: (_ for _ in ()).throw(RuntimeError("apkanalyzer failed to inspect the APK")))
 
     with pytest.raises(RuntimeError, match="failed to inspect"):
         apk_manifest.inspect_apk_manifest(apk)

@@ -47,7 +47,10 @@ is heuristic: a class name containing "vpn", "tunnel", "xray", "socks", "dns",
 Obfuscated or dynamically loaded classes may not be detected.
 
 Both decoders invoke local SDK tooling with argument arrays, no shell, and a
-30-second timeout. Missing tooling fails clearly; no executable is downloaded.
+30-second timeout. Standard output and standard error are drained concurrently
+with a strict per-stream memory ceiling; the child process is terminated as soon
+as either stream exceeds its limit. Missing tooling fails clearly; no executable
+is downloaded.
 Treat APKs and SDK tools as untrusted software and use an isolated analysis
 environment for unknown samples. Neither report verifies runtime behavior or
 discovers APNA server endpoints.

@@ -6,12 +6,12 @@ returned, never arbitrary manifest text or resource values.
 """
 from __future__ import annotations
 
-import json
 import shutil
-import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
+
+from apnawin.services.apk_tool import run_apkanalyzer
 
 _ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
 _MAX_APKANALYZER_OUTPUT = 4 * 1024 * 1024
@@ -55,7 +55,6 @@ def parse_manifest_xml(xml_text: str) -> dict[str, Any]:
     package_name = root.attrib.get("package")
     if not package_name or len(package_name) > 255:
         package_name = None
-
     uses_sdk = root.find("uses-sdk")
     permissions: set[str] = set()
     for node in root:
@@ -76,9 +75,7 @@ def parse_manifest_xml(xml_text: str) -> dict[str, Any]:
                 continue
             permission = _android_attr(node, "permission")
             exported_text = _android_attr(node, "exported")
-            exported = None
-            if exported_text in {"true", "false"}:
-                exported = exported_text == "true"
+            exported = exported_text == "true" if exported_text in {"true", "false"} else None
             components.append({
                 "type": node.tag,
                 "name": name,
@@ -89,21 +86,16 @@ def parse_manifest_xml(xml_text: str) -> dict[str, Any]:
                 vpn_services.append(name)
             if len(components) > _MAX_REPORTED_ITEMS:
                 raise ValueError("manifest contains too many components")
-
     if len(permissions) > _MAX_REPORTED_ITEMS:
         raise ValueError("manifest contains too many permissions")
-
-    version_code = _safe_int(_android_attr(root, "versionCode"))
-    min_sdk = _safe_int(_android_attr(uses_sdk, "minSdkVersion")) if uses_sdk is not None else None
-    target_sdk = _safe_int(_android_attr(uses_sdk, "targetSdkVersion")) if uses_sdk is not None else None
 
     return {
         "format": "apnawin-apk-manifest-v1",
         "package_name": package_name,
-        "version_code": version_code,
+        "version_code": _safe_int(_android_attr(root, "versionCode")),
         "version_name_present": _android_attr(root, "versionName") is not None,
-        "min_sdk": min_sdk,
-        "target_sdk": target_sdk,
+        "min_sdk": _safe_int(_android_attr(uses_sdk, "minSdkVersion")) if uses_sdk is not None else None,
+        "target_sdk": _safe_int(_android_attr(uses_sdk, "targetSdkVersion")) if uses_sdk is not None else None,
         "permissions": sorted(permissions),
         "components": components,
         "vpn_services": sorted(set(vpn_services)),
@@ -123,34 +115,23 @@ def inspect_apk_manifest(
         raise ValueError("APK path must refer to an existing regular file")
     if timeout <= 0 or timeout > _MAX_APKANALYZER_TIMEOUT_SECONDS:
         raise ValueError("apkanalyzer timeout is outside the allowed range")
-
     resolved = shutil.which(executable)
     if resolved is None and Path(executable).is_file():
         resolved = str(Path(executable).resolve())
     if resolved is None:
         raise RuntimeError("Android SDK apkanalyzer was not found on PATH")
 
+    output = run_apkanalyzer(
+        resolved,
+        ["manifest", "print", str(path.resolve())],
+        timeout,
+        _MAX_APKANALYZER_OUTPUT,
+        "apkanalyzer failed to inspect the APK",
+        "apkanalyzer timed out",
+        "apkanalyzer output exceeds the allowed size",
+    )
     try:
-        result = subprocess.run(
-            [resolved, "manifest", "print", str(path.resolve())],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            shell=False,
-            check=False,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError("apkanalyzer timed out") from exc
-    except OSError as exc:
-        raise RuntimeError("apkanalyzer could not be started") from exc
-
-    if len(result.stdout) > _MAX_APKANALYZER_OUTPUT or len(result.stderr) > _MAX_APKANALYZER_OUTPUT:
-        raise RuntimeError("apkanalyzer output exceeds the allowed size")
-    if result.returncode != 0:
-        raise RuntimeError("apkanalyzer failed to inspect the APK")
-    try:
-        xml_text = result.stdout.decode("utf-8")
+        xml_text = output.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ValueError("apkanalyzer output is not UTF-8 XML") from exc
     return parse_manifest_xml(xml_text)

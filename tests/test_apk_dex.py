@@ -1,5 +1,3 @@
-import subprocess
-
 import pytest
 
 from apnawin.services import apk_dex
@@ -68,7 +66,7 @@ def test_inspector_invokes_documented_commands(tmp_path, monkeypatch):
         return result
 
     monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
-    monkeypatch.setattr(apk_dex.subprocess, "run", fake_run)
+    monkeypatch.setattr(apk_dex, "run_apkanalyzer", fake_run)
     report = apk_dex.inspect_apk_dex(apk)
 
     assert report["dex_file_count"] == 2
@@ -85,13 +83,8 @@ def test_dex_tool_failure_is_sanitized(tmp_path, monkeypatch):
     apk = tmp_path / "sample.apk"
     apk.write_bytes(b"placeholder")
 
-    class Failed:
-        returncode = 2
-        stdout = b""
-        stderr = b"private data"
-
     monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
-    monkeypatch.setattr(apk_dex.subprocess, "run", lambda *a, **k: Failed())
+    monkeypatch.setattr(apk_dex, "run_apkanalyzer", lambda *a: (_ for _ in ()).throw(RuntimeError("apkanalyzer failed during DEX inspection")))
     with pytest.raises(RuntimeError, match="failed during DEX"):
         apk_dex.inspect_apk_dex(apk)
 
@@ -125,16 +118,10 @@ def test_no_dex_report_still_includes_manifest_service_join(tmp_path, monkeypatc
     outputs = iter([b""])
     monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
 
-    class Completed:
-        returncode = 0
-        stderr = b""
+    def fake_run(*args):
+        return next(outputs)
 
-    def fake_run(*args, **kwargs):
-        result = Completed()
-        result.stdout = next(outputs)
-        return result
-
-    monkeypatch.setattr(apk_dex.subprocess, "run", fake_run)
+    monkeypatch.setattr(apk_dex, "run_apkanalyzer", fake_run)
     report = apk_dex.inspect_apk_dex(
         apk, manifest_services=[".TunnelService"], package_name="com.example"
     )

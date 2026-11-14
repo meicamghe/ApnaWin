@@ -4,7 +4,7 @@
 
 The native Windows application shell, profile management, Xray process runner, Windows Job Object supervision, remote catalog schema/cache, refresh coordinator, bounded HTTPS transport and privacy-conscious APK inventory are implemented. The inventory hashes and inspects through one open file descriptor, enforces a 2 GiB compressed-input ceiling, and checks for ordinary concurrent mutation.
 
-Optional Android SDK-backed inspection covers manifest and DEX metadata; ZIP inventory also records bounded native-library metadata:
+Optional Android SDK-backed inspection covers manifest and DEX metadata. Its shared subprocess runner enforces timeout and per-stream output caps while reading, terminating the child on overflow instead of checking only after unbounded capture. ZIP inventory also records bounded native-library metadata:
 - Manifest decoder: selected package/version/SDK, permissions, component declarations and VPN-binding services.
 - DEX decoder: DEX filenames, defined-class count, per-DEX method-reference counts and heuristic candidate VPN/network class names.
 - Native inventory: allowlisted `.so` basenames, ABI labels and sizes; combined report emits token-boundary filename-only engine candidates and per-ABI counts. Android `.so` files are not assumed to be Windows DLLs.

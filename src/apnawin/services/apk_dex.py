@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import re
 import shutil
-import subprocess
 from pathlib import Path
 from typing import Any
+
+from apnawin.services.apk_tool import run_apkanalyzer
 
 _MAX_OUTPUT_BYTES = 8 * 1024 * 1024
 _MAX_TIMEOUT_SECONDS = 30
@@ -27,26 +28,17 @@ _SIGNAL = re.compile(
 
 
 def _run(executable: str, args: list[str], timeout: float) -> str:
+    output = run_apkanalyzer(
+        executable,
+        args,
+        timeout,
+        _MAX_OUTPUT_BYTES,
+        "apkanalyzer failed during DEX inspection",
+        "apkanalyzer timed out during DEX inspection",
+        "apkanalyzer DEX output exceeds the allowed size",
+    )
     try:
-        result = subprocess.run(
-            [executable, *args],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            shell=False,
-            check=False,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError("apkanalyzer timed out during DEX inspection") from exc
-    except OSError as exc:
-        raise RuntimeError("apkanalyzer could not be started") from exc
-    if len(result.stdout) > _MAX_OUTPUT_BYTES or len(result.stderr) > _MAX_OUTPUT_BYTES:
-        raise RuntimeError("apkanalyzer DEX output exceeds the allowed size")
-    if result.returncode != 0:
-        raise RuntimeError("apkanalyzer failed during DEX inspection")
-    try:
-        return result.stdout.decode("utf-8")
+        return output.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ValueError("apkanalyzer DEX output is not UTF-8") from exc
 
