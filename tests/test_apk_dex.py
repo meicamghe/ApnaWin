@@ -248,3 +248,75 @@ def test_defined_class_metadata_keeps_referenced_rows_out_of_join():
         }
     }
 
+
+
+
+def test_parse_native_method_count_counts_only_native_declarations():
+    output = (
+        ".class public Lcom/example/TunnelService;\\n"
+        ".method public onStartCommand()I\\n"
+        "    .locals 1\\n"
+        ".end method\\n"
+        ".method private static native startTunnel([B)I\\n"
+        ".end method\\n"
+        ".method public native stopTunnel()V\\n"
+        ".end method\\n"
+    )
+    assert apk_dex._parse_native_method_count(output) == 2
+
+
+def test_parse_native_method_count_does_not_count_native_in_method_body():
+    output = (
+        ".method public run()V\\n"
+        "    const-string v0, \\"native method\\"\\n"
+        ".end method\\n"
+    )
+    assert apk_dex._parse_native_method_count(output) == 0
+
+
+def test_inspector_records_native_method_counts_for_exact_service_class(tmp_path, monkeypatch):
+    apk = tmp_path / "native-service.apk"
+    apk.write_bytes(b"placeholder")
+    commands = []
+    outputs = iter([
+        b"classes.dex\\n",
+        b"C d 3 2 80 com.example.TunnelService\\n",
+        b".class public Lcom/example/TunnelService;\\n.method private static native start([B)I\\n.end method\\n",
+        b"classes.dex 100\\n",
+    ])
+
+    def fake_run(executable, args, timeout, limit, failure, timed_out, overflow):
+        commands.append(args[:-1])
+        return next(outputs)
+
+    monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
+    monkeypatch.setattr(apk_dex, "run_apkanalyzer", fake_run)
+    report = apk_dex.inspect_apk_dex(
+        apk, manifest_services=[".TunnelService"], package_name="com.example"
+    )
+    assert report["manifest_service_classes"][0]["native_method_count"] == 1
+    assert report["manifest_service_classes"][0]["native_method_inspection_completed"] is True
+    assert commands == [
+        ["dex", "list"],
+        ["dex", "packages", "--defined-only"],
+        ["dex", "code", "--class", "com.example.TunnelService"],
+        ["dex", "references"],
+    ]
+
+
+def test_missing_service_class_has_no_native_method_claim(tmp_path, monkeypatch):
+    apk = tmp_path / "missing-service.apk"
+    apk.write_bytes(b"placeholder")
+    outputs = iter([
+        b"classes.dex\\n",
+        b"C d 1 1 20 com.example.Other\\n",
+        b"classes.dex 10\\n",
+    ])
+    monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
+    monkeypatch.setattr(apk_dex, "run_apkanalyzer", lambda *args: next(outputs))
+    report = apk_dex.inspect_apk_dex(
+        apk, manifest_services=[".TunnelService"], package_name="com.example"
+    )
+    item = report["manifest_service_classes"][0]
+    assert item["native_method_count"] is None
+    assert item["native_method_inspection_completed"] is False

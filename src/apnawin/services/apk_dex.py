@@ -140,6 +140,28 @@ def _resolve_manifest_class(name: str, package_name: str | None) -> str | None:
     return name
 
 
+def _parse_native_method_count(output: str) -> int:
+    """Count DEX method declarations carrying the native access flag.
+
+    APK Analyzer emits smali text for one exact class. Method names and bodies
+    are deliberately discarded; only the number of native declarations escapes.
+    """
+    if len(output.encode("utf-8")) > _MAX_OUTPUT_BYTES:
+        raise ValueError("DEX class code exceeds the allowed size")
+    count = 0
+    for line in output.splitlines():
+        if len(line) > 16_384:
+            raise ValueError("DEX class code contains an oversized line")
+        if not line.startswith(".method "):
+            continue
+        fields = line.split()
+        if len(fields) < 3 or fields[0] != ".method":
+            raise ValueError("apkanalyzer returned an unexpected method declaration")
+        if "native" in fields[1:-1]:
+            count += 1
+    return count
+
+
 def parse_reference_counts(output: str) -> dict[str, int]:
     if len(output.encode("utf-8")) > _MAX_OUTPUT_BYTES:
         raise ValueError("DEX reference listing exceeds the allowed size")
@@ -193,6 +215,8 @@ def inspect_apk_dex(
                     "defined_method_count": None,
                     "referenced_method_count": None,
                     "byte_count": None,
+                    "native_method_count": None,
+                    "native_method_inspection_completed": False,
                 }
                 for service in (manifest_services or [])
             ],
@@ -203,9 +227,22 @@ def inspect_apk_dex(
     class_output = _run(resolved, ["dex", "packages", "--defined-only", apk], timeout)
     class_count, candidates, class_metadata = _parse_defined_class_metadata(class_output)
     service_matches = []
+    native_method_counts: dict[str, int] = {}
     for service in manifest_services or []:
         resolved_name = _resolve_manifest_class(service, package_name)
         evidence = class_metadata.get(resolved_name) if resolved_name else None
+        native_count = None
+        inspection_completed = False
+        if evidence is not None and resolved_name is not None:
+            if resolved_name not in native_method_counts:
+                code_output = _run(
+                    resolved,
+                    ["dex", "code", "--class", resolved_name, apk],
+                    timeout,
+                )
+                native_method_counts[resolved_name] = _parse_native_method_count(code_output)
+            native_count = native_method_counts[resolved_name]
+            inspection_completed = True
         service_matches.append({
             "manifest_name": service,
             "resolved_class_name": resolved_name,
@@ -213,6 +250,8 @@ def inspect_apk_dex(
             "defined_method_count": evidence["defined_method_count"] if evidence else None,
             "referenced_method_count": evidence["referenced_method_count"] if evidence else None,
             "byte_count": evidence["byte_count"] if evidence else None,
+            "native_method_count": native_count,
+            "native_method_inspection_completed": inspection_completed,
         })
     reference_output = _run(resolved, ["dex", "references", apk], timeout)
     references = parse_reference_counts(reference_output)

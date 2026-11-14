@@ -112,3 +112,25 @@ candidate name and ABI. Its interpretation may mark that a manifest-declared
 VPN service class and one or more native engine-name candidates are both
 present in the same APK. This is only co-presence in the package: it does not
 establish a class-to-library dependency, dynamic loading, or runtime use.
+
+
+
+## Native method declarations in VPN service classes
+
+For each manifest-declared VPN service whose exact class name resolves and is
+present among DEX-defined classes, the combined DEX inspection additionally
+runs the documented `apkanalyzer dex code --class CLASS APK` command. The
+smali output is processed in memory and discarded; only the count of method
+declarations carrying the DEX `native` access flag is retained. Method names,
+signatures, bytecode, strings, and raw tool output are not included in the
+report. Classes that cannot be resolved or are absent from defined DEX classes
+are not disassembled and have a null count with inspection marked incomplete.
+
+A positive count establishes that the service class declares native methods;
+it does not establish which library implements them, whether JNI resolution
+succeeds, or whether those methods are invoked. A zero count does not rule out
+native code elsewhere in the application. This remains static structural
+evidence, not proof of native-service linkage or runtime behavior.
+
+The command and smali output format are documented by the
+[Android APK Analyzer reference](https://developer.android.com/tools/apkanalyzer).
