@@ -58,6 +58,10 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
         raise ValueError("ELF header is truncated")
     header = struct.unpack_from(header_fmt, data, 0)
     elf_type, machine = header[1], header[2]
+    if header[3] != 1:
+        raise ValueError("ELF header version is unsupported")
+    if header[8] != expected_header:
+        raise ValueError("ELF header size is invalid")
     section_offset, section_entry_size, section_count = header[6], header[11], header[12]
     if section_count and section_count > _MAX_SECTION_HEADERS:
         raise ValueError("ELF has too many section headers")

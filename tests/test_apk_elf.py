@@ -302,3 +302,21 @@ def test_inspect_elf32_bytes_rejects_truncated_header():
     data = _elf32_minimal(3)[:51]
     with pytest.raises(ValueError, match="ELF header is truncated"):
         inspect_elf_bytes(data)
+
+
+@pytest.mark.parametrize(
+    ("payload", "offset", "bad_value", "message"),
+    [
+        (_elf64_with_jni_exports(), 52, 63, "ELF header size is invalid"),
+        (_elf32_minimal(3), 40, 51, "ELF header size is invalid"),
+        (_elf64_with_jni_exports(), 20, 2, "ELF header version is unsupported"),
+        (_elf32_minimal(3), 20, 0, "ELF header version is unsupported"),
+    ],
+)
+def test_inspect_elf_bytes_rejects_invalid_header_size_or_version(
+    payload, offset, bad_value, message
+):
+    data = bytearray(payload)
+    struct.pack_into("<H" if offset in (52, 40) else "<I", data, offset, bad_value)
+    with pytest.raises(ValueError, match=message):
+        inspect_elf_bytes(bytes(data))

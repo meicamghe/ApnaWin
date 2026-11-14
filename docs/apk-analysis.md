@@ -186,3 +186,13 @@ the number of libraries with a known identity check, and a boolean mismatch
 indicator. Unknown ABI labels and unreadable or skipped files are excluded
 from the checked-library count; inspect native.elf_analysis for the full
 per-library classifications and all category counts.
+
+
+## ELF header consistency checks
+
+The ELF metadata parser also verifies that the main header's version field is
+the current ELF version and that e_ehsize matches the class-specific ELF
+header size (64 bytes for ELF64 and 52 bytes for ELF32). Inputs with inconsistent
+header metadata are classified as invalid rather than being interpreted using
+assumed offsets. This is a structural consistency check; it does not establish
+that a library is accepted by an Android loader.
