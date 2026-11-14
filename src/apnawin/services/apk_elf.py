@@ -92,18 +92,6 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             alignment = section[8]
             if alignment > 1 and alignment & (alignment - 1):
                 raise ValueError("ELF section alignment is not a power of two")
-        # File-backed sections must remain within the input. SHT_NOBITS
-        # occupies memory but has no bytes in the ELF file; section zero can
-        # carry extended-numbering metadata in sh_size.
-        for index, section in enumerate(sections):
-            if index == 0 or section[1] == 8:  # SHT_NULL / SHT_NOBITS
-                continue
-            section_data_offset, section_data_size = section[4], section[5]
-            if (
-                section_data_offset > len(data)
-                or section_data_size > len(data) - section_data_offset
-            ):
-                raise ValueError("ELF section data is out of bounds")
         # Relocation sections reference a symbol table and, for relocatable
         # objects, the section receiving the relocations. Validate metadata
         # without interpreting architecture-specific relocation records.
@@ -173,6 +161,18 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                     "ELF dynamic string table is missing its leading NUL"
                     if section[1] == 11 else "ELF symbol string table is missing its leading NUL"
                 )
+        # File-backed sections must remain within the input. SHT_NOBITS
+        # occupies memory but has no bytes in the ELF file; section zero can
+        # carry extended-numbering metadata in sh_size.
+        for index, section in enumerate(sections):
+            if index == 0 or section[1] == 8:  # SHT_NULL / SHT_NOBITS
+                continue
+            section_data_offset, section_data_size = section[4], section[5]
+            if (
+                section_data_offset > len(data)
+                or section_data_size > len(data) - section_data_offset
+            ):
+                raise ValueError("ELF section data is out of bounds")
     else:
         if section_count:
             raise ValueError("ELF section table offset is missing")
