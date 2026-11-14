@@ -526,7 +526,10 @@ def _elf_with_group_section(payload, elf_class, group_words=(1, 6)):
     group_header_offset = section_offset + 5 * section_size
     member_header_offset = section_offset + 6 * section_size
     group_data = struct.pack("<" + "I" * len(group_words), *group_words)
-    group_payload_offset = len(data) + 2 * section_size
+    # The base fixture has sections 0..3. Add a null placeholder at 4,
+    # then the group at 5 and its member at 6, keeping the section table
+    # contiguous as required by e_shoff/e_shnum.
+    group_payload_offset = len(data) + 3 * section_size
     member_payload_offset = group_payload_offset + len(group_data)
     group_header = struct.pack(
         section_fmt, 0, 17, 0, 0, group_payload_offset, len(group_data), 2, 1, 4, 4
@@ -535,6 +538,7 @@ def _elf_with_group_section(payload, elf_class, group_words=(1, 6)):
         section_fmt, 0, 1, 0x200, 0, member_payload_offset, 4, 0, 0, 4, 0
     )
     struct.pack_into("<H", data, count_offset, 7)
+    data.extend(bytes(section_size))
     data.extend(group_header)
     data.extend(member_header)
     data.extend(group_data)
