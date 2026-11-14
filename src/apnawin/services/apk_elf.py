@@ -99,6 +99,8 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                 continue
             symbol_offset, symbol_size = section[4], section[5]
             string_index, local_boundary, entry_size = section[6], section[7], section[9]
+            if section[1] == 11 and symbol_size > _MAX_DYNAMIC_SYMBOL_TABLE_BYTES:
+                raise ValueError("ELF dynamic symbol table exceeds the analysis limit")
             if (
                 string_index >= len(sections)
                 or entry_size < expected_symbol
@@ -106,7 +108,10 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             ):
                 raise ValueError("ELF symbol table metadata is invalid")
             if symbol_offset > len(data) or symbol_size > len(data) - symbol_offset:
-                raise ValueError("ELF symbol table is out of bounds")
+                raise ValueError(
+                    "ELF dynamic symbol table is out of bounds"
+                    if section[1] == 11 else "ELF symbol table is out of bounds"
+                )
             symbol_count = symbol_size // entry_size
             if local_boundary > symbol_count:
                 raise ValueError("ELF symbol table local-symbol boundary is invalid")
@@ -115,9 +120,15 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                 raise ValueError("ELF symbol string table has an invalid section type")
             string_offset, string_size = string_section[4], string_section[5]
             if string_offset > len(data) or string_size > len(data) - string_offset:
-                raise ValueError("ELF symbol string table is out of bounds")
+                raise ValueError(
+                    "ELF dynamic string table is out of bounds"
+                    if section[1] == 11 else "ELF symbol string table is out of bounds"
+                )
             if not string_size or data[string_offset] != 0:
-                raise ValueError("ELF symbol string table is missing its leading NUL")
+                raise ValueError(
+                    "ELF dynamic string table is missing its leading NUL"
+                    if section[1] == 11 else "ELF symbol string table is missing its leading NUL"
+                )
     else:
         if section_count:
             raise ValueError("ELF section table offset is missing")
