@@ -69,12 +69,13 @@ def parse_dex_file_list(output: str) -> list[str]:
     return names
 
 
-def parse_defined_classes(output: str) -> tuple[int, list[str]]:
-    """Parse only defined class records from dex packages --defined-only output."""
+def _parse_defined_class_details(output: str) -> tuple[int, list[str], set[str]]:
+    """Parse defined classes, retaining names internally for exact manifest joins."""
     if len(output.encode("utf-8")) > _MAX_OUTPUT_BYTES:
         raise ValueError("DEX class listing exceeds the allowed size")
     count = 0
     relevant: set[str] = set()
+    defined: set[str] = set()
     for line in output.splitlines():
         fields = line.split()
         if not fields or fields[0] != "C":
@@ -88,11 +89,26 @@ def parse_defined_classes(output: str) -> tuple[int, list[str]]:
         count += 1
         if count > _MAX_CLASSES:
             raise ValueError("APK contains too many defined classes")
+        defined.add(name)
         if _SIGNAL.search(name):
             relevant.add(name)
     if len(relevant) > _MAX_RELEVANT_CLASSES:
         raise ValueError("too many potentially relevant class names")
-    return count, sorted(relevant)
+    return count, sorted(relevant), defined
+
+
+def parse_defined_classes(output: str) -> tuple[int, list[str]]:
+    """Parse defined class count and likely VPN/network class names."""
+    count, relevant, _ = _parse_defined_class_details(output)
+    return count, relevant
+
+
+def _resolve_manifest_class(name: str, package_name: str | None) -> str:
+    if name.startswith(".") and package_name:
+        return package_name + name
+    if "." not in name and package_name:
+        return package_name + "." + name
+    return name
 
 
 def parse_reference_counts(output: str) -> dict[str, int]:
@@ -115,6 +131,8 @@ def inspect_apk_dex(
     apk_path: str | Path,
     executable: str = "apkanalyzer",
     timeout: float = _MAX_TIMEOUT_SECONDS,
+    manifest_services: list[str] | None = None,
+    package_name: str | None = None,
 ) -> dict[str, Any]:
     """Return DEX file counts and candidate VPN/network class names."""
     path = Path(apk_path)
@@ -143,7 +161,15 @@ def inspect_apk_dex(
         }
 
     class_output = _run(resolved, ["dex", "packages", "--defined-only", apk], timeout)
-    class_count, candidates = parse_defined_classes(class_output)
+    class_count, candidates, defined_classes = _parse_defined_class_details(class_output)
+    service_matches = []
+    for service in manifest_services or []:
+        resolved_name = _resolve_manifest_class(service, package_name)
+        service_matches.append({
+            "manifest_name": service,
+            "resolved_class_name": resolved_name,
+            "defined_in_dex": resolved_name in defined_classes,
+        })
     reference_output = _run(resolved, ["dex", "references", apk], timeout)
     references = parse_reference_counts(reference_output)
     if set(references) - set(dex_files):
@@ -155,6 +181,7 @@ def inspect_apk_dex(
         "defined_class_count": class_count,
         "method_references": references,
         "candidate_classes": candidates,
+        "manifest_service_classes": service_matches,
         "source": "apkanalyzer",
         "raw_dex_output_included": False,
     }

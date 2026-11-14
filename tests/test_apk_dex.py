@@ -94,3 +94,26 @@ def test_dex_tool_failure_is_sanitized(tmp_path, monkeypatch):
     monkeypatch.setattr(apk_dex.subprocess, "run", lambda *a, **k: Failed())
     with pytest.raises(RuntimeError, match="failed during DEX"):
         apk_dex.inspect_apk_dex(apk)
+
+
+def test_manifest_vpn_service_is_joined_to_defined_dex_class():
+    output = (
+        "C d 1 1 20 com.example.TunnelService\\n"
+        "C d 1 1 20 com.example.Other\\n"
+    )
+    count, candidates, defined = apk_dex._parse_defined_class_details(output)
+    assert count == 2
+    assert "com.example.TunnelService" in defined
+    assert candidates == ["com.example.TunnelService"]
+    assert apk_dex._resolve_manifest_class(".TunnelService", "com.example") == (
+        "com.example.TunnelService"
+    )
+    assert apk_dex._resolve_manifest_class("TunnelService", "com.example") == (
+        "com.example.TunnelService"
+    )
+
+
+def test_manifest_service_join_does_not_claim_missing_class():
+    output = "C d 1 1 20 com.example.Other\\n"
+    _, _, defined = apk_dex._parse_defined_class_details(output)
+    assert "com.example.TunnelService" not in defined

@@ -26,4 +26,4 @@ This verifies the desktop package starts in CI; it does not verify VPN connectiv
 
 ## Latest engineering change
 
-Added `src/apnawin/services/apk_dex.py` and `tools/inspect_apk_dex.py`. They use the documented `apkanalyzer dex list`, `dex packages --defined-only`, and `dex references` commands. Fixture tests cover class filtering, DEX filename validation, reference counts, command invocation and sanitized tool errors. No real APNA APK has yet been analyzed.
+Added `src/apnawin/services/apk_dex.py`, `tools/inspect_apk_dex.py`, and combined `src/apnawin/services/apk_report.py` / `tools/inspect_apk_report.py`. The combined report correlates manifest VPN service names with defined DEX classes and verifies DEX-count consistency. The DEX decoder uses the documented `apkanalyzer dex list`, `dex packages --defined-only`, and `dex references` commands. Fixture tests cover class filtering, DEX filename validation, reference counts, command invocation and sanitized tool errors. No real APNA APK has yet been analyzed.

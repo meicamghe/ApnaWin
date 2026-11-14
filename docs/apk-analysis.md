@@ -53,3 +53,23 @@ environment for unknown samples. Neither report verifies runtime behavior or
 discovers APNA server endpoints.
 
 Official command reference: [Android APK Analyzer](https://developer.android.com/tools/apkanalyzer).
+
+
+## Combined structural report
+
+To generate one report with the APK hash and correlate manifest-declared VPN
+services against class definitions in DEX, run:
+
+```powershell
+py -3 tools/inspect_apk_report.py .\\path\\to\\application.apk
+```
+
+The report first records the safe ZIP inventory and SHA-256, then obtains
+manifest and DEX metadata from Android SDK APK Analyzer. It checks that both
+inventory and APK Analyzer agree on the number of DEX files. Relative service
+names such as `.TunnelService` are resolved using the manifest package name
+and compared with the defined class set. The result distinguishes a declared
+VPN service from whether a corresponding class was found in DEX. A positive
+match is static evidence only; it does not prove that the service starts,
+establishes a tunnel, or carries traffic. A negative match may also occur when
+the manifest name is aliased, obfuscated, or loaded through other mechanisms.
