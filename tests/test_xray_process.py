@@ -738,6 +738,12 @@ def test_windows_stop_falls_back_when_taskkill_returns_failure(monkeypatch, file
             {"listen": "127.0.0.1", "port": 10808, "protocol": "socks"},
             {"listen": "127.0.0.1", "port": 10809, "protocol": "socks"},
         ],
+        [{"listen": "0.0.0.0", "port": 10808, "protocol": "http"}],
+        [
+            {"listen": "127.0.0.1", "port": 10808, "protocol": "socks"},
+            {"listen": "0.0.0.0", "port": 10809, "protocol": "http"},
+        ],
+        [None],
     ],
 )
 def test_validate_rejects_unsafe_or_ambiguous_socks_inbound_before_execution(
@@ -750,7 +756,7 @@ def test_validate_rejects_unsafe_or_ambiguous_socks_inbound_before_execution(
     def unexpected_execution(*args, **kwargs):
         nonlocal called
         called = True
-        raise AssertionError("Xray must not execute with an unsafe SOCKS bind")
+        raise AssertionError("Xray must not execute with an unsupported inbound topology")
 
     monkeypatch.setattr(subprocess, "run", unexpected_execution)
     with pytest.raises(ValueError):

@@ -52,23 +52,24 @@ def inspect_local_socks_inbound(config: dict) -> LocalSocksInbound:
     if not isinstance(inbounds, list):
         raise ValueError("Xray config must contain an inbounds list")
 
-    candidates: list[LocalSocksInbound] = []
-    for inbound in inbounds:
-        if not isinstance(inbound, dict) or inbound.get("protocol") != "socks":
-            continue
-        host = inbound.get("listen")
-        port = inbound.get("port")
-        if not isinstance(host, str) or not host.strip():
-            raise ValueError("SOCKS inbound must specify an explicit loopback listen address")
-        if host not in {"127.0.0.1", "::1", "localhost"}:
-            raise ValueError("SOCKS inbound must listen only on loopback")
-        if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
-            raise ValueError("SOCKS inbound port must be an integer from 1 to 65535")
-        candidates.append(LocalSocksInbound(host, port))
+    if len(inbounds) != 1:
+        raise ValueError("Xray config must define exactly one inbound")
 
-    if len(candidates) != 1:
-        raise ValueError("Xray config must define exactly one local SOCKS inbound")
-    return candidates[0]
+    inbound = inbounds[0]
+    if not isinstance(inbound, dict):
+        raise ValueError("Xray inbound must be an object")
+    if inbound.get("protocol") != "socks":
+        raise ValueError("Xray's single inbound must use the SOCKS protocol")
+
+    host = inbound.get("listen")
+        port = inbound.get("port")
+    if not isinstance(host, str) or not host.strip():
+        raise ValueError("SOCKS inbound must specify an explicit loopback listen address")
+    if host not in {"127.0.0.1", "::1", "localhost"}:
+        raise ValueError("SOCKS inbound must listen only on loopback")
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise ValueError("SOCKS inbound port must be an integer from 1 to 65535")
+    return LocalSocksInbound(host, port)
 
 
 class XrayProcessRunner:

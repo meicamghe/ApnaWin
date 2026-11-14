@@ -18,13 +18,13 @@ The caller supplies:
 - A complete UTF-8 JSON Xray configuration file.
 - A profile whose transport is `xray`.
 
-Config parsing rejects duplicate object keys at every nesting level and non-standard non-finite JSON constants such as `NaN` and `Infinity`; these values are otherwise silently accepted by Python's default JSON decoder and can make security review ambiguous. Before config validation or process launch, the runner requires exactly one SOCKS inbound bound explicitly to loopback (`127.0.0.1`, `::1`, or `localhost`). Wildcard, non-loopback, missing, or ambiguous SOCKS inbounds are rejected before Xray is executed. This prevents the desktop client from inadvertently starting an unauthenticated proxy reachable from the LAN. Configurations intended for a different inbound topology need a separately designed policy rather than bypassing this check.
+Config parsing rejects duplicate object keys at every nesting level and non-standard non-finite JSON constants such as `NaN` and `Infinity`; these values are otherwise silently accepted by Python's default JSON decoder and can make security review ambiguous. Before config validation or process launch, the runner requires exactly one inbound in the entire `inbounds` array, and that inbound must be a SOCKS listener bound explicitly to loopback (`127.0.0.1`, `::1`, or `localhost`). Missing, additional, malformed, non-SOCKS, wildcard, and non-loopback inbounds are rejected before Xray is executed. This intentionally disallows auxiliary HTTP, mixed, dokodemo-door, or other listeners: even if the SOCKS listener is safe, an unchecked second inbound could expose a local proxy or service to the LAN. Configurations needing a different inbound topology require a separately designed policy rather than bypassing this check.
 
 The current profile's host and port do not specify protocol, security, flow, credentials, UUID, TLS/Reality parameters, transport settings or routing. Therefore the runner intentionally does not synthesize a config from those two fields.
 
 ## Local SOCKS diagnostics
 
-`local_socks_inbound()` accepts exactly one SOCKS inbound with an explicit loopback listen address (`127.0.0.1`, `::1`, or `localhost`) and a valid integer port. Wildcard and non-loopback bind addresses are rejected to avoid accidentally exposing a local proxy to the network.
+`local_socks_inbound()` accepts exactly one inbound total, which must be a SOCKS inbound with an explicit loopback listen address (`127.0.0.1`, `::1`, or `localhost`) and a valid integer port. Wildcard and non-loopback bind addresses are rejected to avoid accidentally exposing a local proxy to the network.
 
 `is_socks_ready()` attempts a short TCP connection to that configured listener. Its timeout must be a finite positive number; zero, negative, non-finite, boolean and non-numeric values are rejected. A successful result means only that a local TCP listener accepted a connection; it does not prove authentication, proxy negotiation, remote reachability, or successful traffic forwarding.
 
@@ -38,7 +38,7 @@ The current profile's host and port do not specify protocol, security, flow, cre
 
 - Uses argument arrays and `shell=False`.
 - Does not capture or expose raw Xray output, which could contain server details.
-- Parses strict JSON (rejecting duplicate keys and non-finite constants), then validates the config before launch and rejects missing, duplicate, wildcard or non-loopback SOCKS inbounds before executing Xray.
+- Parses strict JSON (rejecting duplicate keys and non-finite constants), then validates the config before launch and rejects missing, additional, malformed, non-SOCKS, wildcard or non-loopback inbounds before executing Xray.
 - Refuses duplicate starts.
 - Validates finite positive validation and stop timeouts at construction.
 - Stops the process and escalates after the configured timeout. On Windows, the forced-stop path first attempts `taskkill /T /F` for the supervised PID so Windows can include descendants. If `taskkill` is unavailable, times out, or returns a non-zero exit code, it falls back to the direct `Popen.kill()` handle. The process handle is cleared only after exit is confirmed; termination, kill or wait failures raise `XrayProcessError` and retain the handle when the child may still be alive. A successful `taskkill` exit code is followed by a wait on the supervised process, but does not independently prove that every descendant has exited.
