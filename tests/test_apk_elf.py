@@ -47,6 +47,19 @@ def test_inspect_elf_bytes_counts_only_exported_jni_symbol_names():
     assert "JNI_OnLoad" not in str(result)
 
 
+def test_inspect_elf_bytes_ignores_non_function_jni_named_symbols():
+    data = bytearray(_elf64_with_jni_exports())
+    section_offset = struct.unpack_from("<Q", data, 40)[0]
+    dynsym_offset = struct.unpack_from("<Q", data, section_offset + 2 * 64 + 24)[0]
+    # The fixture's second and third symbols are JNI_OnLoad and Java_... .
+    data[dynsym_offset + 24 + 4] = 0x11
+    data[dynsym_offset + 48 + 4] = 0x11
+    result = inspect_elf_bytes(bytes(data))
+    assert result["dynamic_symbol_count"] == 4
+    assert result["jni_exported_symbol_count"] == 0
+    assert result["jni_onload_exported"] is False
+
+
 def test_inspect_elf_bytes_reports_no_dynamic_symbol_table():
     ident = b"\x7fELF" + bytes([2, 1, 1]) + bytes(9)
     header = struct.pack(

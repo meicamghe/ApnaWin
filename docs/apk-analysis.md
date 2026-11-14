@@ -143,7 +143,7 @@ The combined report reads selected native-library members in bounded memory
 parses ELF identification and section metadata for supported 32-bit and
 64-bit, little- or big-endian ELF layouts. It records machine architecture,
 file type, whether a dynamic symbol table is available, and counts of
-exported JNI-style `Java_...` symbols and an exported `JNI_OnLoad` symbol.
+exported function symbols using the JNI-style `Java_...` naming convention and an exported function symbol named `JNI_OnLoad`. Data objects with those names are not counted as callable JNI entry points.
 Raw symbol names, symbol values, addresses, and binary contents are never
 included in the report. Per-library reads are capped at 64 MiB, aggregate
 reads at 256 MiB, analysis at 256 libraries, and each dynamic symbol table

@@ -101,7 +101,7 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             else:
                 name_offset, _value, _size, info, other, section_index = symbol
             dynamic_symbols += 1
-            binding, visibility = info >> 4, other & 0x3
+            binding, symbol_type, visibility = info >> 4, info & 0x0F, other & 0x3
             if not section_index or binding not in (1, 2) or visibility not in (0, 3):
                 continue
             if name_offset >= len(strings):
@@ -110,6 +110,10 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             if end < 0:
                 raise ValueError("ELF symbol name is not terminated")
             name = strings[name_offset:end]
+            # JNI entry points are functions; a data object with a Java_-like
+            # name is not a callable JNI export.
+            if symbol_type != 2:  # STT_FUNC
+                continue
             if name == b"JNI_OnLoad":
                 jni_onload = True
             elif name.startswith(b"Java_"):
