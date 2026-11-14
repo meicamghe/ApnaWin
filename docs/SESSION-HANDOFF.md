@@ -21,7 +21,7 @@ The repository contains:
 - Windows Job Object process-tree containment integrated into the Xray runner.
 - Windows GitHub Actions tests and a PyInstaller portable-folder build workflow.
 
-M2b process containment is implemented and verified in Windows CI. Run [#99](https://github.com/meicamghe/ApnaWin/actions/runs/43512207741) passed the full Windows test job and completed the PyInstaller build, packaged GUI smoke test, and portable-folder artifact upload. Profile domain validation, strict JSON persistence, and the latest UI workflow tests are under active CI verification; always inspect the newest run before treating new changes as verified.
+M2b process containment is implemented and verified in Windows CI. Latest run [#110](https://github.com/meicamghe/ApnaWin/actions/runs/43558711821) passed the full test job, PyInstaller build, packaged GUI smoke test, and portable-folder artifact upload. It includes strict profile JSON persistence and the expanded profile UI tests. Subsequent changes must be verified by a newer run before being treated as green.
 
 **The Connect button remains intentionally disabled.** The current Xray runner is not a complete tunnel engine, and the published CI artifact is not a signed installer or a working VPN client. Do not describe the app as connected or APNA TUNNEL-compatible without end-to-end proof.
 
@@ -55,9 +55,9 @@ The Xray runner's exact limitations are documented in \`docs/xray-process-runner
 
 1. Check the newest GitHub Actions run for workflow **Windows tests and build** on every status-check request. Report status, run number, branch, commit and timestamp; do not reuse stale status.
 2. If CI is red, inspect the failing job and logs, reproduce the failure, fix the root cause and rerun tests. If green, continue the next focused task rather than repeatedly rechecking without a reason.
-3. Continue strict domain validation for profile names, transport values, endpoint hosts and ports; preserve valid schema-v1 profile compatibility.
+3. Continue strict domain validation for profile names, transport values, endpoint hosts and ports, including Unicode control characters; preserve valid schema-v1 profile compatibility.
 4. Verify strict JSON persistence: unique same-directory atomic temp files, duplicate JSON key and duplicate profile rejection, fsync/replace failure handling, and compatibility with existing schema-v1 files. See `docs/profile-storage.md`.
-5. Expand UI workflow tests for add/edit/select/remove, duplicate handling, removal cancellation, persistence failures and metadata-only storage. The current test additions are queued for Windows CI verification.
+5. Maintain UI workflow tests for add/edit/select/remove, duplicate handling, removal cancellation, persistence failures and metadata-only storage; these passed in run #110.
 6. Test the Xray process runner on Windows 10/11 with fake-process tests and then a separately installed, pinned binary plus an authorized test config.
 7. Verify an application-level request through the authorized test endpoint; a SOCKS greeting alone is insufficient.
 8. Design the production tunnel adapter only after configuration/protocol and engine licensing are established.
