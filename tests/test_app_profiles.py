@@ -184,7 +184,6 @@ def test_profile_json_contains_metadata_only(tmp_path):
     )
 
 
-
 def test_add_profile_rejects_duplicate_name_case_insensitively(tmp_path, qapp, monkeypatch):
     from PySide6.QtWidgets import QDialog
     import apnawin.app as app_module
@@ -243,9 +242,8 @@ def test_remove_profile_cancel_keeps_profile(tmp_path, qapp, monkeypatch):
     window.close()
 
 
-
 def test_profile_details_render_untrusted_host_as_plain_text(tmp_path, qapp):
-    hostile_host = '<img src="file:///private/test.png">'
+    hostile_host = "<b>untrusted</b>"
     profile = ConnectionProfile("Imported", Transport.SOCKS, hostile_host, 1080)
     path = tmp_path / "profiles.json"
     save_profiles(path, [profile])
