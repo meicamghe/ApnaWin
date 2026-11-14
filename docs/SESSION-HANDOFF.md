@@ -106,3 +106,14 @@ Import failures now present the underlying validation or I/O detail with actual
 line breaks rather than literal backslash-n sequences. Regression coverage
 verifies malformed imports leave both the in-memory profile list and existing
 destination file untouched, and cancelling the file picker is a no-op.
+
+
+## Normalized remote catalog foundation
+
+A provider-neutral internal catalog model/parser now exists at
+`src/apnawin/domain/remote_catalog.py`. It validates bounded display-only
+server metadata, strict JSON, unique identifiers and timezone-aware freshness.
+It intentionally excludes connection endpoints and secrets and is not claimed
+to match APNA's unknown upstream API. No HTTP client, guessed endpoint,
+subscription/auth flow, or automatic refresh is enabled. See
+`docs/remote-configuration.md` for the boundary and next evidence gate.

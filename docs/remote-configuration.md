@@ -77,3 +77,30 @@ Implement a provider-neutral pipeline only after the source contract is verified
 ## Current decision
 
 Keep this work in discovery/design. Do not build a speculative backend client or enable Connect until the APK evidence and an authorized test account/configuration establish the real contract.
+
+## Internal normalized catalog contract (implemented foundation)
+
+`src/apnawin/domain/remote_catalog.py` defines a deliberately small,
+provider-neutral **internal** catalog representation. It is not an APNA API
+schema and must not be sent to or expected from any upstream service without
+an explicit adapter based on verified evidence.
+
+The normalized document contains a format version, opaque revision, timezone-
+aware generation/expiry timestamps, and a bounded list of display-only server
+entries (identifier, name, region and availability). It excludes endpoints,
+credentials, keys, transport parameters, executable metadata and arbitrary
+feature flags. Therefore a catalog entry is display/selection metadata only;
+it cannot be passed to an engine or treated as a connection profile.
+
+The parser rejects duplicate JSON keys at every depth, non-standard JSON
+constants, unknown fields, invalid UTF-8, oversized documents, excess entries,
+duplicate identifiers, control characters, non-boolean availability and
+timestamps without timezones. The immutable parsed catalog exposes an explicit
+freshness check. Stale catalogs may be retained for offline display, but callers
+must check freshness before presenting availability as current.
+
+This foundation intentionally has no HTTP client, endpoint, scheduler,
+authentication, signature format or cache writer. Those belong in a future
+provider adapter after the real Android/backend contract and authorization
+model are evidenced. The normalized internal schema can then remain stable
+while adapters translate verified upstream formats into it.
