@@ -72,7 +72,6 @@ def test_inspect_elf_bytes_reports_no_dynamic_symbol_table():
     assert result["inspection_status"] == "no_dynamic_symbol_table"
 
 
-@pytest.mark.parametrize("payload", [b"", b"not-elf", b"\x7fELF"])
 def test_inspect_elf_bytes_supports_extended_section_count():
     data = bytearray(_elf64_with_jni_exports())
     section_offset = struct.unpack_from("<Q", data, 40)[0]
@@ -97,6 +96,7 @@ def test_inspect_elf_bytes_rejects_invalid_extended_section_count():
         inspect_elf_bytes(header + section)
 
 
+@pytest.mark.parametrize("payload", [b"", b"not-elf", b"\\x7fELF"])
 def test_inspect_elf_bytes_rejects_non_elf_or_truncated_input(payload):
     with pytest.raises(ValueError):
         inspect_elf_bytes(payload)
