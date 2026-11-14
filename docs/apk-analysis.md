@@ -94,3 +94,6 @@ establish that code is loaded or used.
 Android ABI libraries (such as `arm64-v8a`) are not Windows DLLs and are not
 treated as reusable Windows binaries. No Windows binary compatibility is
 inferred.
+
+
+The combined interpretation also reports counts of VPN service classes matched in DEX, resolvable-but-missing classes, and unresolved service names. `vpn_service_class_resolution_complete` is false whenever a service could not be resolved because package context was unavailable; this prevents an incomplete join from being presented as a definitive negative result.

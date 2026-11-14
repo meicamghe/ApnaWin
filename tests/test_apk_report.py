@@ -136,3 +136,41 @@ def test_combined_report_rejects_dex_count_disagreement():
         pytest.raises(ValueError, match="disagree on DEX file count"),
     ):
         apk_report.inspect_apk_report("sample.apk")
+
+
+
+@pytest.mark.parametrize(
+    ("service_rows", "expected"),
+    [
+        (
+            [{"manifest_name": ".TunnelService", "resolved_class_name": "org.example.app.TunnelService", "defined_in_dex": False}],
+            {"vpn_service_class_match_count": 0, "vpn_service_class_unmatched_count": 1, "vpn_service_class_unresolved_count": 0, "vpn_service_class_resolution_complete": True},
+        ),
+        (
+            [{"manifest_name": ".TunnelService", "resolved_class_name": None, "defined_in_dex": False}],
+            {"vpn_service_class_match_count": 0, "vpn_service_class_unmatched_count": 0, "vpn_service_class_unresolved_count": 1, "vpn_service_class_resolution_complete": False},
+        ),
+        (
+            [
+                {"manifest_name": ".TunnelService", "resolved_class_name": "org.example.app.TunnelService", "defined_in_dex": True},
+                {"manifest_name": ".OtherService", "resolved_class_name": None, "defined_in_dex": False},
+            ],
+            {"vpn_service_class_match_count": 1, "vpn_service_class_unmatched_count": 0, "vpn_service_class_unresolved_count": 1, "vpn_service_class_resolution_complete": False},
+        ),
+    ],
+)
+def test_combined_report_distinguishes_matched_missing_and_unresolved_services(service_rows, expected):
+    inventory, manifest, dex = _report_fixtures()
+    dex["manifest_service_classes"] = service_rows
+    with (
+        patch.object(apk_report, "inspect_apk", return_value=inventory),
+        patch.object(apk_report, "inspect_apk_manifest", return_value=manifest),
+        patch.object(apk_report, "inspect_apk_dex", return_value=dex),
+    ):
+        report = apk_report.inspect_apk_report("sample.apk")
+    interpretation = report["interpretation"]
+    for key, value in expected.items():
+        assert interpretation[key] == value
+    assert interpretation["vpn_service_class_found_in_dex"] is (
+        expected["vpn_service_class_match_count"] > 0
+    )

@@ -4,7 +4,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
 
 from apnawin.services.apk_dex import inspect_apk_dex
 from apnawin.services.apk_inventory import inspect_apk
@@ -87,6 +86,11 @@ def inspect_apk_report(
         abi = library["abi"]
         abi_library_counts[abi] = abi_library_counts.get(abi, 0) + 1
 
+    service_matches = dex["manifest_service_classes"]
+    matched_services = sum(bool(item["defined_in_dex"]) for item in service_matches)
+    unresolved_services = sum(item["resolved_class_name"] is None for item in service_matches)
+    unmatched_services = len(service_matches) - matched_services - unresolved_services
+
     return {
         "format": "apnawin-apk-analysis-v1",
         "sha256": inventory["sha256"],
@@ -105,9 +109,11 @@ def inspect_apk_report(
         },
         "interpretation": {
             "vpn_service_declared": bool(manifest["vpn_services"]),
-            "vpn_service_class_found_in_dex": any(
-                item["defined_in_dex"] for item in dex["manifest_service_classes"]
-            ),
+            "vpn_service_class_found_in_dex": matched_services > 0,
+            "vpn_service_class_match_count": matched_services,
+            "vpn_service_class_unmatched_count": unmatched_services,
+            "vpn_service_class_unresolved_count": unresolved_services,
+            "vpn_service_class_resolution_complete": unresolved_services == 0,
             "runtime_behavior_verified": False,
             "server_endpoints_discovered": False,
         },
