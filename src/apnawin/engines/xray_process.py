@@ -13,6 +13,9 @@ import os
 import socket
 import subprocess
 from dataclasses import dataclass
+
+
+MAX_XRAY_CONFIG_BYTES = 16 * 1024 * 1024
 from pathlib import Path
 
 from apnawin.domain.profile import ConnectionProfile, Transport
@@ -102,13 +105,17 @@ class XrayProcessRunner:
 
     def _read_config(self) -> dict:
         try:
+            with self.config_path.open("rb") as stream:
+                raw_config = stream.read(MAX_XRAY_CONFIG_BYTES + 1)
+            if len(raw_config) > MAX_XRAY_CONFIG_BYTES:
+                raise ValueError("Xray config exceeds the maximum supported size")
             config = json.loads(
-                self.config_path.read_text(encoding="utf-8"),
+                raw_config.decode("utf-8"),
                 object_pairs_hook=_unique_json_object,
                 parse_constant=_reject_json_constant,
             )
         except (OSError, UnicodeError, ValueError) as exc:
-            raise ValueError("Xray config must be readable UTF-8 JSON") from exc
+            raise ValueError("Xray config must be readable UTF-8 JSON within the size limit") from exc
         if not isinstance(config, dict):
             raise ValueError("Xray config root must be a JSON object")
         return config

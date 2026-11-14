@@ -791,3 +791,25 @@ def test_read_config_rejects_non_object_root(tmp_path):
 
     with pytest.raises(ValueError, match="root must be a JSON object"):
         XrayProcessRunner(executable, config)._read_config()
+
+
+def test_read_config_rejects_oversized_file_before_json_parse(tmp_path, monkeypatch):
+    executable = tmp_path / "xray.exe"
+    executable.touch()
+    config = tmp_path / "config.json"
+    config.write_bytes(b" " * 65)
+    monkeypatch.setattr(xray_module, "MAX_XRAY_CONFIG_BYTES", 64)
+
+    with pytest.raises(ValueError, match="size limit"):
+        XrayProcessRunner(executable, config)._read_config()
+
+
+def test_read_config_accepts_file_at_configured_size_limit(tmp_path, monkeypatch):
+    executable = tmp_path / "xray.exe"
+    executable.touch()
+    config = tmp_path / "config.json"
+    raw = b'{"inbounds":[]}'
+    monkeypatch.setattr(xray_module, "MAX_XRAY_CONFIG_BYTES", len(raw))
+    config.write_bytes(raw)
+
+    assert XrayProcessRunner(executable, config)._read_config() == {"inbounds": []}

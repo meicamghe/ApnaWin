@@ -17,11 +17,11 @@ The repository contains:
 - Local JSON persistence for non-secret profile metadata, with a 1 MiB document-size bound on reads and writes.
 - Transport-neutral profile model and tunnel-engine contract.
 - Test-only mock engine that performs no network operations.
-- Xray process runner with strict config validation (duplicate JSON keys and non-finite constants rejected), SOCKS diagnostics and process supervision.
+- Xray process runner with bounded 16 MiB config reads, strict JSON validation (duplicate keys and non-finite constants rejected), SOCKS diagnostics and process supervision.
 - Windows Job Object process-tree containment integrated into the Xray runner.
 - Windows GitHub Actions tests and a PyInstaller portable-folder build workflow.
 
-The latest Windows CI run [#126](https://github.com/meicamghe/ApnaWin/actions/runs/43562335343) passed unit tests, the PyInstaller build, packaged GUI smoke test and portable-folder artifact upload. Commit `64ad8ab2` contains the profile UI rendering test correction. Later changes require a newer green run before being treated as verified.
+The latest Windows CI run [#127](https://github.com/meicamghe/ApnaWin/actions/runs/43562771648) passed unit tests, the PyInstaller build, packaged GUI smoke test and portable-folder artifact upload. Commit `3d180aa0` adds a 1 MiB bound to profile metadata reads and writes. Later changes require a newer green run before being treated as verified.
 
 **The Connect button remains intentionally disabled.** The current Xray runner is not a complete tunnel engine, and the published CI artifact is not a signed installer or a working VPN client. Do not describe the app as connected or APNA TUNNEL-compatible without end-to-end proof.
 
@@ -58,7 +58,7 @@ The Xray runner's exact limitations are documented in `docs/xray-process-runner.
 3. Continue strict domain validation for profile names, transport values, endpoint hosts and ports, including Unicode control characters; preserve valid schema-v1 profile compatibility. Profile-derived UI text must remain plain-text or be escaped before entering Qt auto-detecting message dialogs.
 4. Verify strict JSON persistence: unique same-directory atomic temp files, duplicate JSON key and duplicate profile rejection, fsync/replace failure handling, bounded reads/writes and compatibility with existing schema-v1 files. See `docs/profile-storage.md`.
 5. Maintain UI workflow tests for add/edit/select/remove, duplicate handling, removal cancellation, persistence failures and metadata-only storage.
-6. Keep Xray config parsing strict: reject duplicate JSON keys and non-finite constants before process execution; cover nested duplicate keys and malformed roots in tests.
+6. Keep Xray config parsing strict and bounded: read at most 16 MiB plus one detection byte, reject duplicate JSON keys and non-finite constants before process execution, and cover nested duplicate keys, malformed roots and oversized files in tests.
 7. Test the Xray process runner on Windows 10/11 with fake-process tests and then a separately installed, pinned binary plus an authorized test config.
 8. Verify an application-level request through the authorized test endpoint; a SOCKS greeting alone is insufficient.
 9. Design the production tunnel adapter only after configuration/protocol and engine licensing are established.
