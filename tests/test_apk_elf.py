@@ -74,16 +74,16 @@ def test_inspect_elf_bytes_reports_no_dynamic_symbol_table():
 
 @pytest.mark.parametrize("payload", [b"", b"not-elf", b"\x7fELF"])
 def test_inspect_elf_bytes_supports_extended_section_count():
-    ident = b"\\x7fELF" + bytes([2, 1, 1]) + bytes(9)
-    section = struct.pack("<IIQQQQIIQQ", 0, 0, 0, 0, 0, 1, 0, 0, 0, 0)
-    header = struct.pack(
-        "<16sHHIQQQIHHHHHH",
-        ident, 3, 183, 1, 0, 0, 64, 0, 64, 0, 0, 64, 0, 0,
-    )
-    result = inspect_elf_bytes(header + section)
-    assert result["elf_valid"] is True
-    assert result["dynamic_symbol_table_present"] is False
-    assert result["inspection_status"] == "no_dynamic_symbol_table"
+    data = bytearray(_elf64_with_jni_exports())
+    section_offset = struct.unpack_from("<Q", data, 40)[0]
+    # e_shnum = 0 means the real count is stored in section-zero sh_size.
+    struct.pack_into("<H", data, 60 + 4, 0)
+    struct.pack_into("<Q", data, section_offset + 32, 4)
+    result = inspect_elf_bytes(bytes(data))
+    assert result["dynamic_symbol_table_present"] is True
+    assert result["dynamic_symbol_count"] == 4
+    assert result["jni_exported_symbol_count"] == 1
+    assert result["jni_onload_exported"] is True
 
 
 def test_inspect_elf_bytes_rejects_invalid_extended_section_count():
