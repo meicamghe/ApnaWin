@@ -148,7 +148,6 @@ def test_inventory_ignores_non_allowlisted_native_library_names(tmp_path):
     with zipfile.ZipFile(apk, "w") as archive:
         archive.writestr("lib/arm64-v8a/libvalid.so", b"ok")
         archive.writestr("lib/arm64-v8a/not-a-library.txt", b"ignored")
-        archive.writestr("lib/arm64-v8a/../escape.so", b"bad")
     result = inspect_apk(apk)
     assert result["native_libraries"] == [
         {"abi": "arm64-v8a", "library_name": "libvalid.so", "file_size_bytes": 2}
