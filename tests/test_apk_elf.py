@@ -521,6 +521,9 @@ def _elf_with_group_section(payload, elf_class, group_words=(1, 1)):
     section_fmt = "<IIQQQQIIQQ" if elf_class == 64 else "<IIIIIIIIII"
     count_offset = 60 if elf_class == 64 else 48
     section_offset = struct.unpack_from(section_offset_fmt, data, section_offset_field)[0]
+    # The fixture's member section must advertise SHF_GROUP.
+    struct.pack_into("<Q" if elf_class == 64 else "<I", data,
+                     section_offset + section_size + 8, 0x200)
     group_data = struct.pack("<" + "I" * len(group_words), *group_words)
     group_payload_offset = len(data) + section_size
     group_header = struct.pack(
@@ -539,6 +542,26 @@ def _elf_with_group_section(payload, elf_class, group_words=(1, 1)):
 def test_inspect_elf_accepts_valid_group_section(payload, elf_class):
     result = inspect_elf_bytes(_elf_with_group_section(payload, elf_class))
     assert result["inspection_status"] == "complete"
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_rejects_group_member_without_shf_group(payload, elf_class):
+    data = bytearray(_elf_with_group_section(payload, elf_class))
+    section_offset = struct.unpack_from(
+        "<Q" if elf_class == 64 else "<I", data, 40 if elf_class == 64 else 32
+    )[0]
+    section_size = 64 if elf_class == 64 else 40
+    struct.pack_into(
+        "<Q" if elf_class == 64 else "<I",
+        data,
+        section_offset + section_size + 8,
+        0,
+    )
+    with pytest.raises(ValueError, match="member is missing SHF_GROUP"):
+        inspect_elf_bytes(bytes(data))
 
 
 @pytest.mark.parametrize(

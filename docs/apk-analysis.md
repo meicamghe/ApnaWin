@@ -260,6 +260,7 @@ SHT_GROUP sections are checked as bounded arrays of 32-bit words. The parser
 validates the linked symbol-table reference and signature-symbol index, the
 required four-byte entry size, the group flags word (currently accepting only
 the GRP_COMDAT bit), and every member section index. Null, out-of-range,
-self-referential, and duplicate members are rejected. Group records are not
-used to infer linker selection or runtime behavior; this is structural
-metadata validation only.
+self-referential, and duplicate members are rejected. Every listed member
+must also carry the ELF SHF_GROUP section flag. Group records are not used to
+infer linker selection or runtime behavior; this is structural metadata
+validation only.

@@ -218,6 +218,9 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                 or len(set(members)) != len(members)
             ):
                 raise ValueError("ELF section group member index is invalid")
+            # Every section listed in a group must carry SHF_GROUP.
+            if any(not (sections[member][2] & 0x200) for member in members):
+                raise ValueError("ELF section group member is missing SHF_GROUP")
         # File-backed sections must remain within the input. SHT_NOBITS
         # occupies memory but has no bytes in the ELF file; section zero can
         # carry extended-numbering metadata in sh_size.
