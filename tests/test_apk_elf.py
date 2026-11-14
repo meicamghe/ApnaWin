@@ -86,7 +86,7 @@ def test_inspect_elf_bytes_supports_extended_section_count():
 
 
 def test_inspect_elf_bytes_rejects_invalid_extended_section_count():
-    ident = b"\\x7fELF" + bytes([2, 1, 1]) + bytes(9)
+    ident = b"\x7fELF" + bytes([2, 1, 1]) + bytes(9)
     section = struct.pack("<IIQQQQIIQQ", 0, 0, 0, 0, 0, 4097, 0, 0, 0, 0)
     header = struct.pack(
         "<16sHHIQQQIHHHHHH",
@@ -96,7 +96,7 @@ def test_inspect_elf_bytes_rejects_invalid_extended_section_count():
         inspect_elf_bytes(header + section)
 
 
-@pytest.mark.parametrize("payload", [b"", b"not-elf", b"\\x7fELF"])
+@pytest.mark.parametrize("payload", [b"", b"not-elf", b"\x7fELF"])
 def test_inspect_elf_bytes_rejects_non_elf_or_truncated_input(payload):
     with pytest.raises(ValueError):
         inspect_elf_bytes(payload)
