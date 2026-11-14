@@ -522,21 +522,13 @@ def _elf_with_group_section(payload, elf_class, group_words=(1, 1)):
     count_offset = 60 if elf_class == 64 else 48
     section_offset = struct.unpack_from(section_offset_fmt, data, section_offset_field)[0]
     group_data = struct.pack("<" + "I" * len(group_words), *group_words)
-    data[section_offset:section_offset] = group_data
-    section_offset += len(group_data)
-    struct.pack_into(section_offset_fmt, data, section_offset_field, section_offset)
-    struct.pack_into("<H", data, count_offset, 5)
+    group_payload_offset = len(data) + section_size
     group_header = struct.pack(
-        section_fmt, 0, 17, 0, 0, 0, len(group_data), 2, 1, 4, 4
+        section_fmt, 0, 17, 0, 0, group_payload_offset, len(group_data), 2, 1, 4, 4
     )
+    struct.pack_into("<H", data, count_offset, 5)
     data.extend(group_header)
-    # The group payload lives immediately before the shifted section table.
-    group_payload_offset = section_offset - len(group_data)
-    struct.pack_into(
-        "<Q" if elf_class == 64 else "<I",
-        data, section_offset + 4 * section_size + (24 if elf_class == 64 else 16),
-        group_payload_offset,
-    )
+    data.extend(group_data)
     return bytes(data)
 
 
