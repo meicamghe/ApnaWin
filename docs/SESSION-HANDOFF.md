@@ -19,7 +19,7 @@ The Android app is believed to refresh server information and connection behavio
 
 ## Latest verification
 
-Workflow run #175 passed on commit `adc385a61299d2be096640183ed8d7bf20566544`, after correcting Windows newline handling and DEX test fixtures. Workflow #176 for `ee6fc420e5969555d143c6a9abd1c91ee756b791` was observed in progress; its final result must be checked before treating that commit as verified. CI verifies the configured tests only, not live VPN connectivity or APNA endpoint discovery.
+Workflow #176 passed on commit `ee6fc420e5969555d143c6a9abd1c91ee756b791`. Workflow #178 on `1918c394101617f61615d671b00a281b62b609eb` found two test-fixture failures (332 passed): the newly added DEX tests encoded literal backslash-n text instead of newline separators. The fixture correction is committed separately and its CI result must be checked. CI verifies configured tests only, not live VPN connectivity or APNA endpoint discovery.
 
 ## Latest engineering change
 
