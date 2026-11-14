@@ -75,11 +75,31 @@ def test_provider_rejects_oversized_response(monkeypatch):
         "https://catalog.example.test\\@evil.example/catalog",
         "https://café.example/catalog",
         "https://catalog.example.test:99999/catalog",
+        "https://catalog.example.test:/catalog",
+        "https://bad_host.example/catalog",
+        "https://-bad.example/catalog",
+        "https://bad..example/catalog",
+        "https://bad-.example/catalog",
+        "https://2001:db8::1/catalog",
+        "https://[fe80::1%25eth0]/catalog",
     ],
 )
 def test_provider_rejects_unsafe_or_malformed_urls(url):
     with pytest.raises(ValueError):
         HttpsCatalogProvider(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://catalog.example.test/catalog",
+        "https://catalog.example.test./catalog",
+        "https://127.0.0.1/catalog",
+        "https://[2001:db8::1]/catalog",
+    ],
+)
+def test_provider_accepts_valid_dns_and_ip_hosts(url):
+    HttpsCatalogProvider(url)
 
 
 @pytest.mark.parametrize("timeout", [0, -1, float("inf"), float("nan"), True, "5"])

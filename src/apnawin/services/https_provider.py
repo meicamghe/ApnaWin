@@ -6,12 +6,44 @@ assume any APNA endpoint, authentication scheme, or upstream response format.
 
 from __future__ import annotations
 
+import ipaddress
 import math
 from urllib.error import HTTPError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from apnawin.domain.remote_catalog import MAX_REMOTE_CATALOG_BYTES
+
+
+def _validate_hostname(hostname: str) -> None:
+    """Accept IP literals or syntactically valid ASCII DNS names only."""
+    if not hostname or not hostname.isascii() or "%" in hostname:
+        raise ValueError("url must contain a valid ASCII hostname")
+
+    try:
+        ipaddress.ip_address(hostname)
+        return
+    except ValueError:
+        pass
+
+    # A colon is only valid inside an IPv6 literal, handled above.
+    if ":" in hostname:
+        raise ValueError("url must contain a valid IP address or DNS hostname")
+
+    dns_name = hostname[:-1] if hostname.endswith(".") else hostname
+    if not dns_name or len(dns_name) > 253:
+        raise ValueError("url hostname has an invalid length")
+
+    labels = dns_name.split(".")
+    for label in labels:
+        if (
+            not label
+            or len(label) > 63
+            or label.startswith("-")
+            or label.endswith("-")
+            or any(not (char.isascii() and (char.isalnum() or char == "-")) for char in label)
+        ):
+            raise ValueError("url must contain a valid DNS hostname")
 
 
 class _NoRedirectHandler(HTTPRedirectHandler):
@@ -38,12 +70,13 @@ class HttpsCatalogProvider:
         if (
             parsed.scheme.lower() != "https"
             or not hostname
-            or not hostname.isascii()
             or parsed.username is not None
             or parsed.password is not None
             or parsed.fragment
+            or parsed.netloc.endswith(":")
         ):
             raise ValueError("url must be an HTTPS URL without credentials or a fragment")
+        _validate_hostname(hostname)
         if port is not None and not 1 <= port <= 65535:
             raise ValueError("url port must be between 1 and 65535")
         if (
