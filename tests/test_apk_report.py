@@ -105,6 +105,17 @@ def test_combined_report_correlates_evidence_and_summarizes_abis():
         patch.object(apk_report, "inspect_apk", return_value=inventory),
         patch.object(apk_report, "inspect_apk_manifest", return_value=manifest),
         patch.object(apk_report, "inspect_apk_dex", return_value=dex) as inspect_dex,
+        patch.object(
+            apk_report,
+            "inspect_apk_native_libraries",
+            return_value={
+                "libraries": [], "libraries_inspected": 0,
+                "jni_exported_library_count": 0, "jni_onload_library_count": 0,
+                "skipped_library_count": 0, "bytes_read_in_memory": 0,
+                "archive_members_written": False, "native_code_executed": False,
+                "raw_symbol_names_included": False,
+            },
+        ),
     ):
         report = apk_report.inspect_apk_report("sample.apk", executable="apkanalyzer")
 
