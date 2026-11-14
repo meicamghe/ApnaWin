@@ -124,6 +124,8 @@ def test_no_dex_report_still_includes_manifest_service_join(tmp_path, monkeypatc
         "defined_method_count": None,
         "referenced_method_count": None,
         "byte_count": None,
+        "native_method_count": None,
+        "native_method_inspection_completed": False,
     }]
 
 
@@ -197,6 +199,8 @@ def test_manifest_service_join_without_package_reports_unresolved_class(tmp_path
         "defined_method_count": None,
         "referenced_method_count": None,
         "byte_count": None,
+        "native_method_count": None,
+        "native_method_inspection_completed": False,
     }]
 
 def test_manifest_service_join_includes_only_numeric_class_metadata(tmp_path, monkeypatch):
@@ -228,6 +232,8 @@ def test_manifest_service_join_includes_only_numeric_class_metadata(tmp_path, mo
             "defined_method_count": None,
             "referenced_method_count": None,
             "byte_count": None,
+            "native_method_count": None,
+            "native_method_inspection_completed": False,
         },
     ]
 
@@ -253,23 +259,23 @@ def test_defined_class_metadata_keeps_referenced_rows_out_of_join():
 
 def test_parse_native_method_count_counts_only_native_declarations():
     output = (
-        ".class public Lcom/example/TunnelService;\\n"
-        ".method public onStartCommand()I\\n"
-        "    .locals 1\\n"
-        ".end method\\n"
-        ".method private static native startTunnel([B)I\\n"
-        ".end method\\n"
-        ".method public native stopTunnel()V\\n"
-        ".end method\\n"
+        ".class public Lcom/example/TunnelService;\n"
+        ".method public onStartCommand()I\n"
+        "    .locals 1\n"
+        ".end method\n"
+        ".method private static native startTunnel([B)I\n"
+        ".end method\n"
+        ".method public native stopTunnel()V\n"
+        ".end method\n"
     )
     assert apk_dex._parse_native_method_count(output) == 2
 
 
 def test_parse_native_method_count_does_not_count_native_in_method_body():
     output = (
-        ".method public run()V\\n"
-        "    const-string v0, \\"native method\\"\\n"
-        ".end method\\n"
+        ".method public run()V\n"
+        '    const-string v0, "native method"\n'
+        ".end method\n"
     )
     assert apk_dex._parse_native_method_count(output) == 0
 
@@ -279,10 +285,10 @@ def test_inspector_records_native_method_counts_for_exact_service_class(tmp_path
     apk.write_bytes(b"placeholder")
     commands = []
     outputs = iter([
-        b"classes.dex\\n",
-        b"C d 3 2 80 com.example.TunnelService\\n",
-        b".class public Lcom/example/TunnelService;\\n.method private static native start([B)I\\n.end method\\n",
-        b"classes.dex 100\\n",
+        b"classes.dex\n",
+        b"C d 3 2 80 com.example.TunnelService\n",
+        b".class public Lcom/example/TunnelService;\n.method private static native start([B)I\n.end method\n",
+        b"classes.dex 100\n",
     ])
 
     def fake_run(executable, args, timeout, limit, failure, timed_out, overflow):
@@ -308,9 +314,9 @@ def test_missing_service_class_has_no_native_method_claim(tmp_path, monkeypatch)
     apk = tmp_path / "missing-service.apk"
     apk.write_bytes(b"placeholder")
     outputs = iter([
-        b"classes.dex\\n",
-        b"C d 1 1 20 com.example.Other\\n",
-        b"classes.dex 10\\n",
+        b"classes.dex\n",
+        b"C d 1 1 20 com.example.Other\n",
+        b"classes.dex 10\n",
     ])
     monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
     monkeypatch.setattr(apk_dex, "run_apkanalyzer", lambda *args: next(outputs))
@@ -320,3 +326,4 @@ def test_missing_service_class_has_no_native_method_claim(tmp_path, monkeypatch)
     item = report["manifest_service_classes"][0]
     assert item["native_method_count"] is None
     assert item["native_method_inspection_completed"] is False
+
