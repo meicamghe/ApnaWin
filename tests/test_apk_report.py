@@ -121,8 +121,15 @@ def test_combined_report_correlates_evidence_and_summarizes_abis():
         "x86_64": 2,
     }
     assert report["native"]["engine_candidates"][0]["candidate"] == "xray"
+    assert report["native"]["engine_candidate_counts"] == {"xray": 1}
+    assert report["native"]["engine_candidate_abi_counts"] == {
+        "xray": {"arm64-v8a": 1}
+    }
     assert report["interpretation"]["vpn_service_declared"] is True
     assert report["interpretation"]["vpn_service_class_found_in_dex"] is True
+    assert report["interpretation"]["native_engine_candidates_present"] is True
+    assert report["interpretation"]["vpn_service_and_native_engine_candidates_co_present"] is True
+    assert report["interpretation"]["native_service_linkage_verified"] is False
     assert report["interpretation"]["runtime_behavior_verified"] is False
     assert report["interpretation"]["server_endpoints_discovered"] is False
 
@@ -174,3 +181,22 @@ def test_combined_report_distinguishes_matched_missing_and_unresolved_services(s
     assert interpretation["vpn_service_class_found_in_dex"] is (
         expected["vpn_service_class_match_count"] > 0
     )
+
+
+def test_combined_report_does_not_claim_native_service_linkage_without_candidates():
+    inventory, manifest, dex = _report_fixtures()
+    inventory["native_libraries"] = [
+        {"abi": "arm64-v8a", "library_name": "libordinary.so", "file_size_bytes": 5}
+    ]
+    with (
+        patch.object(apk_report, "inspect_apk", return_value=inventory),
+        patch.object(apk_report, "inspect_apk_manifest", return_value=manifest),
+        patch.object(apk_report, "inspect_apk_dex", return_value=dex),
+    ):
+        report = apk_report.inspect_apk_report("sample.apk")
+    assert report["native"]["engine_candidates"] == []
+    assert report["native"]["engine_candidate_counts"] == {}
+    assert report["native"]["engine_candidate_abi_counts"] == {}
+    assert report["interpretation"]["native_engine_candidates_present"] is False
+    assert report["interpretation"]["vpn_service_and_native_engine_candidates_co_present"] is False
+    assert report["interpretation"]["native_service_linkage_verified"] is False

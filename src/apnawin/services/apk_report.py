@@ -90,6 +90,15 @@ def inspect_apk_report(
     matched_services = sum(bool(item["defined_in_dex"]) for item in service_matches)
     unresolved_services = sum(item["resolved_class_name"] is None for item in service_matches)
     unmatched_services = len(service_matches) - matched_services - unresolved_services
+    engine_candidates = _native_engine_candidates(inventory["native_libraries"])
+    engine_candidate_counts: dict[str, int] = {}
+    engine_candidate_abi_counts: dict[str, dict[str, int]] = {}
+    for candidate in engine_candidates:
+        engine = candidate["candidate"]
+        abi = candidate["abi"]
+        engine_candidate_counts[engine] = engine_candidate_counts.get(engine, 0) + 1
+        per_abi = engine_candidate_abi_counts.setdefault(engine, {})
+        per_abi[abi] = per_abi.get(abi, 0) + 1
 
     return {
         "format": "apnawin-apk-analysis-v1",
@@ -102,9 +111,12 @@ def inspect_apk_report(
             "library_count": len(inventory["native_libraries"]),
             "abi_library_counts": dict(sorted(abi_library_counts.items())),
             "libraries": inventory["native_libraries"],
-            "engine_candidates": _native_engine_candidates(
-                inventory["native_libraries"]
-            ),
+            "engine_candidates": engine_candidates,
+            "engine_candidate_counts": dict(sorted(engine_candidate_counts.items())),
+            "engine_candidate_abi_counts": {
+                engine: dict(sorted(counts.items()))
+                for engine, counts in sorted(engine_candidate_abi_counts.items())
+            },
             "windows_binary_reuse_verified": False,
         },
         "interpretation": {
@@ -114,6 +126,11 @@ def inspect_apk_report(
             "vpn_service_class_unmatched_count": unmatched_services,
             "vpn_service_class_unresolved_count": unresolved_services,
             "vpn_service_class_resolution_complete": unresolved_services == 0,
+            "native_engine_candidates_present": bool(engine_candidates),
+            "vpn_service_and_native_engine_candidates_co_present": (
+                matched_services > 0 and bool(engine_candidates)
+            ),
+            "native_service_linkage_verified": False,
             "runtime_behavior_verified": False,
             "server_endpoints_discovered": False,
         },

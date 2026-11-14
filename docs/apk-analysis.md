@@ -105,3 +105,10 @@ count, referenced-method count, and reported byte count. These values are
 class-level structural metadata, not method names or bytecode. They are null
 when the service class cannot be resolved or is not present among defined
 classes. Referenced-only DEX rows are not treated as class definitions.
+
+
+The combined report also summarizes filename-based engine candidates by
+candidate name and ABI. Its interpretation may mark that a manifest-declared
+VPN service class and one or more native engine-name candidates are both
+present in the same APK. This is only co-presence in the package: it does not
+establish a class-to-library dependency, dynamic loading, or runtime use.
