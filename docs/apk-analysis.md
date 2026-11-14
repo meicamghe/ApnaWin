@@ -204,6 +204,12 @@ and that each section's declared alignment is either zero, one, or a power of
 two. These checks reject structurally inconsistent alignment metadata; they
 do not attempt to map sections into memory or prove loader compatibility.
 
+Every file-backed section (other than the special null section) is also
+checked to ensure its declared byte range lies within the ELF input.
+SHT_NOBITS sections are exempt because they occupy memory size but have no
+file payload. This prevents unrelated malformed section ranges from being
+silently accepted while preserving valid NOBITS layouts.
+
 
 Dynamic symbol-table validation also checks that its linked string table is
 non-empty and begins with the required NUL byte (the empty string at index

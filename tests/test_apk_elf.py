@@ -112,6 +112,27 @@ def test_inspect_elf_bytes_rejects_out_of_bounds_section_table():
 
 
 
+
+def test_inspect_elf_bytes_rejects_out_of_bounds_file_backed_section():
+    data = bytearray(_elf64_with_jni_exports())
+    section_offset = struct.unpack_from("<Q", data, 40)[0]
+    shstr_header = section_offset + 3 * 64
+    struct.pack_into("<Q", data, shstr_header + 24, 0xFFFFFFFF)
+    with pytest.raises(ValueError, match="section data is out of bounds"):
+        inspect_elf_bytes(bytes(data))
+
+
+def test_inspect_elf_bytes_allows_nobits_section_without_file_payload():
+    data = bytearray(_elf64_with_jni_exports())
+    section_offset = struct.unpack_from("<Q", data, 40)[0]
+    shstr_header = section_offset + 3 * 64
+    struct.pack_into("<I", data, shstr_header + 4, 8)  # SHT_NOBITS
+    struct.pack_into("<Q", data, shstr_header + 24, len(data) + 4096)
+    struct.pack_into("<Q", data, shstr_header + 32, 8192)
+    assert inspect_elf_bytes(bytes(data))["inspection_status"] == "complete"
+
+
+
 def test_inspect_apk_native_libraries_reads_only_bounded_metadata(tmp_path):
     apk = tmp_path / "native.apk"
     payload = _elf64_with_jni_exports()
