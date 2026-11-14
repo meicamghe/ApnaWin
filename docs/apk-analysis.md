@@ -252,3 +252,14 @@ for ET_EXEC and ET_DYN objects, zero remains permitted for dynamic relocation
 sections. Relocation records themselves are not decoded: their architecture-specific symbol indexes, relocation types, and
 addends are outside this metadata-only inspection. Passing these checks does
 not establish that relocations can be applied or that the library is loadable.
+
+
+## ELF section-group metadata
+
+SHT_GROUP sections are checked as bounded arrays of 32-bit words. The parser
+validates the linked symbol-table reference and signature-symbol index, the
+required four-byte entry size, the group flags word (currently accepting only
+the GRP_COMDAT bit), and every member section index. Null, out-of-range,
+self-referential, and duplicate members are rejected. Group records are not
+used to infer linker selection or runtime behavior; this is structural
+metadata validation only.

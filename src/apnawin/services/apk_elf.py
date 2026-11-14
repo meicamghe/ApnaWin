@@ -184,6 +184,40 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                     "ELF dynamic string table is missing its leading NUL"
                     if section[1] == 11 else "ELF symbol string table is missing its leading NUL"
                 )
+        # SHT_GROUP stores a flags word followed by section indexes. Its
+        # signature is identified by sh_info in the linked symbol table.
+        for group_index, section in enumerate(sections):
+            if section[1] != 17:  # SHT_GROUP
+                continue
+            group_offset, group_size = section[4], section[5]
+            symbol_table_index, signature_index, entry_size = section[6], section[7], section[9]
+            if (
+                symbol_table_index >= len(sections)
+                or sections[symbol_table_index][1] not in (2, 11)
+            ):
+                raise ValueError("ELF section group has an invalid symbol-table reference")
+            symbol_table = sections[symbol_table_index]
+            symbol_entry_size = symbol_table[9]
+            if symbol_entry_size < expected_symbol or symbol_table[5] % symbol_entry_size:
+                raise ValueError("ELF section group references an invalid symbol table")
+            symbol_count = symbol_table[5] // symbol_entry_size
+            if signature_index == 0 or signature_index >= symbol_count:
+                raise ValueError("ELF section group signature symbol index is invalid")
+            if entry_size != 4 or group_size < 4 or group_size % 4:
+                raise ValueError("ELF section group entry metadata is invalid")
+            if group_offset > len(data) or group_size > len(data) - group_offset:
+                raise ValueError("ELF section group data is out of bounds")
+            group_words = struct.unpack_from(
+                endian + "I" * (group_size // 4), data, group_offset
+            )
+            if group_words[0] & ~1:
+                raise ValueError("ELF section group flags are invalid")
+            members = group_words[1:]
+            if (
+                any(member == 0 or member >= len(sections) or member == group_index for member in members)
+                or len(set(members)) != len(members)
+            ):
+                raise ValueError("ELF section group member index is invalid")
         # File-backed sections must remain within the input. SHT_NOBITS
         # occupies memory but has no bytes in the ELF file; section zero can
         # carry extended-numbering metadata in sh_size.

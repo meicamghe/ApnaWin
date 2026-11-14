@@ -512,6 +512,85 @@ def test_inspect_elf_bytes_rejects_malformed_relocation_metadata(
         inspect_elf_bytes(bytes(data))
 
 
+
+def _elf_with_group_section(payload, elf_class, group_words=(1, 1)):
+    data = bytearray(payload)
+    section_offset_field = 40 if elf_class == 64 else 32
+    section_offset_fmt = "<Q" if elf_class == 64 else "<I"
+    section_size = 64 if elf_class == 64 else 40
+    section_fmt = "<IIQQQQIIQQ" if elf_class == 64 else "<IIIIIIIIII"
+    count_offset = 60 if elf_class == 64 else 48
+    section_offset = struct.unpack_from(section_offset_fmt, data, section_offset_field)[0]
+    group_data = struct.pack("<" + "I" * len(group_words), *group_words)
+    data[section_offset:section_offset] = group_data
+    section_offset += len(group_data)
+    struct.pack_into(section_offset_fmt, data, section_offset_field, section_offset)
+    struct.pack_into("<H", data, count_offset, 5)
+    group_header = struct.pack(
+        section_fmt, 0, 17, 0, 0, 0, len(group_data), 2, 1, 4, 4
+    )
+    data.extend(group_header)
+    # The group payload lives immediately before the shifted section table.
+    group_payload_offset = section_offset - len(group_data)
+    struct.pack_into(
+        "<Q" if elf_class == 64 else "<I",
+        data, section_offset + 4 * section_size + (24 if elf_class == 64 else 16),
+        group_payload_offset,
+    )
+    return bytes(data)
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_accepts_valid_group_section(payload, elf_class):
+    result = inspect_elf_bytes(_elf_with_group_section(payload, elf_class))
+    assert result["inspection_status"] == "complete"
+
+
+@pytest.mark.parametrize(
+    ("words", "message"),
+    [
+        ((1,), "entry metadata is invalid"),
+        ((3, 1), "flags are invalid"),
+        ((1, 0), "member index is invalid"),
+        ((1, 99), "member index is invalid"),
+        ((1, 4), "member index is invalid"),
+        ((1, 1, 1), "member index is invalid"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_rejects_invalid_group_members_and_flags(
+    payload, elf_class, words, message
+):
+    with pytest.raises(ValueError, match=message):
+        inspect_elf_bytes(_elf_with_group_section(payload, elf_class, words))
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class", "field_offset", "format_code", "value", "message"),
+    [
+        (_elf64_with_jni_exports(), 64, 40, "<I", 99, "invalid symbol-table reference"),
+        (_elf64_with_jni_exports(), 64, 44, "<I", 99, "signature symbol index is invalid"),
+        (_elf32_with_jni_exports(), 32, 24, "<I", 99, "invalid symbol-table reference"),
+        (_elf32_with_jni_exports(), 32, 28, "<I", 99, "signature symbol index is invalid"),
+    ],
+)
+def test_inspect_elf_rejects_invalid_group_symbol_references(
+    payload, elf_class, field_offset, format_code, value, message
+):
+    data = bytearray(_elf_with_group_section(payload, elf_class))
+    section_offset = struct.unpack_from("<Q" if elf_class == 64 else "<I", data, 40 if elf_class == 64 else 32)[0]
+    struct.pack_into(format_code, data, section_offset + 4 * (64 if elf_class == 64 else 40) + field_offset, value)
+    with pytest.raises(ValueError, match=message):
+        inspect_elf_bytes(bytes(data))
+
+
+
 def test_inspect_elf32_bytes_rejects_out_of_bounds_file_backed_section():
     data = bytearray(_elf32_with_jni_exports())
     section_offset = struct.unpack_from("<I", data, 32)[0]
