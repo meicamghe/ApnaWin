@@ -724,6 +724,27 @@ def test_inspect_elf_rejects_unterminated_section_name(
     ("payload", "elf_class"),
     [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
 )
+def test_inspect_elf_rejects_orphan_shf_group_section(payload, elf_class):
+    data = bytearray(_elf_with_group_section(payload, elf_class))
+    section_offset = struct.unpack_from(
+        "<Q" if elf_class == 64 else "<I", data, 40 if elf_class == 64 else 32
+    )[0]
+    section_size = 64 if elf_class == 64 else 40
+    # Mark section 1 as a group member without listing it in any group.
+    struct.pack_into(
+        "<Q" if elf_class == 64 else "<I",
+        data,
+        section_offset + section_size + 8,
+        0x200,
+    )
+    with pytest.raises(ValueError, match="not referenced by a group"):
+        inspect_elf_bytes(bytes(data))
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
 def test_inspect_elf_rejects_group_in_non_relocatable_file(payload, elf_class):
     data = bytearray(_elf_with_group_section(payload, elf_class))
     struct.pack_into("<H", data, 16, 3)  # ET_DYN

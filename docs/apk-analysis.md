@@ -263,6 +263,7 @@ index, the required four-byte entry size, and every member section index.
 GRP_COMDAT is recognized; the GRP_MASKOS and GRP_MASKPROC ranges are preserved
 for ABI-specific meanings, while other undefined flag bits are rejected.
 Members must follow the group header, carry SHF_GROUP, and cannot be listed
-more than once or shared between groups. Group records are not used to infer
+more than once or shared between groups. Conversely, every section carrying
+SHF_GROUP must be referenced by exactly one group. Group records are not used to infer
 linker selection or runtime behavior; this is structural metadata validation
 only.

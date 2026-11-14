@@ -231,6 +231,14 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             if any(not (sections[member][2] & 0x200) for member in members):
                 raise ValueError("ELF section group member is missing SHF_GROUP")
             grouped_members.update(members)
+        # SHF_GROUP is meaningful only for ET_REL and every flagged section
+        # must be accounted for by exactly one group above.
+        for member_index, member_section in enumerate(sections):
+            if member_section[2] & 0x200:
+                if elf_type != 1:
+                    raise ValueError("ELF SHF_GROUP is only valid in ET_REL files")
+                if member_index not in grouped_members:
+                    raise ValueError("ELF SHF_GROUP section is not referenced by a group")
         # File-backed sections must remain within the input. SHT_NOBITS
         # occupies memory but has no bytes in the ELF file; section zero can
         # carry extended-numbering metadata in sh_size.
