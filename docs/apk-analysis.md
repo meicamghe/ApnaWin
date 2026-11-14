@@ -1,4 +1,4 @@
-# Android APK manifest inspection
+# Android APK manifest and DEX inspection
 
 ## Metadata-only inventory
 
@@ -20,23 +20,36 @@ available on `PATH`. Then run:
 py -3 tools/inspect_apk_manifest.py .\\path\\to\\application.apk
 ```
 
-The command invokes the installed tool as an argument array
-(`apkanalyzer manifest print APK`), without a shell, with a 30-second timeout.
-If the tool is missing, the command fails clearly; it does not guess or download
-an executable. The tool's output is limited to 4 MiB and only selected fields
-are emitted: package name, numeric version code, whether a version name exists,
-min/target SDK, permission names, component type/name/exported/permission, and
-services declaring `android.permission.BIND_VPN_SERVICE`.
+The command invokes `apkanalyzer manifest print APK` without a shell and with
+a 30-second timeout. Only selected manifest metadata is emitted. The report
+omits version-name text, labels, intent-filter data, resource values, arbitrary
+strings, URLs, and raw XML.
 
-The report deliberately omits version-name text, labels, intent-filter data,
-resource values, arbitrary strings, URLs, and raw XML. It does not verify APK
-signatures, establish runtime behavior, or discover APNA server endpoints.
-A service declaring the VPN binding permission is a manifest declaration, not
-proof that the VPN service works. Keep the APK SHA-256, SDK tool version, and
-exact command alongside any external evidence record.
+## Optional DEX structure inspection
 
-The decoder uses Python's XML parser only on textual XML emitted by the
-Android SDK tool. DTD/entity declarations are rejected. The APK itself is
-passed as an input to the local SDK tool and is not unpacked by ApnaWin.
-Treat APKs and SDK tools as untrusted software; use an isolated analysis
-environment for unknown samples.
+Run:
+
+```powershell
+py -3 tools/inspect_apk_dex.py .\\path\\to\\application.apk
+```
+
+This uses the Android SDK's documented commands:
+- `apkanalyzer dex list APK` to enumerate DEX files.
+- `apkanalyzer dex packages --defined-only APK` to count defined classes and
+  identify class names matching VPN/network-related indicators.
+- `apkanalyzer dex references APK` to record per-DEX method-reference counts.
+
+The output contains only DEX filenames, counts, and a bounded allowlist of
+candidate class names. It does not include method names, field names, bytecode,
+raw command output, URLs, credentials, or extracted files. Candidate matching
+is heuristic: a class name containing "vpn", "tunnel", "xray", "socks", "dns",
+"proxy", or related terms is a lead for later review, not proof of behavior.
+Obfuscated or dynamically loaded classes may not be detected.
+
+Both decoders invoke local SDK tooling with argument arrays, no shell, and a
+30-second timeout. Missing tooling fails clearly; no executable is downloaded.
+Treat APKs and SDK tools as untrusted software and use an isolated analysis
+environment for unknown samples. Neither report verifies runtime behavior or
+discovers APNA server endpoints.
+
+Official command reference: [Android APK Analyzer](https://developer.android.com/tools/apkanalyzer).

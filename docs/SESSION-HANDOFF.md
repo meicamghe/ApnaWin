@@ -2,7 +2,13 @@
 
 ## Current repository state
 
-The native Windows application shell, profile management, Xray process runner, Windows Job Object supervision, remote catalog schema/cache, refresh coordinator, bounded HTTPS transport and privacy-conscious APK inventory are implemented. The inventory hashes and inspects through one open file descriptor, enforces a 2 GiB compressed-input ceiling, and checks for ordinary concurrent mutation. An optional Android SDK-backed manifest inspection path now invokes `apkanalyzer` without a shell and emits only allowlisted metadata. The Connect button remains intentionally disabled because a verified Windows tunnel/TUN integration and authorized end-to-end server configuration are not yet available.
+The native Windows application shell, profile management, Xray process runner, Windows Job Object supervision, remote catalog schema/cache, refresh coordinator, bounded HTTPS transport and privacy-conscious APK inventory are implemented. The inventory hashes and inspects through one open file descriptor, enforces a 2 GiB compressed-input ceiling, and checks for ordinary concurrent mutation.
+
+Optional Android SDK-backed inspection now covers both manifest and DEX metadata:
+- Manifest decoder: selected package/version/SDK, permissions, component declarations and VPN-binding services.
+- DEX decoder: DEX filenames, defined-class count, per-DEX method-reference counts and heuristic candidate VPN/network class names.
+
+Both tools use apkanalyzer without a shell, enforce timeouts and output-size checks, and omit raw XML/DEX output, methods, fields, bytecode, URLs and credentials. Neither tool extracts or executes archive members. The Connect button remains intentionally disabled because a verified Windows tunnel/TUN integration and authorized end-to-end server configuration are not yet available.
 
 ## Remote configuration
 
@@ -10,7 +16,7 @@ The Android app is believed to refresh server information and connection behavio
 
 ## Latest verification
 
-Workflow run #160 passed:
+Workflow run #161 passed:
 - Python unit tests
 - Windows portable build
 - Packaged-app smoke test
@@ -20,4 +26,4 @@ This verifies the desktop package starts in CI; it does not verify VPN connectiv
 
 ## Latest engineering change
 
-Added `src/apnawin/services/apk_manifest.py` and `tools/inspect_apk_manifest.py`. When Android SDK `apkanalyzer` is installed, the CLI runs `apkanalyzer manifest print APK` with an argument list, no shell, and a 30-second timeout. The XML parser rejects DTD/entity declarations and emits only package/version-code/SDK levels, permission names, component metadata and VPN-binding services. Missing SDK tooling produces an explicit error; no endpoint, credential, raw XML or APK content is printed. Parser and subprocess behavior are covered by fixture-based tests; no real APNA APK has yet been analyzed.
+Added `src/apnawin/services/apk_dex.py` and `tools/inspect_apk_dex.py`. They use the documented `apkanalyzer dex list`, `dex packages --defined-only`, and `dex references` commands. Fixture tests cover class filtering, DEX filename validation, reference counts, command invocation and sanitized tool errors. No real APNA APK has yet been analyzed.
