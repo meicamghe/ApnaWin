@@ -184,11 +184,16 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                     "ELF dynamic string table is missing its leading NUL"
                     if section[1] == 11 else "ELF symbol string table is missing its leading NUL"
                 )
-        # SHT_GROUP stores a flags word followed by section indexes. Its
-        # signature is identified by sh_info in the linked symbol table.
+        # SHT_GROUP is valid only in relocatable objects. A section may
+        # belong to at most one group, and its group header precedes it.
+        grouped_members = set()
         for group_index, section in enumerate(sections):
             if section[1] != 17:  # SHT_GROUP
                 continue
+            if elf_type != 1:  # ET_REL
+                raise ValueError("ELF section group is only valid in ET_REL files")
+            if section[2] != 0:
+                raise ValueError("ELF section group header flags must be zero")
             group_offset, group_size = section[4], section[5]
             symbol_table_index, signature_index, entry_size = section[6], section[7], section[9]
             if (
@@ -210,17 +215,22 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             group_words = struct.unpack_from(
                 endian + "I" * (group_size // 4), data, group_offset
             )
-            if group_words[0] & ~1:
+            # GRP_MASKOS and GRP_MASKPROC are reserved for ABI-specific use.
+            allowed_group_flags = 0x1 | 0x0FF00000 | 0xF0000000
+            if group_words[0] & ~allowed_group_flags:
                 raise ValueError("ELF section group flags are invalid")
             members = group_words[1:]
             if (
-                any(member == 0 or member >= len(sections) or member == group_index for member in members)
+                any(member <= group_index or member >= len(sections) for member in members)
                 or len(set(members)) != len(members)
+                or any(member in grouped_members for member in members)
             ):
                 raise ValueError("ELF section group member index is invalid")
-            # Every section listed in a group must carry SHF_GROUP.
+            # Every listed member must carry SHF_GROUP and cannot be shared
+            # with a second SHT_GROUP section.
             if any(not (sections[member][2] & 0x200) for member in members):
                 raise ValueError("ELF section group member is missing SHF_GROUP")
+            grouped_members.update(members)
         # File-backed sections must remain within the input. SHT_NOBITS
         # occupies memory but has no bytes in the ELF file; section zero can
         # carry extended-numbering metadata in sh_size.

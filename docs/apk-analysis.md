@@ -256,11 +256,13 @@ not establish that relocations can be applied or that the library is loadable.
 
 ## ELF section-group metadata
 
-SHT_GROUP sections are checked as bounded arrays of 32-bit words. The parser
-validates the linked symbol-table reference and signature-symbol index, the
-required four-byte entry size, the group flags word (currently accepting only
-the GRP_COMDAT bit), and every member section index. Null, out-of-range,
-self-referential, and duplicate members are rejected. Every listed member
-must also carry the ELF SHF_GROUP section flag. Group records are not used to
-infer linker selection or runtime behavior; this is structural metadata
-validation only.
+SHT_GROUP sections are accepted only in ET_REL objects and are checked
+as bounded arrays of 32-bit words. Their section-header flags must be zero.
+The parser validates the linked symbol-table reference and signature-symbol
+index, the required four-byte entry size, and every member section index.
+GRP_COMDAT is recognized; the GRP_MASKOS and GRP_MASKPROC ranges are preserved
+for ABI-specific meanings, while other undefined flag bits are rejected.
+Members must follow the group header, carry SHF_GROUP, and cannot be listed
+more than once or shared between groups. Group records are not used to infer
+linker selection or runtime behavior; this is structural metadata validation
+only.

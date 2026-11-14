@@ -513,7 +513,7 @@ def test_inspect_elf_bytes_rejects_malformed_relocation_metadata(
 
 
 
-def _elf_with_group_section(payload, elf_class, group_words=(1, 1)):
+def _elf_with_group_section(payload, elf_class, group_words=(1, 4)):
     data = bytearray(payload)
     section_offset_field = 40 if elf_class == 64 else 32
     section_offset_fmt = "<Q" if elf_class == 64 else "<I"
@@ -521,15 +521,20 @@ def _elf_with_group_section(payload, elf_class, group_words=(1, 1)):
     section_fmt = "<IIQQQQIIQQ" if elf_class == 64 else "<IIIIIIIIII"
     count_offset = 60 if elf_class == 64 else 48
     section_offset = struct.unpack_from(section_offset_fmt, data, section_offset_field)[0]
-    # The fixture's member section must advertise SHF_GROUP.
-    struct.pack_into("<Q" if elf_class == 64 else "<I", data,
-                     section_offset + section_size + 8, 0x200)
+    # ET_REL is required for SHT_GROUP and SHF_GROUP.
+    struct.pack_into("<H", data, 16, 1)
+    member_header_offset = section_offset + 4 * section_size
+    group_header_offset = section_offset + 5 * section_size
+    member_header = struct.pack(
+        section_fmt, 0, 1, 0x200, 0, len(data), 4, 0, 0, 4, 0
+    )
     group_data = struct.pack("<" + "I" * len(group_words), *group_words)
     group_payload_offset = len(data) + section_size
     group_header = struct.pack(
         section_fmt, 0, 17, 0, 0, group_payload_offset, len(group_data), 2, 1, 4, 4
     )
-    struct.pack_into("<H", data, count_offset, 5)
+    struct.pack_into("<H", data, count_offset, 6)
+    data.extend(member_header)
     data.extend(group_header)
     data.extend(group_data)
     return bytes(data)
@@ -557,7 +562,7 @@ def test_inspect_elf_rejects_group_member_without_shf_group(payload, elf_class):
     struct.pack_into(
         "<Q" if elf_class == 64 else "<I",
         data,
-        section_offset + section_size + 8,
+        section_offset + 4 * section_size + 8,
         0,
     )
     with pytest.raises(ValueError, match="member is missing SHF_GROUP"):
@@ -571,7 +576,7 @@ def test_inspect_elf_rejects_group_member_without_shf_group(payload, elf_class):
         ((3, 1), "flags are invalid"),
         ((1, 0), "member index is invalid"),
         ((1, 99), "member index is invalid"),
-        ((1, 4), "member index is invalid"),
+        ((1, 5), "member index is invalid"),
         ((1, 1, 1), "member index is invalid"),
     ],
 )
@@ -600,7 +605,7 @@ def test_inspect_elf_rejects_invalid_group_symbol_references(
 ):
     data = bytearray(_elf_with_group_section(payload, elf_class))
     section_offset = struct.unpack_from("<Q" if elf_class == 64 else "<I", data, 40 if elf_class == 64 else 32)[0]
-    struct.pack_into(format_code, data, section_offset + 4 * (64 if elf_class == 64 else 40) + field_offset, value)
+    struct.pack_into(format_code, data, section_offset + 5 * (64 if elf_class == 64 else 40) + field_offset, value)
     with pytest.raises(ValueError, match=message):
         inspect_elf_bytes(bytes(data))
 
@@ -713,3 +718,40 @@ def test_inspect_elf_rejects_unterminated_section_name(
     data[name_offset + name_size - 1] = ord("X")
     with pytest.raises(ValueError, match="section name offset or termination"):
         inspect_elf_bytes(bytes(data))
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_rejects_group_in_non_relocatable_file(payload, elf_class):
+    data = bytearray(_elf_with_group_section(payload, elf_class))
+    struct.pack_into("<H", data, 16, 3)  # ET_DYN
+    with pytest.raises(ValueError, match="only valid in ET_REL"):
+        inspect_elf_bytes(bytes(data))
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_rejects_nonzero_group_header_flags(payload, elf_class):
+    data = bytearray(_elf_with_group_section(payload, elf_class))
+    section_offset = struct.unpack_from(
+        "<Q" if elf_class == 64 else "<I", data, 40 if elf_class == 64 else 32
+    )[0]
+    group_offset = section_offset + 5 * (64 if elf_class == 64 else 40)
+    struct.pack_into("<Q" if elf_class == 64 else "<I", data, group_offset + 8, 1)
+    with pytest.raises(ValueError, match="header flags must be zero"):
+        inspect_elf_bytes(bytes(data))
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_accepts_os_and_processor_group_flag_masks(payload, elf_class):
+    result = inspect_elf_bytes(
+        _elf_with_group_section(payload, elf_class, (0x10FF0001, 4))
+    )
+    assert result["inspection_status"] == "complete"
