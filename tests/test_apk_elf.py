@@ -237,3 +237,46 @@ def test_inspect_real_elf32_identity_matches_32_bit_android_abi(abi, machine):
     assert _abi_compatibility(abi, parsed) == {
         "abi_compatible": True, "abi_compatibility_status": "compatible"
     }
+
+def _elf32_with_jni_exports():
+    ident = b"\\x7fELF" + bytes([1, 1, 1]) + bytes(9)
+    dynstr = b"\\x00JNI_OnLoad\\x00Java_org_example_Tunnel_start\\x00ordinary\\x00"
+    names = {
+        "jni_onload": dynstr.index(b"JNI_OnLoad"),
+        "jni_method": dynstr.index(b"Java_org_example_Tunnel_start"),
+        "ordinary": dynstr.index(b"ordinary"),
+    }
+    symbols = [bytes(16)]
+    for key in ("jni_onload", "jni_method", "ordinary"):
+        symbols.append(struct.pack("<IIIBBH", names[key], 0, 0, 0x12, 0, 1))
+    dynsym = b"".join(symbols)
+    shstr = b"\\x00.dynstr\\x00.dynsym\\x00.shstrtab\\x00"
+    dynstr_offset = 52
+    dynsym_offset = dynstr_offset + len(dynstr)
+    shstr_offset = dynsym_offset + len(dynsym)
+    section_offset = (shstr_offset + len(shstr) + 3) & ~3
+    sections = [
+        bytes(40),
+        struct.pack("<IIIIIIIIII", 1, 3, 0, 0, dynstr_offset, len(dynstr), 0, 0, 1, 0),
+        struct.pack("<IIIIIIIIII", 9, 11, 0, 0, dynsym_offset, len(dynsym), 1, 1, 4, 16),
+        struct.pack("<IIIIIIIIII", 17, 3, 0, 0, shstr_offset, len(shstr), 0, 0, 1, 0),
+    ]
+    header = struct.pack(
+        "<16sHHIIIIIHHHHHH",
+        ident, 3, 3, 1, 0, 0, section_offset, 0, 52, 0, 0, 40, 4, 3,
+    )
+    return header + dynstr + dynsym + shstr + bytes(section_offset - shstr_offset - len(shstr)) + b"".join(sections)
+
+
+def test_inspect_elf32_bytes_counts_exported_jni_function_symbols():
+    result = inspect_elf_bytes(_elf32_with_jni_exports())
+    assert result == {
+        "elf_valid": True, "elf_class": 32, "endianness": "little",
+        "machine": 3, "machine_name": "x86", "file_type": 3,
+        "dynamic_symbol_table_present": True, "dynamic_symbol_count": 4,
+        "jni_exported_symbol_count": 1, "jni_onload_exported": True,
+        "inspection_status": "complete",
+    }
+    assert "Java_org_example_Tunnel_start" not in str(result)
+    assert "JNI_OnLoad" not in str(result)
+\n
