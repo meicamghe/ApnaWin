@@ -4,9 +4,10 @@
 
 The native Windows application shell, profile management, Xray process runner, Windows Job Object supervision, remote catalog schema/cache, refresh coordinator, bounded HTTPS transport and privacy-conscious APK inventory are implemented. The inventory hashes and inspects through one open file descriptor, enforces a 2 GiB compressed-input ceiling, and checks for ordinary concurrent mutation.
 
-Optional Android SDK-backed inspection now covers both manifest and DEX metadata:
+Optional Android SDK-backed inspection now covers manifest and DEX metadata; ZIP inventory also records bounded native-library metadata:
 - Manifest decoder: selected package/version/SDK, permissions, component declarations and VPN-binding services.
 - DEX decoder: DEX filenames, defined-class count, per-DEX method-reference counts and heuristic candidate VPN/network class names.
+- Native inventory: allowlisted `.so` basenames, ABI labels and sizes; combined report emits filename-only engine candidates with explicit `candidate_only` status. Android `.so` files are not assumed to be Windows DLLs.
 
 Both tools use apkanalyzer without a shell, enforce timeouts and output-size checks, and omit raw XML/DEX output, methods, fields, bytecode, URLs and credentials. Neither tool extracts or executes archive members. The Connect button remains intentionally disabled because a verified Windows tunnel/TUN integration and authorized end-to-end server configuration are not yet available.
 
@@ -16,7 +17,7 @@ The Android app is believed to refresh server information and connection behavio
 
 ## Latest verification
 
-Workflow run #161 passed:
+Workflow run #167 passed:
 - Python unit tests
 - Windows portable build
 - Packaged-app smoke test

@@ -73,3 +73,16 @@ VPN service from whether a corresponding class was found in DEX. A positive
 match is static evidence only; it does not prove that the service starts,
 establishes a tunnel, or carries traffic. A negative match may also occur when
 the manifest name is aliased, obfuscated, or loaded through other mechanisms.
+
+
+## Native library metadata and engine-name leads
+
+The safe ZIP inventory also records a bounded list of native library basenames,
+ABI labels and uncompressed sizes from entries matching `lib/<abi>/lib*.so`.
+It never reads or extracts their contents. The combined report groups filename
+matches into heuristic engine candidates (for example Xray, tun2socks,
+OpenVPN, WireGuard, Shadowsocks or sing-box). These are leads only: filenames
+can be misleading, libraries can be statically linked or obfuscated, and a
+match does not establish that code is loaded or used. Android ABI libraries
+(such as `arm64-v8a`) are not Windows DLLs and are not treated as reusable
+Windows binaries. No Windows binary compatibility is inferred.

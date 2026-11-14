@@ -26,6 +26,10 @@ def test_inventory_reports_only_safe_static_metadata(tmp_path):
     assert result["manifest_present"] is True
     assert result["dex_file_count"] == 2
     assert result["native_abis"] == ["arm64-v8a", "armeabi-v7a"]
+    assert result["native_libraries"] == [
+        {"abi": "arm64-v8a", "library_name": "libengine.so", "file_size_bytes": 6},
+        {"abi": "armeabi-v7a", "library_name": "libengine.so", "file_size_bytes": 6},
+    ]
     assert result["signature_file_count"] == 1
     assert result["content_extracted"] is False
     assert result["executed"] is False
@@ -137,3 +141,15 @@ def test_inventory_rejects_encrypted_entry_metadata():
     info.flag_bits |= 0x1
     with pytest.raises(ValueError, match="encrypted ZIP entry"):
         apk_inventory._validate_entry(info)
+
+
+def test_inventory_ignores_non_allowlisted_native_library_names(tmp_path):
+    apk = tmp_path / "native-names.apk"
+    with zipfile.ZipFile(apk, "w") as archive:
+        archive.writestr("lib/arm64-v8a/libvalid.so", b"ok")
+        archive.writestr("lib/arm64-v8a/not-a-library.txt", b"ignored")
+        archive.writestr("lib/arm64-v8a/../escape.so", b"bad")
+    result = inspect_apk(apk)
+    assert result["native_libraries"] == [
+        {"abi": "arm64-v8a", "library_name": "libvalid.so", "file_size_bytes": 2}
+    ]

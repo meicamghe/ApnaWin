@@ -14,7 +14,9 @@ _MAX_ZIP_ENTRIES = 100_000
 _MAX_ENTRY_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
 _MAX_TOTAL_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
 _MAX_COMPRESSION_RATIO = 1_000
-_ABI_RE = re.compile(r"^lib/([^/]+)/[^/]+[.]so$")
+_ABI_RE = re.compile(r"^lib/([A-Za-z0-9_.+-]{1,64})/([^/]+[.]so)$")
+_NATIVE_LIBRARY_RE = re.compile(r"^lib[A-Za-z0-9_.+-]{1,120}[.]so$")
+_MAX_NATIVE_LIBRARIES = 2_048
 _WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:")
 
 
@@ -107,6 +109,7 @@ def inspect_apk(path: str | Path) -> dict[str, Any]:
                     raise ValueError("APK contains duplicate ZIP entry names")
 
                 native_abis: set[str] = set()
+                native_libraries: list[dict[str, Any]] = []
                 dex_count = 0
                 signature_file_count = 0
                 has_manifest = False
@@ -116,8 +119,18 @@ def inspect_apk(path: str | Path) -> dict[str, Any]:
                     if re.fullmatch(r"classes(?:[0-9]+)?[.]dex", name):
                         dex_count += 1
                     match = _ABI_RE.fullmatch(name)
-                    if match:
+                    if match and _NATIVE_LIBRARY_RE.fullmatch(match.group(2)):
                         native_abis.add(match.group(1))
+                        if len(native_libraries) >= _MAX_NATIVE_LIBRARIES:
+                            raise ValueError("APK contains too many native libraries")
+                        native_libraries.append({
+                            "abi": match.group(1),
+                            "library_name": match.group(2),
+                            "file_size_bytes": next(
+                                entry.file_size for entry in entries
+                                if entry.filename == name
+                            ),
+                        })
                     upper = name.upper()
                     if upper.startswith("META-INF/") and upper.endswith(
                         (".RSA", ".DSA", ".EC")
@@ -137,6 +150,9 @@ def inspect_apk(path: str | Path) -> dict[str, Any]:
         "manifest_present": has_manifest,
         "dex_file_count": dex_count,
         "native_abis": sorted(native_abis),
+        "native_libraries": sorted(
+            native_libraries, key=lambda item: (item["abi"], item["library_name"])
+        ),
         "signature_file_count": signature_file_count,
         "zip_entry_count": len(names),
         "content_extracted": False,
