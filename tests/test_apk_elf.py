@@ -539,3 +539,73 @@ def test_inspect_elf32_bytes_allows_nobits_section_without_file_payload():
     struct.pack_into("<I", data, shstr_header + 16, len(data) + 4096)
     struct.pack_into("<I", data, shstr_header + 20, 8192)
     assert inspect_elf_bytes(bytes(data))["inspection_status"] == "complete"
+
+
+@pytest.mark.parametrize(
+    ("payload", "index_offset", "bad_index"),
+    [
+        (_elf64_with_jni_exports(), 62, 4),
+        (_elf32_with_jni_exports(), 50, 4),
+    ],
+)
+def test_inspect_elf_rejects_out_of_range_section_name_table_index(
+    payload, index_offset, bad_index
+):
+    data = bytearray(payload)
+    struct.pack_into("<H", data, index_offset, bad_index)
+    with pytest.raises(ValueError, match="section-name string-table index is out of bounds"):
+        inspect_elf_bytes(bytes(data))
+
+
+@pytest.mark.parametrize(
+    ("payload", "index_offset", "bad_index"),
+    [
+        (_elf64_with_jni_exports(), 62, 2),
+        (_elf32_with_jni_exports(), 50, 2),
+    ],
+)
+def test_inspect_elf_rejects_non_string_section_name_table(
+    payload, index_offset, bad_index
+):
+    data = bytearray(payload)
+    struct.pack_into("<H", data, index_offset, bad_index)
+    with pytest.raises(ValueError, match="section-name table has an invalid section type"):
+        inspect_elf_bytes(bytes(data))
+
+
+@pytest.mark.parametrize(
+    ("payload", "section_offset_field", "entry_size", "name_field"),
+    [
+        (_elf64_with_jni_exports(), 40, 64, 0),
+        (_elf32_with_jni_exports(), 32, 40, 0),
+    ],
+)
+def test_inspect_elf_rejects_invalid_section_name_offset(
+    payload, section_offset_field, entry_size, name_field
+):
+    data = bytearray(payload)
+    section_offset = struct.unpack_from(
+        "<Q" if entry_size == 64 else "<I", data, section_offset_field
+    )[0]
+    struct.pack_into("<I", data, section_offset + 3 * entry_size + name_field, 0xFFFFFFFF)
+    with pytest.raises(ValueError, match="section name offset or termination"):
+        inspect_elf_bytes(bytes(data))
+
+
+@pytest.mark.parametrize(
+    ("payload", "section_offset_field", "entry_size", "index_offset", "link_offset"),
+    [
+        (_elf64_with_jni_exports(), 40, 64, 62, 40),
+        (_elf32_with_jni_exports(), 32, 40, 50, 24),
+    ],
+)
+def test_inspect_elf_supports_extended_section_name_table_index(
+    payload, section_offset_field, entry_size, index_offset, link_offset
+):
+    data = bytearray(payload)
+    section_offset = struct.unpack_from(
+        "<Q" if entry_size == 64 else "<I", data, section_offset_field
+    )[0]
+    struct.pack_into("<H", data, index_offset, 0xFFFF)
+    struct.pack_into("<I", data, section_offset + link_offset, 3)
+    assert inspect_elf_bytes(bytes(data))["inspection_status"] == "complete"

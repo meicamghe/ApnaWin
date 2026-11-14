@@ -149,7 +149,9 @@ included in the report. Per-library reads are capped at 64 MiB, aggregate
 reads at 256 MiB, analysis at 256 libraries, and each dynamic symbol table
 at 16 MiB. ELF extended section numbering is supported with the same
 section-count and bounds limits. Dynamic symbol tables must link to a valid
-ELF string-table section.
+ELF string-table section. The section-name string-table index is also checked, including
+`SHN_XINDEX` extended indexes; referenced section names must be in range and
+NUL-terminated. A missing section-name table (`SHN_UNDEF`) remains valid.
 
 A matching exported `Java_...` name is evidence of a JNI-style export, not
 proof that a particular DEX native method resolves to it. An exported

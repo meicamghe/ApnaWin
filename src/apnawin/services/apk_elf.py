@@ -88,6 +88,27 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             struct.unpack_from(section_fmt, data, section_offset + index * section_entry_size)
             for index in range(section_count)
         ]
+        section_name_index = header[13]
+        if section_name_index == 0xFFFF:  # SHN_XINDEX: actual index is sh_link of section zero.
+            section_name_index = sections[0][6]
+        if section_name_index:
+            if section_name_index >= len(sections):
+                raise ValueError("ELF section-name string-table index is out of bounds")
+            name_table = sections[section_name_index]
+            if name_table[1] != 3:  # SHT_STRTAB
+                raise ValueError("ELF section-name table has an invalid section type")
+            name_offset, name_size = name_table[4], name_table[5]
+            if name_offset > len(data) or name_size > len(data) - name_offset:
+                raise ValueError("ELF section-name string table is out of bounds")
+            names = data[name_offset:name_offset + name_size]
+            if not names or names[0] != 0:
+                raise ValueError("ELF section-name string table is missing its leading NUL")
+            for section in sections:
+                name_index = section[0]
+                if name_index >= len(names) or names.find(b"\\x00", name_index) < 0:
+                    raise ValueError("ELF section name offset or termination is invalid")
+        elif header[13] not in (0, 0xFFFF):
+            raise ValueError("ELF section-name string-table index is invalid")
         for section in sections:
             alignment = section[8]
             if alignment > 1 and alignment & (alignment - 1):
