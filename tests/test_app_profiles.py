@@ -244,7 +244,7 @@ def test_remove_profile_cancel_keeps_profile(tmp_path, qapp, monkeypatch):
 
 def test_profile_details_render_as_plain_text_and_rejects_markup_host(tmp_path, qapp):
     hostile_host = "<b>untrusted</b>"
-    with pytest.raises(ValueError, match="valid DNS hostname"):
+    with pytest.raises(ValueError, match="Endpoint host must be"):
         ConnectionProfile("Imported", Transport.SOCKS, hostile_host, 1080)
 
     profile = ConnectionProfile("Imported", Transport.SOCKS, "vpn.example.test", 1080)
