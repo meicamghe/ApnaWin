@@ -3,7 +3,6 @@
 import ipaddress
 import re
 from dataclasses import dataclass
-from enum import Enum
 from unicodedata import category
 
 
