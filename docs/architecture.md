@@ -60,3 +60,8 @@ details label is explicitly configured for plain-text rendering, so values
 resembling Qt rich text are displayed literally rather than interpreted as
 markup. The profile name inserted into the remove-confirmation dialog is
 HTML-escaped before being passed to Qt's auto-detecting message text.
+
+
+## Remote server configuration
+
+The Android app may refresh its server catalog and connection parameters remotely. This behavior is not yet reproducibly verified. The discovery evidence requirements, separation of catalog/profile/account data, secure refresh pipeline and acceptance criteria are recorded in [remote configuration discovery](remote-configuration.md). Do not hard-code guessed backend endpoints or treat a downloaded server list as proof of engine compatibility.
