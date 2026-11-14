@@ -48,22 +48,13 @@ def test_inspector_invokes_documented_commands(tmp_path, monkeypatch):
     apk.write_bytes(b"placeholder")
     commands = []
 
-    def fake_run(args, **kwargs):
-        commands.append(args[1:-1])
-        if args[1:3] == ["dex", "list"]:
-            stdout = b"classes.dex\nclasses2.dex\n"
-        elif args[1:3] == ["dex", "packages"]:
-            stdout = b"C d 1 1 20 com.example.TunnelService\n"
-        else:
-            stdout = b"classes.dex 100\nclasses2.dex 200\n"
-
-        class Completed:
-            returncode = 0
-            stderr = b""
-
-        result = Completed()
-        result.stdout = stdout
-        return result
+    def fake_run(executable, args, timeout, limit, failure, timed_out, overflow):
+        commands.append(args[:-1])
+        if args[:2] == ["dex", "list"]:
+            return b"classes.dex\\nclasses2.dex\\n"
+        if args[:2] == ["dex", "packages"]:
+            return b"C d 1 1 20 com.example.TunnelService\\n"
+        return b"classes.dex 100\\nclasses2.dex 200\\n"
 
     monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
     monkeypatch.setattr(apk_dex, "run_apkanalyzer", fake_run)

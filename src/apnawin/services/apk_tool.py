@@ -59,7 +59,10 @@ def run_apkanalyzer(
     try:
         process.wait(timeout=timeout)
     except subprocess.TimeoutExpired as exc:
-        process.kill()
+        try:
+            process.kill()
+        except OSError:
+            pass
         process.wait()
         for reader in readers:
             reader.join()
