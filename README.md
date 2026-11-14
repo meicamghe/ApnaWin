@@ -8,6 +8,7 @@ A native Windows 10/11 desktop client project inspired by the workflow of APNA T
 - A native PySide6 desktop application.
 - Add, edit, select and remove connection profiles.
 - Strict local JSON persistence for non-secret profile metadata, with unique same-directory atomic temp files, flush/fsync, duplicate-key/schema validation and duplicate-name rejection.
+- Strict Xray config parsing that rejects duplicate JSON keys and non-finite constants before execution.
 - A transport-neutral profile model and tunnel-engine contract.
 - A test-only mock engine that does not touch the network.
 - Windows GitHub Actions tests and a PyInstaller build job that publishes a portable Windows x64 application-folder artifact (14-day retention).
