@@ -76,7 +76,7 @@ def test_inspect_elf_bytes_supports_extended_section_count():
     data = bytearray(_elf64_with_jni_exports())
     section_offset = struct.unpack_from("<Q", data, 40)[0]
     # e_shnum = 0 means the real count is stored in section-zero sh_size.
-    struct.pack_into("<H", data, 60 + 4, 0)
+    struct.pack_into("<H", data, 60, 0)
     struct.pack_into("<Q", data, section_offset + 32, 4)
     result = inspect_elf_bytes(bytes(data))
     assert result["dynamic_symbol_table_present"] is True
