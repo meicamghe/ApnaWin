@@ -756,3 +756,32 @@ def test_validate_rejects_unsafe_or_ambiguous_socks_inbound_before_execution(
     with pytest.raises(ValueError):
         XrayProcessRunner(executable, config).validate(profile)
     assert not called
+
+@pytest.mark.parametrize(
+    "raw_config",
+    [
+        '{"inbounds": [], "inbounds": []}',
+        '{"inbounds": [{"listen": "127.0.0.1", "listen": "0.0.0.0", "port": 10808, "protocol": "socks"}]}',
+        '{"inbounds": [{"listen": "127.0.0.1", "port": 10808, "protocol": "socks"}], "outbounds": [NaN]}',
+        '{"inbounds": [{"listen": "127.0.0.1", "port": 10808, "protocol": "socks"}], "outbounds": [Infinity]}',
+    ],
+)
+def test_read_config_rejects_duplicate_keys_and_non_finite_constants(tmp_path, raw_config):
+    executable = tmp_path / "xray.exe"
+    executable.touch()
+    config = tmp_path / "config.json"
+    config.write_text(raw_config, encoding="utf-8")
+    runner = XrayProcessRunner(executable, config)
+
+    with pytest.raises(ValueError, match="readable UTF-8 JSON"):
+        runner._read_config()
+
+
+def test_read_config_rejects_non_object_root(tmp_path):
+    executable = tmp_path / "xray.exe"
+    executable.touch()
+    config = tmp_path / "config.json"
+    config.write_text('["not", "an", "object"]', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="root must be a JSON object"):
+        XrayProcessRunner(executable, config)._read_config()
