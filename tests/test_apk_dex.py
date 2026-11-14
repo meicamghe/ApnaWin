@@ -6,8 +6,8 @@ from apnawin.services import apk_dex
 
 
 def test_parse_dex_file_list():
-    assert apk_dex.parse_dex_file_list("classes.dex\nclasses2.dex\n") == [
-        "classes.dex", "classes2.dex"
+    assert apk_dex.parse_dex_file_list("classes.dex\nclasses2.dex\nclasses10.dex\n") == [
+        "classes.dex", "classes2.dex", "classes10.dex"
     ]
 
 
