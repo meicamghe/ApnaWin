@@ -2,7 +2,7 @@
 
 ## Current repository state
 
-The native Windows application shell, profile management, Xray process runner, Windows Job Object supervision, remote catalog schema/cache, refresh coordinator, bounded HTTPS transport and privacy-conscious APK inventory are implemented. The inventory is metadata-only and rejects unsafe ZIP structures before reporting. Its current implementation hashes and inspects the archive through one open file descriptor, enforces a 2 GiB compressed-file ceiling, and checks for ordinary concurrent file mutation. The Connect button remains intentionally disabled because a verified Windows tunnel/TUN integration and authorized end-to-end server configuration are not yet available.
+The native Windows application shell, profile management, Xray process runner, Windows Job Object supervision, remote catalog schema/cache, refresh coordinator, bounded HTTPS transport and privacy-conscious APK inventory are implemented. The inventory hashes and inspects through one open file descriptor, enforces a 2 GiB compressed-input ceiling, and checks for ordinary concurrent mutation. An optional Android SDK-backed manifest inspection path now invokes `apkanalyzer` without a shell and emits only allowlisted metadata. The Connect button remains intentionally disabled because a verified Windows tunnel/TUN integration and authorized end-to-end server configuration are not yet available.
 
 ## Remote configuration
 
@@ -10,7 +10,7 @@ The Android app is believed to refresh server information and connection behavio
 
 ## Latest verification
 
-Workflow run #158 passed:
+Workflow run #160 passed:
 - Python unit tests
 - Windows portable build
 - Packaged-app smoke test
@@ -20,4 +20,4 @@ This verifies the desktop package starts in CI; it does not verify VPN connectiv
 
 ## Latest engineering change
 
-The APK inventory now reads the same opened file descriptor for SHA-256 and ZIP metadata inspection, reducing path-replacement/TOCTOU exposure. It verifies the opened object is a regular file, enforces a 2 GiB compressed-input limit, and compares file identity, size and timestamps before and after inspection. Tests cover single-open behavior, non-regular paths and size limits in addition to ZIP metadata defenses.
+Added `src/apnawin/services/apk_manifest.py` and `tools/inspect_apk_manifest.py`. When Android SDK `apkanalyzer` is installed, the CLI runs `apkanalyzer manifest print APK` with an argument list, no shell, and a 30-second timeout. The XML parser rejects DTD/entity declarations and emits only package/version-code/SDK levels, permission names, component metadata and VPN-binding services. Missing SDK tooling produces an explicit error; no endpoint, credential, raw XML or APK content is printed. Parser and subprocess behavior are covered by fixture-based tests; no real APNA APK has yet been analyzed.

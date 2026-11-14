@@ -1,30 +1,42 @@
-# APK analysis notes
+# Android APK manifest inspection
 
-## Evidence status
+## Metadata-only inventory
 
-This document is deliberately conservative. Earlier inspection notes reported the following package-level observations, but the original APK archive is not currently attached to this repository as a reproducible analysis artifact. Re-run and record commands and hashes before treating these as verified facts.
+Run the repository's inventory first to record the exact APK size and SHA-256:
 
-Reported preliminary observations:
-- Android package: com.apnatunnel.lite
-- Reported version code: 51
-- Reported minimum Android API: 24
-- Reported target Android API: 36
-- Reported class/service names included TunnelVpnService, Tun2Socks, OpenVPNClient, XRayDNSService, and SocksDNSService.
-- Reported native library names included libxray.so, libtun2socks.so, and libpdnsd.so.
+```powershell
+py -3 tools/inspect_apk.py .\\path\\to\\application.apk
+```
 
-These names suggest possible Xray, OpenVPN, tun2socks and DNS-related components, but names alone do not prove which protocols, configuration formats, server endpoints, or user-visible features are active.
+It never extracts or executes archive members. See [apk-inventory.md](apk-inventory.md)
+for ZIP safety limits and the fields that inventory does and does not establish.
 
-## Required reproducible inspection
+## Optional Android SDK manifest decoder
 
-When APK splits are available, record:
-- SHA-256 for every APK split.
-- Package/version metadata from aapt dump badging or apkanalyzer.
-- Manifest permissions, exported components and VPN service declarations.
-- Native library ABI and ELF dependencies.
-- Strings and resources relevant to profile formats and engine invocation.
-- Network endpoints only when present in the APK and legally appropriate to document; redact tokens and credentials.
-- Runtime behavior observed on a test device, clearly separated from static-analysis hypotheses.
+Install Android SDK Command-line Tools / APK Analyzer and make `apkanalyzer`
+available on `PATH`. Then run:
 
-## Windows implications
+```powershell
+py -3 tools/inspect_apk_manifest.py .\\path\\to\\application.apk
+```
 
-Android ARM64 .so libraries are not Windows DLLs and cannot be loaded directly by a native Windows application. A Windows port needs Windows-compatible engine binaries or a separately implemented equivalent. Compatibility with any proprietary service/backend remains unverified until a lawful test configuration is available.
+The command invokes the installed tool as an argument array
+(`apkanalyzer manifest print APK`), without a shell, with a 30-second timeout.
+If the tool is missing, the command fails clearly; it does not guess or download
+an executable. The tool's output is limited to 4 MiB and only selected fields
+are emitted: package name, numeric version code, whether a version name exists,
+min/target SDK, permission names, component type/name/exported/permission, and
+services declaring `android.permission.BIND_VPN_SERVICE`.
+
+The report deliberately omits version-name text, labels, intent-filter data,
+resource values, arbitrary strings, URLs, and raw XML. It does not verify APK
+signatures, establish runtime behavior, or discover APNA server endpoints.
+A service declaring the VPN binding permission is a manifest declaration, not
+proof that the VPN service works. Keep the APK SHA-256, SDK tool version, and
+exact command alongside any external evidence record.
+
+The decoder uses Python's XML parser only on textual XML emitted by the
+Android SDK tool. DTD/entity declarations are rejected. The APK itself is
+passed as an input to the local SDK tool and is not unpacked by ApnaWin.
+Treat APKs and SDK tools as untrusted software; use an isolated analysis
+environment for unknown samples.
