@@ -160,3 +160,20 @@ verified service-to-library linkage or runtime behavior.
 
 The parsing approach follows the Android NDK JNI guidance on dynamic lookup
 and `RegisterNatives`: [JNI tips](https://developer.android.com/ndk/guides/jni-tips).
+
+
+
+## Android ABI and ELF identity consistency
+
+For each readable native library under a recognized Android ABI directory, the
+combined report compares ELF class, machine number, and byte order with the
+ABI's expected identity: `armeabi-v7a` (ELF32/EM_ARM), `arm64-v8a`
+(ELF64/EM_AARCH64), `x86` (ELF32/EM_386), and `x86_64`
+(ELF64/EM_X86_64). Recognized Android ABIs are expected to use little-endian
+ELF. Per-library results are `compatible`, `mismatch`, `unknown_abi`, or
+`not_checked`; aggregate counts and the mismatch count are included.
+
+This checks only ELF header identity against the APK path's ABI label. A match
+does not prove Android loader acceptance, required shared libraries, CPU
+feature compatibility, JNI resolution, or runtime use. Unknown ABI labels and
+unreadable or skipped ELF files are not classified as compatible or mismatched.

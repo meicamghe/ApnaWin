@@ -12,6 +12,33 @@ _MAX_SECTION_HEADERS = 4096
 _MAX_DYNAMIC_SYMBOL_TABLE_BYTES = 16 * 1024 * 1024
 _MACHINE_NAMES = {3: "x86", 40: "arm", 62: "x86_64", 183: "aarch64", 243: "riscv"}
 
+# Expected ELF class and e_machine for Android ABI directory labels.
+_ANDROID_ABI_IDENTITY = {
+    "armeabi-v7a": (32, 40),
+    "arm64-v8a": (64, 183),
+    "x86": (32, 3),
+    "x86_64": (64, 62),
+}
+
+
+def _abi_compatibility(abi: str, elf: dict[str, Any]) -> dict[str, Any]:
+    """Compare ELF header identity with a known Android ABI, not loadability."""
+    expected = _ANDROID_ABI_IDENTITY.get(abi)
+    if not elf.get("elf_valid"):
+        return {"abi_compatible": None, "abi_compatibility_status": "not_checked"}
+    if expected is None:
+        return {"abi_compatible": None, "abi_compatibility_status": "unknown_abi"}
+    expected_class, expected_machine = expected
+    matches = (
+        elf.get("elf_class") == expected_class
+        and elf.get("machine") == expected_machine
+        and elf.get("endianness") == "little"
+    )
+    return {
+        "abi_compatible": matches,
+        "abi_compatibility_status": "compatible" if matches else "mismatch",
+    }
+
 
 def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
     """Read ELF identity and exported JNI symbol counts; never return symbol names."""
@@ -120,11 +147,11 @@ def inspect_apk_native_libraries(apk_path: str | Path, libraries: list[dict[str,
             size = item.get("file_size_bytes")
             base = {"abi": item["abi"], "library_name": item["library_name"]}
             if not isinstance(size, int) or size < 0 or size > _MAX_ELF_BYTES:
-                results.append({**base, "inspection_status": "skipped_size_limit"})
+                results.append({**base, "inspection_status": "skipped_size_limit", "abi_compatible": None, "abi_compatibility_status": "not_checked"})
                 skipped += 1
                 continue
             if total_bytes + size > _MAX_TOTAL_ELF_BYTES:
-                results.append({**base, "inspection_status": "skipped_total_size_limit"})
+                results.append({**base, "inspection_status": "skipped_total_size_limit", "abi_compatible": None, "abi_compatibility_status": "not_checked"})
                 skipped += 1
                 continue
             try:
@@ -133,13 +160,19 @@ def inspect_apk_native_libraries(apk_path: str | Path, libraries: list[dict[str,
                 if len(data) > _MAX_ELF_BYTES or len(data) != size:
                     raise ValueError("native library size does not match bounded metadata")
                 total_bytes += len(data)
-                results.append({**base, **inspect_elf_bytes(data)})
+                parsed = inspect_elf_bytes(data)
+                results.append({**base, **parsed, **_abi_compatibility(item["abi"], parsed)})
             except (KeyError, OSError, RuntimeError, ValueError, zipfile.BadZipFile):
-                results.append({**base, "inspection_status": "invalid_or_unreadable"})
+                results.append({**base, "inspection_status": "invalid_or_unreadable", "abi_compatible": None, "abi_compatibility_status": "not_checked"})
                 skipped += 1
     return {
         "libraries": results,
         "libraries_inspected": sum(item.get("inspection_status") in ("complete", "no_dynamic_symbol_table") for item in results),
+        "abi_compatibility_counts": {
+            status: sum(item.get("abi_compatibility_status") == status for item in results)
+            for status in ("compatible", "mismatch", "unknown_abi", "not_checked")
+        },
+        "abi_mismatch_count": sum(item.get("abi_compatibility_status") == "mismatch" for item in results),
         "jni_exported_library_count": sum((item.get("jni_exported_symbol_count") or 0) > 0 for item in results),
         "jni_onload_library_count": sum(item.get("jni_onload_exported") is True for item in results),
         "skipped_library_count": skipped,

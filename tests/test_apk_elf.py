@@ -123,3 +123,60 @@ def test_inspect_elf_bytes_rejects_non_string_dynamic_symbol_link():
     struct.pack_into("<I", data, dynsym_header + 40, 2)
     with pytest.raises(ValueError, match="invalid section type"):
         inspect_elf_bytes(bytes(data))
+
+
+
+@pytest.mark.parametrize(
+    ("abi", "elf_class", "machine"),
+    [("armeabi-v7a", 32, 40), ("arm64-v8a", 64, 183),
+     ("x86", 32, 3), ("x86_64", 64, 62)],
+)
+def test_android_abi_mapping_checks_class_machine_and_endianness(abi, elf_class, machine):
+    from apnawin.services.apk_elf import _abi_compatibility
+
+    parsed = {"elf_valid": True, "elf_class": elf_class, "machine": machine, "endianness": "little"}
+    assert _abi_compatibility(abi, parsed) == {
+        "abi_compatible": True, "abi_compatibility_status": "compatible"
+    }
+
+
+def test_android_abi_mapping_rejects_wrong_identity_and_big_endian():
+    from apnawin.services.apk_elf import _abi_compatibility
+
+    assert _abi_compatibility("arm64-v8a", {
+        "elf_valid": True, "elf_class": 32, "machine": 40, "endianness": "little"
+    })["abi_compatibility_status"] == "mismatch"
+    assert _abi_compatibility("arm64-v8a", {
+        "elf_valid": True, "elf_class": 64, "machine": 183, "endianness": "big"
+    })["abi_compatibility_status"] == "mismatch"
+
+
+def test_android_abi_mapping_keeps_unknown_and_invalid_unclassified():
+    from apnawin.services.apk_elf import _abi_compatibility
+
+    assert _abi_compatibility("vendor-abi", {
+        "elf_valid": True, "elf_class": 64, "machine": 183, "endianness": "little"
+    }) == {"abi_compatible": None, "abi_compatibility_status": "unknown_abi"}
+    assert _abi_compatibility("arm64-v8a", {"elf_valid": False}) == {
+        "abi_compatible": None, "abi_compatibility_status": "not_checked"
+    }
+
+
+def test_native_library_report_includes_abi_compatibility_counts(tmp_path):
+    apk = tmp_path / "abi.apk"
+    payload = _elf64_with_jni_exports()
+    with zipfile.ZipFile(apk, "w") as archive:
+        archive.writestr("lib/arm64-v8a/libgood.so", payload)
+        archive.writestr("lib/x86_64/libwrong.so", payload)
+        archive.writestr("lib/vendor-abi/libunknown.so", payload)
+        archive.writestr("lib/arm64-v8a/libbroken.so", b"not ELF")
+    result = inspect_apk_native_libraries(apk, [
+        {"abi": "arm64-v8a", "library_name": "libgood.so", "file_size_bytes": len(payload)},
+        {"abi": "x86_64", "library_name": "libwrong.so", "file_size_bytes": len(payload)},
+        {"abi": "vendor-abi", "library_name": "libunknown.so", "file_size_bytes": len(payload)},
+        {"abi": "arm64-v8a", "library_name": "libbroken.so", "file_size_bytes": 7},
+    ])
+    assert result["abi_compatibility_counts"] == {
+        "compatible": 1, "mismatch": 1, "unknown_abi": 1, "not_checked": 1
+    }
+    assert result["abi_mismatch_count"] == 1
