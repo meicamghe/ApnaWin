@@ -17,7 +17,7 @@ The repository contains:
 - Local JSON persistence for non-secret profile metadata.
 - Transport-neutral profile model and tunnel-engine contract.
 - Test-only mock engine that performs no network operations.
-- Xray process runner with config validation, SOCKS diagnostics and process supervision.
+- Xray process runner with strict config validation (duplicate JSON keys and non-finite constants rejected), SOCKS diagnostics and process supervision.
 - Windows Job Object process-tree containment integrated into the Xray runner.
 - Windows GitHub Actions tests and a PyInstaller portable-folder build workflow.
 
@@ -58,10 +58,11 @@ The Xray runner's exact limitations are documented in \`docs/xray-process-runner
 3. Continue strict domain validation for profile names, transport values, endpoint hosts and ports, including Unicode control characters; preserve valid schema-v1 profile compatibility.
 4. Verify strict JSON persistence: unique same-directory atomic temp files, duplicate JSON key and duplicate profile rejection, fsync/replace failure handling, and compatibility with existing schema-v1 files. See `docs/profile-storage.md`.
 5. Maintain UI workflow tests for add/edit/select/remove, duplicate handling, removal cancellation, persistence failures and metadata-only storage; these passed in run #110.
-6. Test the Xray process runner on Windows 10/11 with fake-process tests and then a separately installed, pinned binary plus an authorized test config.
-7. Verify an application-level request through the authorized test endpoint; a SOCKS greeting alone is insufficient.
-8. Design the production tunnel adapter only after configuration/protocol and engine licensing are established.
-9. Keep Connect disabled until the production adapter passes end-to-end tests and reliable cleanup/rollback.
+6. Keep Xray config parsing strict: reject duplicate JSON keys and non-finite constants before process execution; cover nested duplicate keys and malformed roots in tests.
+7. Test the Xray process runner on Windows 10/11 with fake-process tests and then a separately installed, pinned binary plus an authorized test config.
+8. Verify an application-level request through the authorized test endpoint; a SOCKS greeting alone is insufficient.
+9. Design the production tunnel adapter only after configuration/protocol and engine licensing are established.
+10. Keep Connect disabled until the production adapter passes end-to-end tests and reliable cleanup/rollback.
 
 ## CI reporting rule
 
