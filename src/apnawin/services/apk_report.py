@@ -1,8 +1,10 @@
 """Build a privacy-conscious combined APK analysis report."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from apnawin.services.apk_dex import inspect_apk_dex
 from apnawin.services.apk_inventory import inspect_apk
@@ -21,13 +23,37 @@ _NATIVE_ENGINE_MARKERS = {
 }
 
 
+def _name_tokens(library_name: str) -> tuple[str, ...]:
+    """Split a native basename into conservative alphanumeric name tokens."""
+    stem = library_name.lower()
+    if stem.startswith("lib"):
+        stem = stem[3:]
+    if stem.endswith(".so"):
+        stem = stem[:-3]
+    return tuple(token for token in re.split(r"[-_.]+", stem) if token)
+
+
+def _marker_matches(tokens: tuple[str, ...], marker: str) -> bool:
+    expected = tuple(part for part in re.split(r"[-_.]+", marker.lower()) if part)
+    if not expected or len(tokens) < len(expected):
+        return False
+    for actual, wanted in zip(tokens, expected):
+        if actual == wanted:
+            continue
+        # Android libraries commonly append an ABI/API variant number, e.g. socks5.
+        if wanted == "socks" and actual.startswith("socks") and actual[5:].isdigit():
+            continue
+        return False
+    return True
+
+
 def _native_engine_candidates(libraries: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return filename-only heuristic leads; names never prove runtime behavior."""
+    """Return token-boundary filename leads; names never prove runtime behavior."""
     candidates = []
     for item in libraries:
-        normalized = item["library_name"].lower().replace("_", "-")
+        tokens = _name_tokens(item["library_name"])
         for engine, markers in _NATIVE_ENGINE_MARKERS.items():
-            if any(marker in normalized for marker in markers):
+            if any(_marker_matches(tokens, marker) for marker in markers):
                 candidates.append({
                     "abi": item["abi"],
                     "library_name": item["library_name"],
@@ -55,6 +81,12 @@ def inspect_apk_report(
     )
     if inventory["dex_file_count"] != dex["dex_file_count"]:
         raise ValueError("APK inventory and Android SDK disagree on DEX file count")
+
+    abi_library_counts: dict[str, int] = {}
+    for library in inventory["native_libraries"]:
+        abi = library["abi"]
+        abi_library_counts[abi] = abi_library_counts.get(abi, 0) + 1
+
     return {
         "format": "apnawin-apk-analysis-v1",
         "sha256": inventory["sha256"],
@@ -64,6 +96,7 @@ def inspect_apk_report(
         "dex": dex,
         "native": {
             "library_count": len(inventory["native_libraries"]),
+            "abi_library_counts": dict(sorted(abi_library_counts.items())),
             "libraries": inventory["native_libraries"],
             "engine_candidates": _native_engine_candidates(
                 inventory["native_libraries"]
