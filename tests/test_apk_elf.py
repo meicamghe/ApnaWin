@@ -118,7 +118,7 @@ def test_inspect_elf_bytes_rejects_out_of_bounds_file_backed_section():
     section_offset = struct.unpack_from("<Q", data, 40)[0]
     shstr_header = section_offset + 3 * 64
     struct.pack_into("<Q", data, shstr_header + 24, 0xFFFFFFFF)
-    with pytest.raises(ValueError, match="section data is out of bounds"):
+    with pytest.raises(ValueError, match="section-name string table is out of bounds"):
         inspect_elf_bytes(bytes(data))
 
 
@@ -126,6 +126,7 @@ def test_inspect_elf_bytes_allows_nobits_section_without_file_payload():
     data = bytearray(_elf64_with_jni_exports())
     section_offset = struct.unpack_from("<Q", data, 40)[0]
     shstr_header = section_offset + 3 * 64
+    struct.pack_into("<H", data, 50, 0)  # SHN_UNDEF; section 3 is no longer the name table
     struct.pack_into("<I", data, shstr_header + 4, 8)  # SHT_NOBITS
     struct.pack_into("<Q", data, shstr_header + 24, len(data) + 4096)
     struct.pack_into("<Q", data, shstr_header + 32, 8192)
@@ -447,26 +448,17 @@ def _elf_with_relocation_section(payload, elf_class):
     data = bytearray(payload)
     if elf_class == 64:
         section_offset = struct.unpack_from("<Q", data, 40)[0]
-        header_offset = section_offset + 3 * 64
-        struct.pack_into("<I", data, header_offset + 4, 4)  # SHT_RELA
-        struct.pack_into("<Q", data, header_offset + 24, 64)
-        struct.pack_into("<Q", data, header_offset + 32, 24)
-        struct.pack_into("<I", data, header_offset + 40, 2)
-        struct.pack_into("<I", data, header_offset + 44, 1)
-        struct.pack_into("<Q", data, header_offset + 48, 8)
-        struct.pack_into("<Q", data, header_offset + 56, 24)
+        header_offset = section_offset + 4 * 64
+        data.extend(bytes(64))
+        struct.pack_into("<H", data, 60, 5)
+        struct.pack_into("<IIQQQQIIQQ", data, header_offset, 0, 4, 0, 0, 64, 24, 2, 1, 8, 24)
     else:
         section_offset = struct.unpack_from("<I", data, 32)[0]
-        header_offset = section_offset + 3 * 40
-        struct.pack_into("<I", data, header_offset + 4, 4)  # SHT_RELA
-        struct.pack_into("<I", data, header_offset + 16, 52)
-        struct.pack_into("<I", data, header_offset + 20, 12)
-        struct.pack_into("<I", data, header_offset + 24, 2)
-        struct.pack_into("<I", data, header_offset + 28, 1)
-        struct.pack_into("<I", data, header_offset + 32, 4)
-        struct.pack_into("<I", data, header_offset + 36, 12)
+        header_offset = section_offset + 4 * 40
+        data.extend(bytes(40))
+        struct.pack_into("<H", data, 48, 5)
+        struct.pack_into("<IIIIIIIIII", data, header_offset, 0, 4, 0, 0, 52, 12, 2, 1, 4, 12)
     return data, header_offset
-
 
 @pytest.mark.parametrize(
     ("elf_class", "payload"),
