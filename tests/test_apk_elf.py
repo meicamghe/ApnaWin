@@ -1,6 +1,7 @@
 import struct
+import zipfile
 import pytest
-from apnawin.services.apk_elf import inspect_elf_bytes
+from apnawin.services.apk_elf import inspect_elf_bytes, inspect_apk_native_libraries
 
 
 def _elf64_with_jni_exports():
@@ -71,3 +72,36 @@ def test_inspect_elf_bytes_rejects_out_of_bounds_section_table():
     )
     with pytest.raises(ValueError, match="out of bounds"):
         inspect_elf_bytes(header)
+
+
+
+def test_inspect_apk_native_libraries_reads_only_bounded_metadata(tmp_path):
+    apk = tmp_path / "native.apk"
+    payload = _elf64_with_jni_exports()
+    with zipfile.ZipFile(apk, "w") as archive:
+        archive.writestr("lib/arm64-v8a/libengine.so", payload)
+    result = inspect_apk_native_libraries(
+        apk,
+        [{"abi": "arm64-v8a", "library_name": "libengine.so", "file_size_bytes": len(payload)}],
+    )
+    assert result["libraries_inspected"] == 1
+    assert result["jni_exported_library_count"] == 1
+    assert result["jni_onload_library_count"] == 1
+    assert result["bytes_read_in_memory"] == len(payload)
+    assert result["archive_members_written"] is False
+    assert result["native_code_executed"] is False
+    assert result["raw_symbol_names_included"] is False
+
+
+def test_inspect_apk_native_libraries_marks_non_elf_as_unreadable(tmp_path):
+    apk = tmp_path / "not-elf.apk"
+    with zipfile.ZipFile(apk, "w") as archive:
+        archive.writestr("lib/arm64-v8a/libfake.so", b"not an ELF")
+    result = inspect_apk_native_libraries(
+        apk,
+        [{"abi": "arm64-v8a", "library_name": "libfake.so", "file_size_bytes": 10}],
+    )
+    assert result["libraries"][0]["inspection_status"] == "invalid_or_unreadable"
+    assert result["libraries_inspected"] == 0
+    assert result["skipped_library_count"] == 1
+    assert result["jni_exported_library_count"] == 0
