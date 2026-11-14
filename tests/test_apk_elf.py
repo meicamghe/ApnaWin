@@ -116,23 +116,21 @@ def test_inspect_elf_bytes_rejects_out_of_bounds_section_table():
 def test_inspect_elf_bytes_rejects_out_of_bounds_file_backed_section():
     data = bytearray(_elf64_with_jni_exports())
     section_offset = struct.unpack_from("<Q", data, 40)[0]
-    shstr_header = section_offset + 3 * 64
-    struct.pack_into("<Q", data, shstr_header + 24, 0xFFFFFFFF)
-    with pytest.raises(ValueError, match="section-name string table is out of bounds"):
+    header_offset = section_offset + 4 * 64
+    data.extend(bytes(64))
+    struct.pack_into("<H", data, 60, 5)
+    struct.pack_into("<IIQQQQIIQQ", data, header_offset, 0, 1, 0, 0, 0xFFFFFFFF, 8, 0, 0, 1, 0)
+    with pytest.raises(ValueError, match="section data is out of bounds"):
         inspect_elf_bytes(bytes(data))
-
 
 def test_inspect_elf_bytes_allows_nobits_section_without_file_payload():
     data = bytearray(_elf64_with_jni_exports())
     section_offset = struct.unpack_from("<Q", data, 40)[0]
-    shstr_header = section_offset + 3 * 64
-    struct.pack_into("<H", data, 50, 0)  # SHN_UNDEF; section 3 is no longer the name table
-    struct.pack_into("<I", data, shstr_header + 4, 8)  # SHT_NOBITS
-    struct.pack_into("<Q", data, shstr_header + 24, len(data) + 4096)
-    struct.pack_into("<Q", data, shstr_header + 32, 8192)
+    header_offset = section_offset + 4 * 64
+    data.extend(bytes(64))
+    struct.pack_into("<H", data, 60, 5)
+    struct.pack_into("<IIQQQQIIQQ", data, header_offset, 0, 8, 0, 0, len(data) + 4096, 8192, 0, 0, 1, 0)
     assert inspect_elf_bytes(bytes(data))["inspection_status"] == "complete"
-
-
 
 def test_inspect_apk_native_libraries_reads_only_bounded_metadata(tmp_path):
     apk = tmp_path / "native.apk"
@@ -517,21 +515,21 @@ def test_inspect_elf_bytes_rejects_malformed_relocation_metadata(
 def test_inspect_elf32_bytes_rejects_out_of_bounds_file_backed_section():
     data = bytearray(_elf32_with_jni_exports())
     section_offset = struct.unpack_from("<I", data, 32)[0]
-    shstr_header = section_offset + 3 * 40
-    struct.pack_into("<I", data, shstr_header + 16, 0xFFFFFFFF)
+    header_offset = section_offset + 4 * 40
+    data.extend(bytes(40))
+    struct.pack_into("<H", data, 48, 5)
+    struct.pack_into("<IIIIIIIIII", data, header_offset, 0, 1, 0, 0, 0xFFFFFFFF, 8, 0, 0, 1, 0)
     with pytest.raises(ValueError, match="section data is out of bounds"):
         inspect_elf_bytes(bytes(data))
-
 
 def test_inspect_elf32_bytes_allows_nobits_section_without_file_payload():
     data = bytearray(_elf32_with_jni_exports())
     section_offset = struct.unpack_from("<I", data, 32)[0]
-    shstr_header = section_offset + 3 * 40
-    struct.pack_into("<I", data, shstr_header + 4, 8)  # SHT_NOBITS
-    struct.pack_into("<I", data, shstr_header + 16, len(data) + 4096)
-    struct.pack_into("<I", data, shstr_header + 20, 8192)
+    header_offset = section_offset + 4 * 40
+    data.extend(bytes(40))
+    struct.pack_into("<H", data, 48, 5)
+    struct.pack_into("<IIIIIIIIII", data, header_offset, 0, 8, 0, 0, len(data) + 4096, 8192, 0, 0, 1, 0)
     assert inspect_elf_bytes(bytes(data))["inspection_status"] == "complete"
-
 
 @pytest.mark.parametrize(
     ("payload", "index_offset", "bad_index"),
