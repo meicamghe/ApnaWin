@@ -203,7 +203,7 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             symbol_count = symbol_table[5] // symbol_entry_size
             if signature_index == 0 or signature_index >= symbol_count:
                 raise ValueError("ELF section group signature symbol index is invalid")
-            if entry_size != 4 or group_size < 4 or group_size % 4:
+            if entry_size != 4 or group_size < 8 or group_size % 4:
                 raise ValueError("ELF section group entry metadata is invalid")
             if group_offset > len(data) or group_size > len(data) - group_offset:
                 raise ValueError("ELF section group data is out of bounds")
