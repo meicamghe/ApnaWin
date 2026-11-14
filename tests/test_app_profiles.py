@@ -275,3 +275,41 @@ def test_remove_confirmation_escapes_profile_name_html(tmp_path, qapp, monkeypat
     assert "&lt;img" in captured[0]
     assert hostile_name not in captured[0]
     window.close()
+
+
+def test_corrupt_profile_file_disables_editing_and_preserves_original(tmp_path, qapp, monkeypatch):
+    import apnawin.app as app_module
+
+    path = tmp_path / "profiles.json"
+    original_bytes = b'{"format_version": 1, "profiles": ['
+    path.write_bytes(original_bytes)
+    monkeypatch.setattr(app_module.QMessageBox, "warning", lambda *_args, **_kwargs: None)
+    window = MainWindow(profiles_path=path)
+
+    assert window.profile_storage_writable is False
+    assert window.add_button.isEnabled() is False
+    assert window.edit_button.isEnabled() is False
+    assert window.remove_button.isEnabled() is False
+    assert "storage is unavailable" in window.status_label.text().lower()
+    assert window._save_profiles([]) is False
+    assert path.read_bytes() == original_bytes
+    window.close()
+
+
+def test_unreadable_profile_file_disables_editing(tmp_path, qapp, monkeypatch):
+    import apnawin.app as app_module
+
+    path = tmp_path / "profiles.json"
+    path.write_text('{"format_version": 1, "profiles": []}', encoding="utf-8")
+    monkeypatch.setattr(
+        app_module,
+        "load_profiles",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(PermissionError("access denied")),
+    )
+    monkeypatch.setattr(app_module.QMessageBox, "warning", lambda *_args, **_kwargs: None)
+    window = MainWindow(profiles_path=path)
+
+    assert window.profile_storage_writable is False
+    assert window.add_button.isEnabled() is False
+    assert window._save_profiles([]) is False
+    window.close()

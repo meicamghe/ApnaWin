@@ -42,6 +42,15 @@ record fields, unsupported or incorrectly typed format versions, invalid
 profile values, and duplicate names. It does not silently migrate unknown
 schema versions.
 
+If the profile file is missing on first launch, the application treats this as
+an empty profile collection and allows a new file to be created. If an existing
+file cannot be read or validated, the application enters a protected
+read-only state: Add, Edit and Remove are disabled, and save attempts are
+refused. This prevents a later profile action from silently replacing the
+unreadable/corrupt original with an empty or partial collection. The user must
+recover or intentionally move the file outside the application before normal
+editing can resume.
+
 ## Security boundary
 
 This file is metadata storage, not a credential vault. It stores only profile

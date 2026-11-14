@@ -99,6 +99,7 @@ class MainWindow(QMainWindow):
         self.resize(760, 520)
         self.profiles_path = profiles_path or profile_file_path()
         self.profiles: list[ConnectionProfile] = []
+        self.profile_storage_writable = True
 
         heading = QLabel("ApnaWin")
         heading.setObjectName("heading")
@@ -113,8 +114,8 @@ class MainWindow(QMainWindow):
         self.profile_details.setTextFormat(Qt.TextFormat.PlainText)
         self.profile_details.setWordWrap(True)
 
-        add_button = QPushButton("Add")
-        add_button.clicked.connect(self._add_profile)
+        self.add_button = QPushButton("Add")
+        self.add_button.clicked.connect(self._add_profile)
         self.edit_button = QPushButton("Edit")
         self.edit_button.clicked.connect(self._edit_profile)
         self.remove_button = QPushButton("Remove")
@@ -123,7 +124,7 @@ class MainWindow(QMainWindow):
         self.remove_button.setEnabled(False)
 
         profile_actions = QHBoxLayout()
-        profile_actions.addWidget(add_button)
+        profile_actions.addWidget(self.add_button)
         profile_actions.addWidget(self.edit_button)
         profile_actions.addWidget(self.remove_button)
         profile_actions.addStretch(1)
@@ -153,17 +154,26 @@ class MainWindow(QMainWindow):
         try:
             self.profiles = load_profiles(self.profiles_path)
         except FileNotFoundError:
+            # A first launch has no profile file yet; creating it is safe.
             self.profiles = []
         except (OSError, ValueError) as exc:
+            self.profile_storage_writable = False
+            self.add_button.setEnabled(False)
+            self.status_label.setText(
+                "Profile storage is unavailable — editing is disabled to protect existing data."
+            )
             QMessageBox.warning(
                 self,
                 "Could not load profiles",
-                f"Profiles were not loaded. The file was left unchanged.\n\n{exc}",
+                "Profiles were not loaded. The file was left unchanged. "
+                "Profile editing is disabled until the file is recovered.\n\n"
+                f"{exc}",
             )
-            self.profiles = []
         self._refresh_profiles()
 
     def _save_profiles(self, updated: list[ConnectionProfile]) -> bool:
+        if not self.profile_storage_writable:
+            return False
         try:
             save_profiles(self.profiles_path, updated)
         except (OSError, TypeError, ValueError) as exc:
@@ -185,8 +195,9 @@ class MainWindow(QMainWindow):
 
     def _show_selected_profile(self, row: int) -> None:
         selected = 0 <= row < len(self.profiles)
-        self.edit_button.setEnabled(selected)
-        self.remove_button.setEnabled(selected)
+        editable = selected and self.profile_storage_writable
+        self.edit_button.setEnabled(editable)
+        self.remove_button.setEnabled(editable)
         if not selected:
             self.profile_details.setText("No profile selected.")
             return
@@ -197,6 +208,8 @@ class MainWindow(QMainWindow):
         )
 
     def _add_profile(self) -> None:
+        if not self.profile_storage_writable:
+            return
         dialog = ProfileDialog(self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
@@ -209,6 +222,8 @@ class MainWindow(QMainWindow):
             self._refresh_profiles(len(updated) - 1)
 
     def _edit_profile(self) -> None:
+        if not self.profile_storage_writable:
+            return
         row = self.profile_list.currentRow()
         if not 0 <= row < len(self.profiles):
             return
@@ -228,6 +243,8 @@ class MainWindow(QMainWindow):
             self._refresh_profiles(row)
 
     def _remove_profile(self) -> None:
+        if not self.profile_storage_writable:
+            return
         row = self.profile_list.currentRow()
         if not 0 <= row < len(self.profiles):
             return
