@@ -88,3 +88,13 @@ The workflow uses per-ref concurrency cancellation so superseded commits do not 
 ## Historical caveat
 
 Prior chats may include individual commands, build outputs, CI failures and user test observations that are not all represented here. This handoff records the durable information currently recoverable; it is not a complete transcript archive. Reconcile any new user observation with the implementation and tests before treating them as a product guarantee.
+
+
+## Profile import/export milestone
+
+The desktop UI now supports exporting all loaded profile metadata to a
+user-selected JSON file and importing validated profiles as a batch. Imports
+append without overwriting existing entries and fail atomically on any
+case-insensitive name collision. The existing bounded JSON loader/writer is
+reused, so import/export does not introduce a second parsing or serialization
+path. Credentials and private keys remain outside the profile format.

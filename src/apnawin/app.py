@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -120,6 +121,10 @@ class MainWindow(QMainWindow):
         self.edit_button.clicked.connect(self._edit_profile)
         self.remove_button = QPushButton("Remove")
         self.remove_button.clicked.connect(self._remove_profile)
+        self.import_button = QPushButton("Import…")
+        self.import_button.clicked.connect(self._import_profiles)
+        self.export_button = QPushButton("Export…")
+        self.export_button.clicked.connect(self._export_profiles)
         self.edit_button.setEnabled(False)
         self.remove_button.setEnabled(False)
 
@@ -127,6 +132,8 @@ class MainWindow(QMainWindow):
         profile_actions.addWidget(self.add_button)
         profile_actions.addWidget(self.edit_button)
         profile_actions.addWidget(self.remove_button)
+        profile_actions.addWidget(self.import_button)
+        profile_actions.addWidget(self.export_button)
         profile_actions.addStretch(1)
 
         self.connect_button = QPushButton("Connect")
@@ -159,6 +166,7 @@ class MainWindow(QMainWindow):
         except (OSError, ValueError) as exc:
             self.profile_storage_writable = False
             self.add_button.setEnabled(False)
+            self.import_button.setEnabled(False)
             self.status_label.setText(
                 "Profile storage is unavailable — editing is disabled to protect existing data."
             )
@@ -192,6 +200,7 @@ class MainWindow(QMainWindow):
             self.profile_list.setCurrentRow(row)
         self.profile_list.blockSignals(False)
         self._show_selected_profile(self.profile_list.currentRow())
+        self.export_button.setEnabled(bool(self.profiles))
 
     def _show_selected_profile(self, row: int) -> None:
         selected = 0 <= row < len(self.profiles)
@@ -241,6 +250,66 @@ class MainWindow(QMainWindow):
         updated[row] = profile
         if self._save_profiles(updated):
             self._refresh_profiles(row)
+
+    def _import_profiles(self) -> None:
+        """Import validated metadata profiles, rejecting name collisions as a batch."""
+        if not self.profile_storage_writable:
+            return
+        filename, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Import profiles",
+            "",
+            "ApnaWin profile files (*.json);;JSON files (*.json);;All files (*)",
+        )
+        if not filename:
+            return
+        try:
+            imported = load_profiles(filename)
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "Import failed", f"Profiles were not imported.\\n\\n{exc}")
+            return
+
+        existing_names = {profile.name.casefold() for profile in self.profiles}
+        collisions = [
+            profile.name for profile in imported if profile.name.casefold() in existing_names
+        ]
+        if collisions:
+            preview = ", ".join(collisions[:5])
+            if len(collisions) > 5:
+                preview += f", and {len(collisions) - 5} more"
+            QMessageBox.warning(
+                self,
+                "Import conflict",
+                "Import was cancelled because these profile names already exist: " + preview,
+            )
+            return
+
+        if not imported:
+            QMessageBox.information(self, "Import profiles", "The selected file contains no profiles.")
+            return
+        updated = [*self.profiles, *imported]
+        if self._save_profiles(updated):
+            self._refresh_profiles(len(updated) - 1)
+            self.status_label.setText(f"Imported {len(imported)} profile(s).")
+
+    def _export_profiles(self) -> None:
+        """Export all currently loaded non-secret profile metadata."""
+        if not self.profiles:
+            return
+        filename, _selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Export profiles",
+            "apnawin-profiles.json",
+            "ApnaWin profile files (*.json);;JSON files (*.json)",
+        )
+        if not filename:
+            return
+        try:
+            save_profiles(filename, self.profiles)
+        except (OSError, TypeError, ValueError) as exc:
+            QMessageBox.critical(self, "Export failed", str(exc))
+            return
+        self.status_label.setText(f"Exported {len(self.profiles)} profile(s).")
 
     def _remove_profile(self) -> None:
         if not self.profile_storage_writable:

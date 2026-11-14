@@ -313,3 +313,81 @@ def test_unreadable_profile_file_disables_editing(tmp_path, qapp, monkeypatch):
     assert window.add_button.isEnabled() is False
     assert window._save_profiles([]) is False
     window.close()
+
+
+
+def test_import_profiles_merges_valid_profiles_and_persists(tmp_path, qapp, monkeypatch):
+    import apnawin.app as app_module
+
+    existing = ConnectionProfile("Existing", Transport.SOCKS, "localhost", 1080)
+    incoming = ConnectionProfile("Imported", Transport.XRAY, "vpn.example.test", 443)
+    source = tmp_path / "incoming.json"
+    destination = tmp_path / "profiles.json"
+    save_profiles(source, [incoming])
+    save_profiles(destination, [existing])
+    monkeypatch.setattr(
+        app_module.QFileDialog,
+        "getOpenFileName",
+        lambda *_args, **_kwargs: (str(source), "JSON"),
+    )
+    window = MainWindow(profiles_path=destination)
+
+    window._import_profiles()
+
+    assert window.profiles == [existing, incoming]
+    assert load_profiles(destination) == [existing, incoming]
+    assert window.profile_list.count() == 2
+    assert window.profile_list.currentRow() == 1
+    window.close()
+
+
+def test_import_profiles_rejects_name_collision_without_overwrite(tmp_path, qapp, monkeypatch):
+    import apnawin.app as app_module
+
+    existing = ConnectionProfile("Office", Transport.SOCKS, "localhost", 1080)
+    conflicting = ConnectionProfile("office", Transport.XRAY, "vpn.example.test", 443)
+    source = tmp_path / "incoming.json"
+    destination = tmp_path / "profiles.json"
+    save_profiles(source, [conflicting])
+    save_profiles(destination, [existing])
+    original = destination.read_bytes()
+    warnings = []
+    monkeypatch.setattr(
+        app_module.QFileDialog,
+        "getOpenFileName",
+        lambda *_args, **_kwargs: (str(source), "JSON"),
+    )
+    monkeypatch.setattr(
+        app_module.QMessageBox,
+        "warning",
+        lambda *_args, **_kwargs: warnings.append(True),
+    )
+    window = MainWindow(profiles_path=destination)
+
+    window._import_profiles()
+
+    assert window.profiles == [existing]
+    assert destination.read_bytes() == original
+    assert warnings
+    window.close()
+
+
+def test_export_profiles_writes_non_secret_profile_file(tmp_path, qapp, monkeypatch):
+    import apnawin.app as app_module
+
+    profile = ConnectionProfile("Office", Transport.XRAY, "vpn.example.test", 443)
+    destination = tmp_path / "exported.json"
+    monkeypatch.setattr(
+        app_module.QFileDialog,
+        "getSaveFileName",
+        lambda *_args, **_kwargs: (str(destination), "JSON"),
+    )
+    window = MainWindow(profiles_path=tmp_path / "profiles.json")
+    window.profiles = [profile]
+    window._refresh_profiles(0)
+
+    window._export_profiles()
+
+    assert load_profiles(destination) == [profile]
+    assert window.export_button.isEnabled()
+    window.close()

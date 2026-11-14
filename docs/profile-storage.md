@@ -63,3 +63,19 @@ The endpoint host and port alone do not define an Xray/OpenVPN configuration
 and do not prove that a server is compatible. The UI's Connect action remains
 disabled until a real engine, secure credential handling where required,
 TUN/routes/DNS lifecycle, rollback and authorized end-to-end tests are complete.
+
+
+## Import and export
+
+The profile list can be exported to a user-selected JSON file and imported from
+a previously exported file. Import validates the complete file with the same
+size, UTF-8, schema, duplicate-key and profile-model checks used by normal
+storage. Imported profiles are appended as one batch; if any imported name
+collides case-insensitively with an existing profile, the entire import is
+rejected without changing the current file. Empty imports are a no-op.
+
+Exports contain only the four metadata fields in schema version 1. They never
+include credentials, tokens, private keys or subscription secrets. Treat an
+exported file as configuration metadata, not as a secret backup. The export
+destination is chosen by the user; protect the file according to the sensitivity
+of its server addresses and profile names.
