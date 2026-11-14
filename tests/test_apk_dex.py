@@ -117,3 +117,30 @@ def test_manifest_service_join_does_not_claim_missing_class():
     output = "C d 1 1 20 com.example.Other\\n"
     _, _, defined = apk_dex._parse_defined_class_details(output)
     assert "com.example.TunnelService" not in defined
+
+
+def test_no_dex_report_still_includes_manifest_service_join(tmp_path, monkeypatch):
+    apk = tmp_path / "empty-dex.apk"
+    apk.write_bytes(b"placeholder")
+    outputs = iter([b""])
+    monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
+
+    class Completed:
+        returncode = 0
+        stderr = b""
+
+    def fake_run(*args, **kwargs):
+        result = Completed()
+        result.stdout = next(outputs)
+        return result
+
+    monkeypatch.setattr(apk_dex.subprocess, "run", fake_run)
+    report = apk_dex.inspect_apk_dex(
+        apk, manifest_services=[".TunnelService"], package_name="com.example"
+    )
+    assert report["dex_file_count"] == 0
+    assert report["manifest_service_classes"] == [{
+        "manifest_name": ".TunnelService",
+        "resolved_class_name": "com.example.TunnelService",
+        "defined_in_dex": False,
+    }]

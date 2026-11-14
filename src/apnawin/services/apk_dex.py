@@ -156,6 +156,14 @@ def inspect_apk_dex(
             "defined_class_count": 0,
             "method_references": {},
             "candidate_classes": [],
+            "manifest_service_classes": [
+                {
+                    "manifest_name": service,
+                    "resolved_class_name": _resolve_manifest_class(service, package_name),
+                    "defined_in_dex": False,
+                }
+                for service in (manifest_services or [])
+            ],
             "source": "apkanalyzer",
             "raw_dex_output_included": False,
         }
