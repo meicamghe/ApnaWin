@@ -1,23 +1,24 @@
 
 
-### Local last-known-good cache (implemented foundation)
+### Refresh coordinator (implemented, provider-neutral)
 
-`src/apnawin/storage/remote_catalog_store.py` adds an atomic local cache for
-the normalized, non-secret catalog document. A candidate document is fully
-parsed and validated before any filesystem mutation; successful writes use a
-unique same-directory temporary file, flush/fsync and atomic replacement.
-Malformed, oversized or invalid-UTF-8 updates therefore cannot overwrite the
-previous cache. Existing cache files are size-bounded and revalidated on load.
+src/apnawin/services/remote_refresh.py defines an injectable
+RemoteConfigProvider contract and a thread-safe
+RemoteCatalogRefreshCoordinator. It serializes concurrent refresh calls
+(single-flight), validates and persists provider output through
+RemoteCatalogStore, and returns the last known-good cache when a fetch or
+validation fails. Error results expose only the exception class, never the
+exception message, to reduce accidental leakage of tokens or response data.
 
-A missing cache returns `None`; a corrupt or oversized cache raises a
-validation error rather than being silently treated as an empty catalog.
-Stale-but-valid catalogs remain loadable for offline display, but the store
-does not mark them fresh or extend their expiry. Callers must explicitly check
-`RemoteCatalog.is_fresh()` before presenting availability as current.
+Automatic retries use bounded exponential backoff (default 5 seconds, capped
+at 5 minutes). A forced refresh bypasses backoff but not single-flight
+protection. Successful refresh resets the failure counter. Backoff uses an
+injected monotonic clock and does not alter the catalog's server-declared
+freshness window. Callers must still check catalog.is_fresh().
 
-The cache stores only the normalized catalog metadata already defined above.
-It is not a verified upstream response, does not hold credentials, and does
-not add a network provider, refresh scheduler, signature scheme or connection
-profile. Last-known-good means structurally valid under the internal schema;
-cryptographic authenticity still depends on a future evidence-based provider
-and verifier.
+This is orchestration only: no HTTP implementation, APNA endpoint, timer,
+background thread, authentication or signature verifier is guessed or enabled.
+A future provider must implement strict TLS/authorization, bounded request
+timeouts and translation from verified upstream responses to the internal
+normalized schema. The coordinator must be invoked by application lifecycle
+code only after that provider exists.
