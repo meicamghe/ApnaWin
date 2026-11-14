@@ -114,6 +114,8 @@ def test_combined_report_correlates_evidence_and_summarizes_abis():
                 "skipped_library_count": 0, "bytes_read_in_memory": 0,
                 "archive_members_written": False, "native_code_executed": False,
                 "raw_symbol_names_included": False,
+                "abi_compatibility_counts": {"compatible": 2, "mismatch": 1, "unknown_abi": 0, "not_checked": 0},
+                "abi_mismatch_count": 1,
             },
         ),
     ):
@@ -139,6 +141,9 @@ def test_combined_report_correlates_evidence_and_summarizes_abis():
     assert report["interpretation"]["vpn_service_declared"] is True
     assert report["interpretation"]["vpn_service_class_found_in_dex"] is True
     assert report["interpretation"]["native_engine_candidates_present"] is True
+    assert report["interpretation"]["native_abi_mismatch_count"] == 1
+    assert report["interpretation"]["native_abi_checked_library_count"] == 3
+    assert report["interpretation"]["native_abi_mismatch_detected"] is True
     assert report["interpretation"]["vpn_service_and_native_engine_candidates_co_present"] is True
     assert report["interpretation"]["native_service_linkage_verified"] is False
     assert report["interpretation"]["runtime_behavior_verified"] is False
@@ -235,3 +240,26 @@ def test_combined_report_includes_bounded_elf_analysis():
         result = apk_report.inspect_apk_report("sample.apk")
     inspect_elf.assert_called_once_with("sample.apk", inventory["native_libraries"])
     assert result["native"]["elf_analysis"] == elf
+
+
+def test_combined_report_does_not_flag_abi_mismatch_when_none_was_found():
+    inventory, manifest, dex = _report_fixtures()
+    elf = {
+        "libraries": [], "libraries_inspected": 0,
+        "jni_exported_library_count": 0, "jni_onload_library_count": 0,
+        "skipped_library_count": 0, "bytes_read_in_memory": 0,
+        "archive_members_written": False, "native_code_executed": False,
+        "raw_symbol_names_included": False,
+        "abi_compatibility_counts": {"compatible": 2, "mismatch": 0, "unknown_abi": 1, "not_checked": 0},
+        "abi_mismatch_count": 0,
+    }
+    with (
+        patch.object(apk_report, "inspect_apk", return_value=inventory),
+        patch.object(apk_report, "inspect_apk_manifest", return_value=manifest),
+        patch.object(apk_report, "inspect_apk_dex", return_value=dex),
+        patch.object(apk_report, "inspect_apk_native_libraries", return_value=elf),
+    ):
+        result = apk_report.inspect_apk_report("sample.apk")
+    assert result["interpretation"]["native_abi_mismatch_count"] == 0
+    assert result["interpretation"]["native_abi_checked_library_count"] == 2
+    assert result["interpretation"]["native_abi_mismatch_detected"] is False

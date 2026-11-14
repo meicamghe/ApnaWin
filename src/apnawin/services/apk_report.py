@@ -93,6 +93,9 @@ def inspect_apk_report(
     unmatched_services = len(service_matches) - matched_services - unresolved_services
     engine_candidates = _native_engine_candidates(inventory["native_libraries"])
     elf_analysis = inspect_apk_native_libraries(apk_path, inventory["native_libraries"])
+    abi_compatibility_counts = elf_analysis.get("abi_compatibility_counts", {})
+    abi_mismatch_count = elf_analysis.get("abi_mismatch_count", 0)
+    abi_checked_count = abi_compatibility_counts.get("compatible", 0) + abi_mismatch_count
     engine_candidate_counts: dict[str, int] = {}
     engine_candidate_abi_counts: dict[str, dict[str, int]] = {}
     for candidate in engine_candidates:
@@ -130,6 +133,9 @@ def inspect_apk_report(
             "vpn_service_class_unresolved_count": unresolved_services,
             "vpn_service_class_resolution_complete": unresolved_services == 0,
             "native_engine_candidates_present": bool(engine_candidates),
+            "native_abi_mismatch_count": abi_mismatch_count,
+            "native_abi_checked_library_count": abi_checked_count,
+            "native_abi_mismatch_detected": abi_mismatch_count > 0,
             "vpn_service_and_native_engine_candidates_co_present": (
                 matched_services > 0 and bool(engine_candidates)
             ),

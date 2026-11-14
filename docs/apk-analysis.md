@@ -177,3 +177,10 @@ This checks only ELF header identity against the APK path's ABI label. A match
 does not prove Android loader acceptance, required shared libraries, CPU
 feature compatibility, JNI resolution, or runtime use. Unknown ABI labels and
 unreadable or skipped ELF files are not classified as compatible or mismatched.
+
+
+The top-level interpretation section repeats the number of ABI mismatches,
+the number of libraries with a known identity check, and a boolean mismatch
+indicator. Unknown ABI labels and unreadable or skipped files are excluded
+from the checked-library count; inspect native.elf_analysis for the full
+per-library classifications and all category counts.
