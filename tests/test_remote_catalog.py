@@ -140,3 +140,19 @@ def test_remote_catalog_rejects_invalid_utf8():
 def test_remote_catalog_rejects_non_string_input():
     with pytest.raises(TypeError, match="str or bytes"):
         parse_remote_catalog(123)
+
+
+
+def test_remote_catalog_rejects_excessive_json_nesting():
+    from apnawin.domain.remote_catalog import MAX_JSON_NESTING_DEPTH
+
+    raw = "[" * (MAX_JSON_NESTING_DEPTH + 1) + "0" + "]" * (MAX_JSON_NESTING_DEPTH + 1)
+    with pytest.raises(ValueError, match="nesting depth"):
+        parse_remote_catalog(raw)
+
+
+def test_remote_catalog_nesting_check_ignores_brackets_inside_strings():
+    payload = catalog_payload()
+    payload["revision"] = 'revision with [braces] and {"quoted"} text'
+    catalog = parse_remote_catalog(json.dumps(payload))
+    assert catalog.revision == payload["revision"]

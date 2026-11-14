@@ -14,6 +14,7 @@ from typing import Any
 
 MAX_REMOTE_CATALOG_BYTES = 1 * 1024 * 1024
 MAX_REMOTE_SERVERS = 500
+MAX_JSON_NESTING_DEPTH = 32
 MAX_IDENTIFIER_LENGTH = 128
 MAX_DISPLAY_TEXT_LENGTH = 256
 
@@ -29,6 +30,32 @@ def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 def _reject_json_constant(value: str) -> None:
     raise ValueError(f"Invalid JSON constant: {value}")
+
+
+def _check_json_nesting_depth(text: str) -> None:
+    """Reject excessive container nesting before invoking the recursive JSON decoder."""
+    depth = 0
+    in_string = False
+    escaped = False
+    for char in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char in "[{":
+            depth += 1
+            if depth > MAX_JSON_NESTING_DEPTH:
+                raise ValueError(
+                    f"Remote catalog exceeds JSON nesting depth {MAX_JSON_NESTING_DEPTH}"
+                )
+        elif char in "]}":
+            depth -= 1
 
 
 def _parse_timestamp(value: object, field: str) -> datetime:
@@ -102,6 +129,7 @@ def parse_remote_catalog(document: str | bytes) -> RemoteCatalog:
     else:
         raise TypeError("document must be str or bytes")
 
+    _check_json_nesting_depth(text)
     try:
         payload = json.loads(
             text,
@@ -110,6 +138,10 @@ def parse_remote_catalog(document: str | bytes) -> RemoteCatalog:
         )
     except json.JSONDecodeError as exc:
         raise ValueError(f"Invalid remote catalog JSON: {exc.msg}") from exc
+    except RecursionError as exc:
+        # Defensive fallback if decoder behavior changes or a future parser bypasses
+        # the lexical nesting check.
+        raise ValueError("Remote catalog JSON nesting is too deep") from exc
 
     if not isinstance(payload, dict):
         raise ValueError("Remote catalog root must be an object")

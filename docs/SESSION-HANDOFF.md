@@ -117,3 +117,14 @@ It intentionally excludes connection endpoints and secrets and is not claimed
 to match APNA's unknown upstream API. No HTTP client, guessed endpoint,
 subscription/auth flow, or automatic refresh is enabled. See
 `docs/remote-configuration.md` for the boundary and next evidence gate.
+
+
+
+## Remote catalog parser depth hardening
+
+The normalized catalog parser now rejects JSON container nesting beyond 32
+levels before invoking the recursive decoder. The scanner correctly ignores
+braces/brackets inside quoted strings and preserves JSON escape handling.
+Regression tests cover both excessive nesting and bracket-like text inside
+ordinary string values. This is parser hardening only; it does not introduce
+an upstream API client or alter the verified integration boundary.

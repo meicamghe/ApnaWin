@@ -104,3 +104,13 @@ authentication, signature format or cache writer. Those belong in a future
 provider adapter after the real Android/backend contract and authorization
 model are evidenced. The normalized internal schema can then remain stable
 while adapters translate verified upstream formats into it.
+
+
+### Parser nesting bound
+
+The normalized catalog parser also performs a bounded lexical scan before
+calling Python's recursive JSON decoder. Container nesting is limited to 32
+levels, while braces and brackets inside quoted JSON strings are ignored.
+Excessive nesting is rejected with a controlled validation error rather than
+being allowed to reach the decoder's recursion limit. A defensive
+`RecursionError` translation remains as a second line of defense.
