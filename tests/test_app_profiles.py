@@ -181,3 +181,62 @@ def test_profile_json_contains_metadata_only(tmp_path):
     assert not {"password", "token", "private_key", "credential"} & set(
         payload["profiles"][0]
     )
+
+
+
+def test_add_profile_rejects_duplicate_name_case_insensitively(tmp_path, qapp, monkeypatch):
+    from PySide6.QtWidgets import QDialog
+    import apnawin.app as app_module
+
+    existing = ConnectionProfile("Office", Transport.SOCKS, "localhost", 1080)
+    duplicate = ConnectionProfile("office", Transport.XRAY, "vpn.example.test", 443)
+    path = tmp_path / "profiles.json"
+    save_profiles(path, [existing])
+
+    class AcceptedDialog:
+        def __init__(self, _parent=None, _profile=None):
+            pass
+
+        def exec(self):
+            return QDialog.DialogCode.Accepted
+
+        def to_profile(self):
+            return duplicate
+
+    warnings = []
+    monkeypatch.setattr(app_module, "ProfileDialog", AcceptedDialog)
+    monkeypatch.setattr(
+        app_module.QMessageBox,
+        "warning",
+        lambda *_args, **_kwargs: warnings.append(True),
+    )
+    window = MainWindow(profiles_path=path)
+
+    window._add_profile()
+
+    assert window.profiles == [existing]
+    assert load_profiles(path) == [existing]
+    assert warnings
+    window.close()
+
+
+def test_remove_profile_cancel_keeps_profile(tmp_path, qapp, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    import apnawin.app as app_module
+
+    profile = ConnectionProfile("Office", Transport.SOCKS, "localhost", 1080)
+    path = tmp_path / "profiles.json"
+    save_profiles(path, [profile])
+    monkeypatch.setattr(
+        app_module.QMessageBox,
+        "question",
+        lambda *_args, **_kwargs: QMessageBox.StandardButton.No,
+    )
+    window = MainWindow(profiles_path=path)
+    window.profile_list.setCurrentRow(0)
+
+    window._remove_profile()
+
+    assert window.profiles == [profile]
+    assert load_profiles(path) == [profile]
+    window.close()
