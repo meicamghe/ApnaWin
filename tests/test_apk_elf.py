@@ -323,6 +323,33 @@ def test_inspect_elf_bytes_rejects_invalid_header_size_or_version(
 
 
 
+
+def test_inspect_elf_bytes_rejects_misaligned_section_header_table():
+    data = bytearray(_elf64_with_jni_exports())
+    struct.pack_into("<Q", data, 40, 65)
+    with pytest.raises(ValueError, match="section header table is misaligned"):
+        inspect_elf_bytes(bytes(data))
+
+
+def test_inspect_elf_bytes_rejects_non_power_of_two_section_alignment():
+    data = bytearray(_elf64_with_jni_exports())
+    section_offset = struct.unpack_from("<Q", data, 40)[0]
+    dynstr_header = section_offset + 64
+    struct.pack_into("<Q", data, dynstr_header + 48, 3)
+    with pytest.raises(ValueError, match="section alignment is not a power of two"):
+        inspect_elf_bytes(bytes(data))
+
+
+def test_inspect_elf_bytes_accepts_zero_and_one_section_alignment():
+    data = bytearray(_elf64_with_jni_exports())
+    section_offset = struct.unpack_from("<Q", data, 40)[0]
+    dynstr_header = section_offset + 64
+    struct.pack_into("<Q", data, dynstr_header + 48, 0)
+    result = inspect_elf_bytes(bytes(data))
+    assert result["inspection_status"] == "complete"
+    struct.pack_into("<Q", data, dynstr_header + 48, 1)
+    assert inspect_elf_bytes(bytes(data))["inspection_status"] == "complete"
+
 def test_inspect_elf_bytes_rejects_empty_dynamic_string_table():
     data = bytearray(_elf64_with_jni_exports())
     section_offset = struct.unpack_from("<Q", data, 40)[0]

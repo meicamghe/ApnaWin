@@ -79,12 +79,19 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                 raise ValueError("ELF extended section count is invalid or exceeds the analysis limit")
         if section_count > _MAX_SECTION_HEADERS:
             raise ValueError("ELF has too many section headers")
+        required_table_alignment = 8 if elf_class == 2 else 4
+        if section_offset % required_table_alignment:
+            raise ValueError("ELF section header table is misaligned")
         if section_count * section_entry_size > len(data) - section_offset:
             raise ValueError("ELF section header table is out of bounds")
         sections = [
             struct.unpack_from(section_fmt, data, section_offset + index * section_entry_size)
             for index in range(section_count)
         ]
+        for section in sections:
+            alignment = section[8]
+            if alignment > 1 and alignment & (alignment - 1):
+                raise ValueError("ELF section alignment is not a power of two")
     else:
         if section_count:
             raise ValueError("ELF section table offset is missing")

@@ -198,6 +198,13 @@ assumed offsets. This is a structural consistency check; it does not establish
 that a library is accepted by an Android loader.
 
 
+Section metadata validation also checks that the section-header table begins
+at the class-required alignment (8 bytes for ELF64 and 4 bytes for ELF32),
+and that each section's declared alignment is either zero, one, or a power of
+two. These checks reject structurally inconsistent alignment metadata; they
+do not attempt to map sections into memory or prove loader compatibility.
+
+
 Dynamic symbol-table validation also checks that its linked string table is
 non-empty and begins with the required NUL byte (the empty string at index
 zero), that the local-symbol boundary (sh_info) does not exceed the number of
