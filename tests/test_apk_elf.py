@@ -529,7 +529,7 @@ def _elf_with_group_section(payload, elf_class, group_words=(1, 4)):
         section_fmt, 0, 1, 0x200, 0, len(data), 4, 0, 0, 4, 0
     )
     group_data = struct.pack("<" + "I" * len(group_words), *group_words)
-    group_payload_offset = len(data) + section_size
+    group_payload_offset = len(data) + 2 * section_size
     group_header = struct.pack(
         section_fmt, 0, 17, 0, 0, group_payload_offset, len(group_data), 2, 1, 4, 4
     )
@@ -752,6 +752,6 @@ def test_inspect_elf_rejects_nonzero_group_header_flags(payload, elf_class):
 )
 def test_inspect_elf_accepts_os_and_processor_group_flag_masks(payload, elf_class):
     result = inspect_elf_bytes(
-        _elf_with_group_section(payload, elf_class, (0x10FF0001, 4))
+        _elf_with_group_section(payload, elf_class, (0x1FF00001, 4))
     )
     assert result["inspection_status"] == "complete"
