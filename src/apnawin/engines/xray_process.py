@@ -333,8 +333,8 @@ class XrayProcessRunner:
             result = subprocess.run(
                 command,
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 timeout=self.validation_timeout,
                 check=False,
                 shell=False,

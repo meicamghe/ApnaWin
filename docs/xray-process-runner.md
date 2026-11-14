@@ -37,7 +37,8 @@ The current profile's host and port do not specify protocol, security, flow, cre
 ## Safety behavior
 
 - Uses argument arrays and `shell=False`.
-- Does not capture or expose raw Xray output, which could contain server details.
+- Discards validation stdout and stderr directly to the null device instead of capturing potentially unbounded or sensitive output.
+- Redirects validation stdout and stderr to `subprocess.DEVNULL`; output that could contain server details or credentials is neither buffered in Python memory nor exposed.
 - Reads at most 16 MiB plus one detection byte, then parses strict JSON (rejecting duplicate keys and non-finite constants), then validates the config before launch and rejects missing, additional, malformed, non-SOCKS, wildcard or non-loopback inbounds before executing Xray.
 - Refuses duplicate starts.
 - Validates finite positive validation and stop timeouts at construction.

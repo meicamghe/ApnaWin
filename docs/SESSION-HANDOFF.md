@@ -17,11 +17,11 @@ The repository contains:
 - Local JSON persistence for non-secret profile metadata, with a 1 MiB document-size bound on reads and writes.
 - Transport-neutral profile model and tunnel-engine contract.
 - Test-only mock engine that performs no network operations.
-- Xray process runner with bounded 16 MiB config reads, strict JSON validation (duplicate keys and non-finite constants rejected), SOCKS diagnostics and process supervision.
+- Xray process runner with bounded 16 MiB config reads, strict JSON validation (duplicate keys and non-finite constants rejected), discarded validation output, SOCKS diagnostics and process supervision.
 - Windows Job Object process-tree containment integrated into the Xray runner.
 - Windows GitHub Actions tests and a PyInstaller portable-folder build workflow.
 
-The latest Windows CI run [#127](https://github.com/meicamghe/ApnaWin/actions/runs/43562771648) passed unit tests, the PyInstaller build, packaged GUI smoke test and portable-folder artifact upload. Commit `3d180aa0` adds a 1 MiB bound to profile metadata reads and writes. Later changes require a newer green run before being treated as verified.
+The latest verified Windows CI run [#128](https://github.com/meicamghe/ApnaWin/actions/runs/43563383972) passed unit tests, the PyInstaller build, packaged GUI smoke test and portable-folder artifact upload. Commit `dec5b7bf` adds a 16 MiB bound to Xray config reads. The following validation-output change is pending its own CI run.
 
 **The Connect button remains intentionally disabled.** The current Xray runner is not a complete tunnel engine, and the published CI artifact is not a signed installer or a working VPN client. Do not describe the app as connected or APNA TUNNEL-compatible without end-to-end proof.
 

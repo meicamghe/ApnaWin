@@ -68,6 +68,10 @@ def test_validate_uses_xray_config_test_without_shell(monkeypatch, files):
     assert command == [str(executable), "run", "-test", "-c", str(config)]
     assert kwargs["shell"] is False
     assert kwargs["stdin"] == subprocess.DEVNULL
+    # Xray diagnostics may contain server metadata or credentials; discard them
+    # at the OS handle level instead of buffering them in Python memory.
+    assert kwargs["stdout"] == subprocess.DEVNULL
+    assert kwargs["stderr"] == subprocess.DEVNULL
 
 
 def test_validate_rejects_non_xray_profile(files):
