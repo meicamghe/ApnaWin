@@ -14,6 +14,7 @@ from apnawin.domain.profile import ConnectionProfile, Transport
 
 
 _FORMAT_VERSION = 1
+MAX_PROFILE_FILE_BYTES = 1024 * 1024
 _REQUIRED_KEYS = {"name", "transport", "endpoint_host", "endpoint_port"}
 
 
@@ -31,7 +32,7 @@ def _reject_nonstandard_constant(value: str) -> None:
 
 
 def save_profiles(path: str | Path, profiles: Iterable[ConnectionProfile]) -> None:
-    """Atomically save profiles as UTF-8 JSON using a unique same-directory temp file."""
+    """Atomically save bounded UTF-8 JSON using a unique same-directory temp file."""
     destination = Path(path)
     items = []
     for profile in profiles:
@@ -47,8 +48,13 @@ def save_profiles(path: str | Path, profiles: Iterable[ConnectionProfile]) -> No
         )
 
     payload = {"format_version": _FORMAT_VERSION, "profiles": items}
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    serialized = (json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    if len(serialized) > MAX_PROFILE_FILE_BYTES:
+        raise ValueError(
+            f"Profile data exceeds the {MAX_PROFILE_FILE_BYTES}-byte storage limit"
+        )
 
+    destination.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{destination.name}.",
         suffix=".tmp",
@@ -56,8 +62,8 @@ def save_profiles(path: str | Path, profiles: Iterable[ConnectionProfile]) -> No
     )
     temporary = Path(temporary_name)
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
-            stream.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(serialized)
             stream.flush()
             os.fsync(stream.fileno())
         temporary.replace(destination)
@@ -66,11 +72,22 @@ def save_profiles(path: str | Path, profiles: Iterable[ConnectionProfile]) -> No
 
 
 def load_profiles(path: str | Path) -> list[ConnectionProfile]:
-    """Load profiles, rejecting unknown versions, duplicate keys and malformed records."""
+    """Load bounded profile JSON, rejecting duplicate keys and malformed records."""
     source = Path(path)
     try:
+        with source.open("rb") as stream:
+            raw = stream.read(MAX_PROFILE_FILE_BYTES + 1)
+        if len(raw) > MAX_PROFILE_FILE_BYTES:
+            raise ValueError(
+                f"Profile file exceeds the {MAX_PROFILE_FILE_BYTES}-byte storage limit"
+            )
+        document = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("Profile file must contain valid UTF-8") from exc
+
+    try:
         payload = json.loads(
-            source.read_text(encoding="utf-8"),
+            document,
             object_pairs_hook=_reject_duplicate_keys,
             parse_constant=_reject_nonstandard_constant,
         )

@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-11-14
 
-This document preserves durable product decisions, current implementation boundaries and the next engineering steps. It complements \`README.md\`, \`docs/architecture.md\`, \`docs/engine-contract.md\` and \`docs/xray-process-runner.md\`.
+This document preserves durable product decisions, current implementation boundaries and the next engineering steps. It complements `README.md`, `docs/architecture.md`, `docs/engine-contract.md` and `docs/xray-process-runner.md`.
 
 ## Product goal
 
@@ -14,18 +14,18 @@ The repository contains:
 
 - Native PySide6 desktop application shell.
 - Add/edit/select/remove connection profiles; profile-derived UI text is rendered safely as plain text or HTML-escaped for auto-detecting dialogs.
-- Local JSON persistence for non-secret profile metadata.
+- Local JSON persistence for non-secret profile metadata, with a 1 MiB document-size bound on reads and writes.
 - Transport-neutral profile model and tunnel-engine contract.
 - Test-only mock engine that performs no network operations.
 - Xray process runner with strict config validation (duplicate JSON keys and non-finite constants rejected), SOCKS diagnostics and process supervision.
 - Windows Job Object process-tree containment integrated into the Xray runner.
 - Windows GitHub Actions tests and a PyInstaller portable-folder build workflow.
 
-M2b process containment is implemented and verified in Windows CI. Latest run [#110](https://github.com/meicamghe/ApnaWin/actions/runs/43558711821) passed the full test job, PyInstaller build, packaged GUI smoke test, and portable-folder artifact upload. It includes strict profile JSON persistence and the expanded profile UI tests. Subsequent changes must be verified by a newer run before being treated as green.
+The latest Windows CI run [#126](https://github.com/meicamghe/ApnaWin/actions/runs/43562335343) passed unit tests, the PyInstaller build, packaged GUI smoke test and portable-folder artifact upload. Commit `64ad8ab2` contains the profile UI rendering test correction. Later changes require a newer green run before being treated as verified.
 
 **The Connect button remains intentionally disabled.** The current Xray runner is not a complete tunnel engine, and the published CI artifact is not a signed installer or a working VPN client. Do not describe the app as connected or APNA TUNNEL-compatible without end-to-end proof.
 
-The Xray runner's exact limitations are documented in \`docs/xray-process-runner.md\`: it does not synthesize configuration from host/port alone, configure TUN, change routes/DNS, verify APNA's private protocol, or prove remote traffic forwarding just because a process/listener starts.
+The Xray runner's exact limitations are documented in `docs/xray-process-runner.md`: it does not synthesize configuration from host/port alone, configure TUN, change routes/DNS, verify APNA's private protocol, or prove remote traffic forwarding just because a process/listener starts.
 
 ## Binding architecture and security decisions
 
@@ -48,7 +48,7 @@ The Xray runner's exact limitations are documented in \`docs/xray-process-runner
 - M2a — safe Xray process runner and automated process-supervision tests: implemented.
 - M2b — Windows Job Object process-tree containment and Xray runner integration: implemented and verified in Windows CI, including child/grandchild containment, creation-time root membership, final-handle-close cleanup and targeted Win32 failure/handle-retention tests.
 - M3 — integrate one Windows engine end-to-end using an authorized test server and documented configuration.
-- M4 — elevation/service and TUN adapter lifecycle with rollback and cleanup.
+- M4 — implement elevation/service and TUN adapter lifecycle with rollback and cleanup.
 - M5 — package, sign where possible, test on clean Windows 10/11 VMs and publish releases.
 
 ## Immediate next steps
@@ -56,8 +56,8 @@ The Xray runner's exact limitations are documented in \`docs/xray-process-runner
 1. Check the newest GitHub Actions run for workflow **Windows tests and build** on every status-check request. Report status, run number, branch, commit and timestamp; do not reuse stale status.
 2. If CI is red, inspect the failing job and logs, reproduce the failure, fix the root cause and rerun tests. If green, continue the next focused task rather than repeatedly rechecking without a reason.
 3. Continue strict domain validation for profile names, transport values, endpoint hosts and ports, including Unicode control characters; preserve valid schema-v1 profile compatibility. Profile-derived UI text must remain plain-text or be escaped before entering Qt auto-detecting message dialogs.
-4. Verify strict JSON persistence: unique same-directory atomic temp files, duplicate JSON key and duplicate profile rejection, fsync/replace failure handling, and compatibility with existing schema-v1 files. See `docs/profile-storage.md`.
-5. Maintain UI workflow tests for add/edit/select/remove, duplicate handling, removal cancellation, persistence failures and metadata-only storage; these passed in run #110.
+4. Verify strict JSON persistence: unique same-directory atomic temp files, duplicate JSON key and duplicate profile rejection, fsync/replace failure handling, bounded reads/writes and compatibility with existing schema-v1 files. See `docs/profile-storage.md`.
+5. Maintain UI workflow tests for add/edit/select/remove, duplicate handling, removal cancellation, persistence failures and metadata-only storage.
 6. Keep Xray config parsing strict: reject duplicate JSON keys and non-finite constants before process execution; cover nested duplicate keys and malformed roots in tests.
 7. Test the Xray process runner on Windows 10/11 with fake-process tests and then a separately installed, pinned binary plus an authorized test config.
 8. Verify an application-level request through the authorized test endpoint; a SOCKS greeting alone is insufficient.

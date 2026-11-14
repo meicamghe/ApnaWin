@@ -13,13 +13,20 @@ Each record is validated by the domain model. Ports must be integers from 1
 through 65535; names and hosts must be non-empty and within their configured
 length/character limits. Profile names must be unique case-insensitively.
 
+The complete serialized document is limited to 1 MiB. Reads are capped at
+1 MiB plus one byte so an oversized file is rejected before JSON parsing.
+Writes serialize and measure the UTF-8 payload before creating a temporary file;
+an oversized save leaves the previous destination unchanged. This is a resource
+bound, not a profile-count limit independent of record size.
+
 ## Write behavior
 
 1. Validate and serialize all profile objects before touching the destination.
-2. Create a unique temporary file in the destination directory.
-3. Write UTF-8 JSON, flush the Python stream, and call `os.fsync`.
-4. Atomically replace the destination with the completed temporary file.
-5. Remove the temporary file on every failure path.
+2. Reject the serialized UTF-8 document if it exceeds the 1 MiB limit.
+3. Create a unique temporary file in the destination directory.
+4. Write UTF-8 JSON, flush the Python stream, and call `os.fsync`.
+5. Atomically replace the destination with the completed temporary file.
+6. Remove the temporary file on every failure path.
 
 Using the same directory keeps the replacement on the same filesystem and
 avoids collisions between simultaneous writers using a shared fixed `.tmp`
@@ -28,10 +35,12 @@ overwrite the previous profile file.
 
 ## Read behavior
 
-The loader rejects malformed JSON, duplicate object keys, non-standard JSON
-constants, unexpected top-level or record fields, unsupported or incorrectly
-typed format versions, invalid profile values, and duplicate names. It does
-not silently migrate unknown schema versions.
+The loader reads at most 1 MiB plus one byte and rejects oversized files before
+decoding or parsing. It requires valid UTF-8 and rejects malformed JSON,
+duplicate object keys, non-standard JSON constants, unexpected top-level or
+record fields, unsupported or incorrectly typed format versions, invalid
+profile values, and duplicate names. It does not silently migrate unknown
+schema versions.
 
 ## Security boundary
 
