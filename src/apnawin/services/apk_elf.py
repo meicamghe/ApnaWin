@@ -111,6 +111,11 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                 raise ValueError("ELF relocation section has an invalid symbol-table reference")
             if target_index >= len(sections):
                 raise ValueError("ELF relocation section has an invalid target-section reference")
+            # In ET_REL files sh_info identifies the section being relocated;
+            # section zero is not a valid relocation target. For ET_EXEC/ET_DYN,
+            # zero is permitted for dynamic relocation sections.
+            if elf_type == 1 and target_index == 0:
+                raise ValueError("ELF relocatable-file relocation target section is missing")
             minimum_entry_size = relocation_entry_sizes[relocation_type]
             if entry_size < minimum_entry_size or relocation_size % entry_size:
                 raise ValueError("ELF relocation section entry metadata is invalid")

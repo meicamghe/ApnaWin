@@ -235,8 +235,8 @@ section metadata for both ELF32 and ELF64. REL and RELA sections must reference
 an in-range static or dynamic symbol-table section, identify an in-range target
 section index, use an entry size at least as large as the class-specific
 standard record, have a section size divisible by that entry size, and keep
-the relocation bytes within the file. The target index may be zero, as used by
-some dynamic relocation sections. Relocation records themselves are not
-decoded: their architecture-specific symbol indexes, relocation types, and
+the relocation bytes within the file. For ET_REL objects, the target index must identify a nonzero section;
+for ET_EXEC and ET_DYN objects, zero remains permitted for dynamic relocation
+sections. Relocation records themselves are not decoded: their architecture-specific symbol indexes, relocation types, and
 addends are outside this metadata-only inspection. Passing these checks does
 not establish that relocations can be applied or that the library is loadable.
