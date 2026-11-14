@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-11-14
 
-This document preserves durable product decisions, current implementation boundaries and the next engineering steps. It complements `README.md`, `docs/architecture.md`, `docs/engine-contract.md` and `docs/xray-process-runner.md`.
+This document preserves durable product decisions, current implementation boundaries and the next engineering steps. It complements `README.md`, `docs/architecture.md`, `docs/engine-contract.md`, `docs/xray-process-runner.md` and `docs/remote-configuration.md`.
 
 ## Product goal
 
@@ -21,7 +21,7 @@ The repository contains:
 - Windows Job Object process-tree containment integrated into the Xray runner.
 - Windows GitHub Actions tests and a PyInstaller portable-folder build workflow.
 
-The latest verified Windows CI run [#128](https://github.com/meicamghe/ApnaWin/actions/runs/43563383972) passed unit tests, the PyInstaller build, packaged GUI smoke test and portable-folder artifact upload. Commit `dec5b7bf` adds a 16 MiB bound to Xray config reads. The following validation-output change is pending its own CI run.
+The latest verified Windows CI run is [#130](https://github.com/meicamghe/ApnaWin/actions/runs/43564101918), for commit `99d79795f044c01e4dfe9fa3003e6c5ad744e4f8`. Both the `test` job and `build-windows` job passed, including the PyInstaller build, packaged GUI smoke test and portable-folder artifact upload. The run completed at 2026-11-14 06:01:41 UTC.
 
 **The Connect button remains intentionally disabled.** The current Xray runner is not a complete tunnel engine, and the published CI artifact is not a signed installer or a working VPN client. Do not describe the app as connected or APNA TUNNEL-compatible without end-to-end proof.
 
@@ -44,9 +44,10 @@ The Xray runner's exact limitations are documented in `docs/xray-process-runner.
 
 - M0 — repository skeleton, coding conventions and architecture record: complete.
 - M1 — inspect APK metadata/resources and document observable features/protocols: preliminary; reproducible verification remains.
-- M2 — profile schema, persistence, mock engine contract and desktop profile workflow: in progress.
+- M2 — profile schema, persistence, mock engine contract and desktop profile workflow: implemented baseline; broader usability and integration tests remain.
 - M2a — safe Xray process runner and automated process-supervision tests: implemented.
 - M2b — Windows Job Object process-tree containment and Xray runner integration: implemented and verified in Windows CI, including child/grandchild containment, creation-time root membership, final-handle-close cleanup and targeted Win32 failure/handle-retention tests.
+- M2c — remote configuration discovery plan and provider-neutral security architecture: documented; actual provider integration is blocked on reproducible APK/runtime evidence.
 - M3 — integrate one Windows engine end-to-end using an authorized test server and documented configuration.
 - M4 — implement elevation/service and TUN adapter lifecycle with rollback and cleanup.
 - M5 — package, sign where possible, test on clean Windows 10/11 VMs and publish releases.
@@ -57,9 +58,9 @@ The Android app may update its server catalog and connection parameters remotely
 
 ## Immediate next steps
 
-1. Check the newest GitHub Actions run for workflow **Windows tests and build** on every status-check request. Report status, run number, branch, commit and timestamp; do not reuse stale status.
+1. On every status-check request, inspect the newest GitHub Actions run for workflow **Windows tests and build**. Report status, run number, branch, commit and timestamp; do not reuse stale status.
 2. If CI is red, inspect the failing job and logs, reproduce the failure, fix the root cause and rerun tests. If green, continue the next focused task rather than repeatedly rechecking without a reason.
-3. Investigate the Android app's remote server/config refresh using a reproducible APK and authorized runtime observation; document endpoint/schema/update policy evidence before implementing a provider. See `docs/remote-configuration.md`.
+3. Obtain and analyze a reproducible Android APK and authorized runtime observations for server/config refresh. Record verified endpoint, schema, authentication, signing and update-policy evidence before implementing a provider. See `docs/remote-configuration.md`.
 4. Continue strict domain validation for profile names, transport values, endpoint hosts and ports, including Unicode control characters; preserve valid schema-v1 profile compatibility. Profile-derived UI text must remain plain-text or be escaped before entering Qt auto-detecting message dialogs.
 5. Verify strict JSON persistence: unique same-directory atomic temp files, duplicate JSON key and duplicate profile rejection, fsync/replace failure handling, bounded reads/writes and compatibility with existing schema-v1 files. See `docs/profile-storage.md`.
 6. Maintain UI workflow tests for add/edit/select/remove, duplicate handling, removal cancellation, persistence failures and metadata-only storage.
