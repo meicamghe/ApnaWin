@@ -242,16 +242,19 @@ def test_remove_profile_cancel_keeps_profile(tmp_path, qapp, monkeypatch):
     window.close()
 
 
-def test_profile_details_render_untrusted_host_as_plain_text(tmp_path, qapp):
+def test_profile_details_render_as_plain_text_and_rejects_markup_host(tmp_path, qapp):
     hostile_host = "<b>untrusted</b>"
-    profile = ConnectionProfile("Imported", Transport.SOCKS, hostile_host, 1080)
+    with pytest.raises(ValueError, match="valid DNS hostname"):
+        ConnectionProfile("Imported", Transport.SOCKS, hostile_host, 1080)
+
+    profile = ConnectionProfile("Imported", Transport.SOCKS, "vpn.example.test", 1080)
     path = tmp_path / "profiles.json"
     save_profiles(path, [profile])
 
     window = MainWindow(profiles_path=path)
 
     assert window.profile_details.textFormat() == Qt.TextFormat.PlainText
-    assert hostile_host in window.profile_details.text()
+    assert "vpn.example.test" in window.profile_details.text()
     window.close()
 
 
