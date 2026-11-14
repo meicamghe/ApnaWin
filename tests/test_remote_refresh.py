@@ -129,9 +129,9 @@ def test_concurrent_refresh_calls_share_one_provider_request(tmp_path):
             self.calls += 1
             entered.set()
             assert release.wait(timeout=3)
-            return document("single-flight")
+            return self.response
 
-    provider = BlockingProvider()
+    provider = BlockingProvider(response=document("single-flight"))
     coordinator = RemoteCatalogRefreshCoordinator(
         provider, RemoteCatalogStore(tmp_path / "catalog.json")
     )
