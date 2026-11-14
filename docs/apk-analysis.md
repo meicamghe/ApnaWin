@@ -210,6 +210,9 @@ SHT_NOBITS sections are exempt because they occupy memory size but have no
 file payload. This prevents unrelated malformed section ranges from being
 silently accepted while preserving valid NOBITS layouts.
 
+Regression tests exercise both out-of-bounds file-backed ranges and valid
+out-of-file SHT_NOBITS layouts for ELF32 and ELF64.
+
 
 Dynamic symbol-table validation also checks that its linked string table is
 non-empty and begins with the required NUL byte (the empty string at index

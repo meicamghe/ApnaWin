@@ -520,3 +520,22 @@ def test_inspect_elf_bytes_rejects_malformed_relocation_metadata(
     struct.pack_into(format_code, data, header_offset + field_offset, value)
     with pytest.raises(ValueError, match=message):
         inspect_elf_bytes(bytes(data))
+
+
+def test_inspect_elf32_bytes_rejects_out_of_bounds_file_backed_section():
+    data = bytearray(_elf32_with_jni_exports())
+    section_offset = struct.unpack_from("<I", data, 32)[0]
+    shstr_header = section_offset + 3 * 40
+    struct.pack_into("<I", data, shstr_header + 16, 0xFFFFFFFF)
+    with pytest.raises(ValueError, match="section data is out of bounds"):
+        inspect_elf_bytes(bytes(data))
+
+
+def test_inspect_elf32_bytes_allows_nobits_section_without_file_payload():
+    data = bytearray(_elf32_with_jni_exports())
+    section_offset = struct.unpack_from("<I", data, 32)[0]
+    shstr_header = section_offset + 3 * 40
+    struct.pack_into("<I", data, shstr_header + 4, 8)  # SHT_NOBITS
+    struct.pack_into("<I", data, shstr_header + 16, len(data) + 4096)
+    struct.pack_into("<I", data, shstr_header + 20, 8192)
+    assert inspect_elf_bytes(bytes(data))["inspection_status"] == "complete"
