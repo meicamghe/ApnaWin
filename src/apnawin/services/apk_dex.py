@@ -17,7 +17,7 @@ _MAX_TIMEOUT_SECONDS = 30
 _MAX_DEX_FILES = 128
 _MAX_CLASSES = 100_000
 _MAX_RELEVANT_CLASSES = 2_000
-_DEX_NAME = re.compile(r"classes(?:[2-9][0-9]*)?\.dex\Z")
+_DEX_NAME = re.compile(r"classes(?:[2-9]|[1-9][0-9]+)?\.dex\Z")
 _CLASS_NAME = re.compile(r"[A-Za-z_$][A-Za-z0-9_$/]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*\Z")
 _SIGNAL = re.compile(
     r"(?:vpn|tunnel|tun2socks|tun|socks|xray|openvpn|wireguard|"
