@@ -31,7 +31,7 @@ def test_non_string_host_is_rejected(host):
         ConnectionProfile("Office", Transport.SOCKS, host, 1080)
 
 
-@pytest.mark.parametrize("host", ["host name", "host\nname", "host\tname"])
+@pytest.mark.parametrize("host", ["host name", "host\nname", "host\tname", "host\x85name", "host\x9fname"])
 def test_host_whitespace_is_rejected(host):
     with pytest.raises(ValueError, match="whitespace"):
         ConnectionProfile("Office", Transport.SOCKS, host, 1080)
@@ -40,6 +40,12 @@ def test_host_whitespace_is_rejected(host):
 @pytest.mark.parametrize("name", [None, 123, []])
 def test_non_string_name_is_rejected(name):
     with pytest.raises(TypeError, match="name must be a string"):
+        ConnectionProfile(name, Transport.SOCKS, "localhost", 1080)
+
+
+@pytest.mark.parametrize("name", ["Office\x85Name", "Office\x9fName"])
+def test_unicode_control_characters_in_name_are_rejected(name):
+    with pytest.raises(ValueError, match="control characters"):
         ConnectionProfile(name, Transport.SOCKS, "localhost", 1080)
 
 
