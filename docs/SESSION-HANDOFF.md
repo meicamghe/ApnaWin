@@ -19,7 +19,7 @@ The Android app is believed to refresh server information and connection behavio
 
 ## Latest verification
 
-Workflow run #170 passed on commit `a213da9cf5903bd3f4720aba6b9c4ca537e81361`. This verifies the repository's configured CI checks for that revision; it does not verify VPN connectivity or system-wide traffic tunneling.
+Workflow run #173 failed in two Windows-specific test assertions (DEX fixture byte strings encoded literal backslash-n sequences, and stdout used CRLF). The implementation's bounded subprocess runner passed its other overflow/timeout tests; 322 tests passed and 2 failed. The fixtures/assertion are corrected in the follow-up commit. This does not indicate VPN connectivity or system-wide traffic tunneling.
 
 ## Latest engineering change
 
