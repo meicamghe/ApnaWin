@@ -13,7 +13,7 @@ Build a native Windows 10/11 desktop client inspired by the APNA TUNNEL LITE wor
 The repository contains:
 
 - Native PySide6 desktop application shell.
-- Add/edit/select/remove connection profiles.
+- Add/edit/select/remove connection profiles; profile-derived UI text is rendered safely as plain text or HTML-escaped for auto-detecting dialogs.
 - Local JSON persistence for non-secret profile metadata.
 - Transport-neutral profile model and tunnel-engine contract.
 - Test-only mock engine that performs no network operations.
@@ -55,7 +55,7 @@ The Xray runner's exact limitations are documented in \`docs/xray-process-runner
 
 1. Check the newest GitHub Actions run for workflow **Windows tests and build** on every status-check request. Report status, run number, branch, commit and timestamp; do not reuse stale status.
 2. If CI is red, inspect the failing job and logs, reproduce the failure, fix the root cause and rerun tests. If green, continue the next focused task rather than repeatedly rechecking without a reason.
-3. Continue strict domain validation for profile names, transport values, endpoint hosts and ports, including Unicode control characters; preserve valid schema-v1 profile compatibility.
+3. Continue strict domain validation for profile names, transport values, endpoint hosts and ports, including Unicode control characters; preserve valid schema-v1 profile compatibility. Profile-derived UI text must remain plain-text or be escaped before entering Qt auto-detecting message dialogs.
 4. Verify strict JSON persistence: unique same-directory atomic temp files, duplicate JSON key and duplicate profile rejection, fsync/replace failure handling, and compatibility with existing schema-v1 files. See `docs/profile-storage.md`.
 5. Maintain UI workflow tests for add/edit/select/remove, duplicate handling, removal cancellation, persistence failures and metadata-only storage; these passed in run #110.
 6. Keep Xray config parsing strict: reject duplicate JSON keys and non-finite constants before process execution; cover nested duplicate keys and malformed roots in tests.

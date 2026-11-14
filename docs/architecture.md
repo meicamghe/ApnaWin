@@ -51,3 +51,12 @@ The APK's Android native libraries cannot be assumed to run on Windows. Use Wind
 ## Verification status
 
 The Windows GitHub Actions workflow runs the Python test suite on Windows and builds/smoke-tests the portable application folder. Passing unit tests and a packaged-app smoke test do not establish VPN connectivity, server compatibility, privileged networking behavior, or successful operation on a clean machine. Connect remains disabled until the separate end-to-end networking acceptance criteria are met.
+
+
+## Profile text rendering
+
+Profile fields originate from imported or user-edited local data. The profile
+details label is explicitly configured for plain-text rendering, so values
+resembling Qt rich text are displayed literally rather than interpreted as
+markup. The profile name inserted into the remove-confirmation dialog is
+HTML-escaped before being passed to Qt's auto-detecting message text.

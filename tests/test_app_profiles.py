@@ -4,6 +4,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from apnawin.app import MainWindow
@@ -239,4 +240,40 @@ def test_remove_profile_cancel_keeps_profile(tmp_path, qapp, monkeypatch):
 
     assert window.profiles == [profile]
     assert load_profiles(path) == [profile]
+    window.close()
+
+
+
+def test_profile_details_render_untrusted_host_as_plain_text(tmp_path, qapp):
+    hostile_host = '<img src="file:///private/test.png">'
+    profile = ConnectionProfile("Imported", Transport.SOCKS, hostile_host, 1080)
+    path = tmp_path / "profiles.json"
+    save_profiles(path, [profile])
+
+    window = MainWindow(profiles_path=path)
+
+    assert window.profile_details.textFormat() == Qt.TextFormat.PlainText
+    assert hostile_host in window.profile_details.text()
+    window.close()
+
+
+def test_remove_confirmation_escapes_profile_name_html(tmp_path, qapp, monkeypatch):
+    import apnawin.app as app_module
+
+    hostile_name = '<img src="file:///private/test.png">'
+    profile = ConnectionProfile(hostile_name, Transport.SOCKS, "localhost", 1080)
+    save_profiles(tmp_path / "profiles.json", [profile])
+    captured = []
+
+    def capture_question(*args, **kwargs):
+        captured.append(args[2])
+        return app_module.QMessageBox.StandardButton.No
+
+    monkeypatch.setattr(app_module.QMessageBox, "question", capture_question)
+    window = MainWindow(profiles_path=tmp_path / "profiles.json")
+    window._remove_profile()
+
+    assert captured
+    assert "&lt;img" in captured[0]
+    assert hostile_name not in captured[0]
     window.close()

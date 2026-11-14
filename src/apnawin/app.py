@@ -4,9 +4,10 @@ Tunnel connection remains disabled until a real Windows tunnel engine is integra
 """
 
 import sys
+from html import escape
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths
+from PySide6.QtCore import QStandardPaths, Qt
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -109,6 +110,7 @@ class MainWindow(QMainWindow):
         self.profile_list.currentRowChanged.connect(self._show_selected_profile)
 
         self.profile_details = QLabel("No profile selected.")
+        self.profile_details.setTextFormat(Qt.TextFormat.PlainText)
         self.profile_details.setWordWrap(True)
 
         add_button = QPushButton("Add")
@@ -233,7 +235,7 @@ class MainWindow(QMainWindow):
         answer = QMessageBox.question(
             self,
             "Remove profile",
-            f"Remove the profile “{profile.name}”?",
+            f"Remove the profile “{escape(profile.name, quote=True)}”?",
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
