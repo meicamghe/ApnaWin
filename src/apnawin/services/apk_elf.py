@@ -197,6 +197,65 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                     "ELF dynamic string table is missing its leading NUL"
                     if section[1] == 11 else "ELF symbol string table is missing its leading NUL"
                 )
+        # SHT_SYMTAB_SHNDX provides one 32-bit section index for every
+        # symbol-table entry when SHN_XINDEX is used.
+        symbol_tables = [
+            (index, section)
+            for index, section in enumerate(sections)
+            if section[1] in (2, 11)  # SHT_SYMTAB / SHT_DYNSYM
+        ]
+        for symbol_table_index, symbol_table in symbol_tables:
+            companion_sections = [
+                section for section in sections
+                if section[1] == 18 and section[6] == symbol_table_index
+            ]
+            if len(companion_sections) > 1:
+                raise ValueError("ELF symbol table has multiple extended-index sections")
+            symbol_offset, symbol_size, symbol_entry_size = (
+                symbol_table[4], symbol_table[5], symbol_table[9]
+            )
+            symbol_count = symbol_size // symbol_entry_size
+            companion = companion_sections[0] if companion_sections else None
+            if companion is not None:
+                companion_offset, companion_size = companion[4], companion[5]
+                if companion[7] != 0:
+                    raise ValueError("ELF extended symbol-index section sh_info must be zero")
+                if companion[9] != 4 or companion_size != symbol_count * 4:
+                    raise ValueError("ELF extended symbol-index entry metadata is invalid")
+                if (
+                    companion_offset > len(data)
+                    or companion_size > len(data) - companion_offset
+                ):
+                    raise ValueError("ELF extended symbol-index data is out of bounds")
+            for symbol_index in range(symbol_count):
+                symbol_record_offset = symbol_offset + symbol_index * symbol_entry_size
+                section_index_offset = symbol_record_offset + (6 if elf_class == 2 else 14)
+                symbol_section_index = struct.unpack_from(
+                    endian + "H", data, section_index_offset
+                )[0]
+                extended_section_index = (
+                    struct.unpack_from(
+                        endian + "I", data, companion[4] + symbol_index * 4
+                    )[0]
+                    if companion is not None else 0
+                )
+                if symbol_section_index == 0xFFFF:  # SHN_XINDEX
+                    if companion is None:
+                        raise ValueError("ELF symbol uses SHN_XINDEX without an extended-index section")
+                    if extended_section_index < 0xFF00 or extended_section_index >= len(sections):
+                        raise ValueError("ELF extended symbol section index exceeds the analysis limit")
+                elif extended_section_index != 0:
+                    raise ValueError("ELF unused extended symbol index must be SHN_UNDEF")
+        for section_index, section in enumerate(sections):
+            if section[1] != 18:  # SHT_SYMTAB_SHNDX
+                continue
+            linked_index = section[6]
+            if linked_index >= len(sections) or sections[linked_index][1] not in (2, 11):
+                raise ValueError("ELF extended symbol-index section has an invalid symbol-table reference")
+            if section[7] != 0:
+                raise ValueError("ELF extended symbol-index section sh_info must be zero")
+            if not any(index == linked_index for index, _ in symbol_tables):
+                raise ValueError("ELF extended symbol-index section has no associated symbol table")
         # SHT_GROUP is valid only in relocatable objects. A section may
         # belong to at most one group, and its group header precedes it.
         grouped_members = set()

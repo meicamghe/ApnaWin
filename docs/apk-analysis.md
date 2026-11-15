@@ -265,6 +265,24 @@ semantics in the section-header interpretation table, so those fields are not
 given invented constraints here. These checks establish structural metadata
 only, not relocation correctness or loader compatibility.
 
+
+## ELF extended symbol section-index metadata
+
+SHT_SYMTAB_SHNDX sections are checked against their linked SHT_SYMTAB or
+SHT_DYNSYM section. The link must identify a symbol table, sh_info must be
+zero, sh_entsize must be four bytes, and the section must contain exactly one
+32-bit word for each symbol-table entry. A symbol using SHN_XINDEX must have
+a companion extended-index section; its corresponding word must identify an
+in-range section index. For symbols not using SHN_XINDEX, the corresponding
+word must be SHN_UNDEF (zero). Duplicate companion sections and orphaned
+extended-index sections are rejected.
+
+The parser caps section headers at 4096, below the reserved SHN_XINDEX range
+(starting at 0xff00). Consequently, an actual extended section index cannot
+be represented within the current analysis limit and is rejected explicitly.
+This is a bounded metadata check; it does not decode or resolve symbol names
+or establish loader compatibility.
+
 ## ELF section-group metadata
 
 SHT_GROUP sections are accepted only in ET_REL objects and are checked

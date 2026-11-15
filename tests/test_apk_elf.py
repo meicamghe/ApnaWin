@@ -65,6 +65,42 @@ def _elf32_with_jni_exports():
     return header + dynstr + dynsym + shstr + bytes(section_offset - shstr_offset - len(shstr)) + b"".join(sections)
 
 
+def _elf_with_symtab_shndx(
+    payload, elf_class, *, link=2, info=0, entry_size=4,
+    table_size=None, word_values=None, xindex_symbol=False,
+):
+    data = bytearray(payload)
+    section_offset_field = 40 if elf_class == 64 else 32
+    section_count_field = 60 if elf_class == 64 else 48
+    section_size = 64 if elf_class == 64 else 40
+    section_fmt = "<IIQQQQIIQQ" if elf_class == 64 else "<IIIIIIIIII"
+    word_format = "<Q" if elf_class == 64 else "<I"
+    section_offset = struct.unpack_from(word_format, data, section_offset_field)[0]
+    symbol_header_offset = section_offset + 2 * section_size
+    symbol_offset_field = 24 if elf_class == 64 else 16
+    symbol_entry_size = 24 if elf_class == 64 else 16
+    symbol_data_offset = struct.unpack_from(word_format, data, symbol_header_offset + symbol_offset_field)[0]
+    symbol_count = 4
+    if xindex_symbol:
+        struct.pack_into("<H", data, symbol_data_offset + symbol_entry_size + (6 if elf_class == 64 else 14), 0xFFFF)
+    actual_size = symbol_count * 4 if table_size is None else table_size
+    values = [0] * symbol_count if word_values is None else list(word_values)
+    actual_offset = len(data) + section_size
+    payload_bytes = b"".join(struct.pack("<I", value) for value in values)
+    if len(payload_bytes) < actual_size:
+        payload_bytes += bytes(actual_size - len(payload_bytes))
+    else:
+        payload_bytes = payload_bytes[:actual_size]
+    header = struct.pack(
+        section_fmt, 0, 18, 0, 0, actual_offset, actual_size,
+        link, info, 4, entry_size,
+    )
+    struct.pack_into("<H", data, section_count_field, 5)
+    data.extend(header)
+    data.extend(payload_bytes)
+    return bytes(data)
+
+
 def _elf_with_relr_section(payload, elf_class, *, file_type=3, entry_size=None, relr_size=None, relr_offset=None):
     data = bytearray(payload)
     section_offset_field = 40 if elf_class == 64 else 32
@@ -137,6 +173,85 @@ def test_inspect_elf_rejects_out_of_bounds_relr_data(payload, elf_class):
         inspect_elf_bytes(
             _elf_with_relr_section(
                 payload, elf_class, relr_offset=0x7FFFFFFF
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_accepts_valid_symtab_shndx(payload, elf_class):
+    result = inspect_elf_bytes(_elf_with_symtab_shndx(payload, elf_class))
+    assert result["inspection_status"] == "complete"
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class", "kwargs", "message"),
+    [
+        (_elf64_with_jni_exports(), 64, {"link": 3}, "invalid symbol-table reference"),
+        (_elf32_with_jni_exports(), 32, {"link": 3}, "invalid symbol-table reference"),
+        (_elf64_with_jni_exports(), 64, {"info": 1}, "sh_info must be zero"),
+        (_elf32_with_jni_exports(), 32, {"info": 1}, "sh_info must be zero"),
+        (_elf64_with_jni_exports(), 64, {"entry_size": 8}, "entry metadata is invalid"),
+        (_elf32_with_jni_exports(), 32, {"entry_size": 8}, "entry metadata is invalid"),
+        (_elf64_with_jni_exports(), 64, {"table_size": 12}, "entry metadata is invalid"),
+        (_elf32_with_jni_exports(), 32, {"table_size": 12}, "entry metadata is invalid"),
+    ],
+)
+def test_inspect_elf_rejects_invalid_symtab_shndx_metadata(
+    payload, elf_class, kwargs, message
+):
+    with pytest.raises(ValueError, match=message):
+        inspect_elf_bytes(_elf_with_symtab_shndx(payload, elf_class, **kwargs))
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_rejects_nonzero_unused_symtab_shndx_entry(payload, elf_class):
+    with pytest.raises(ValueError, match="unused extended symbol index"):
+        inspect_elf_bytes(
+            _elf_with_symtab_shndx(
+                payload, elf_class, word_values=[0, 1, 0, 0]
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_rejects_xindex_symbol_without_symtab_shndx(payload, elf_class):
+    data = bytearray(payload)
+    section_offset = struct.unpack_from(
+        "<Q" if elf_class == 64 else "<I", data, 40 if elf_class == 64 else 32
+    )[0]
+    symbol_offset = struct.unpack_from(
+        "<Q" if elf_class == 64 else "<I",
+        data,
+        section_offset + 2 * (64 if elf_class == 64 else 40) + (24 if elf_class == 64 else 16),
+    )[0]
+    struct.pack_into(
+        "<H", data,
+        symbol_offset + (24 if elf_class == 64 else 16) + (6 if elf_class == 64 else 14),
+        0xFFFF,
+    )
+    with pytest.raises(ValueError, match="without an extended-index section"):
+        inspect_elf_bytes(bytes(data))
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_rejects_unrepresentable_extended_symbol_index(payload, elf_class):
+    with pytest.raises(ValueError, match="exceeds the analysis limit"):
+        inspect_elf_bytes(
+            _elf_with_symtab_shndx(
+                payload, elf_class, xindex_symbol=True,
+                word_values=[0, 0xFF00, 0, 0],
             )
         )
 
