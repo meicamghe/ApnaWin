@@ -42,7 +42,7 @@ class ElevatedXrayError(RuntimeError):
     """Raised when the UAC broker cannot be started or supervised."""
 
 
-class _ShellExecuteInfo(wintypes.Structure):
+class _ShellExecuteInfo(ctypes.Structure):
     _fields_ = [
         ("cbSize", wintypes.DWORD),
         ("fMask", wintypes.DWORD),
