@@ -15,6 +15,6 @@ The queue accepts only contiguous one-dimensional buffer-protocol inputs and cop
 
 ## Integration boundary
 
-The future Wintun receive worker must release each native receive packet after copying it into the bounded queue, regardless of enqueue success. The future transmit worker must allocate a Wintun send buffer only when it is ready to copy and send the next queued packet, avoiding allocation while waiting for queue capacity. The native send API consumes the allocated send buffer; there is no separate discard/release operation for a successfully allocated send packet.
+The future Wintun receive worker can use handoff_received_packet(queue, lease): it performs a non-blocking copy into the queue and attempts native lease release whether enqueue succeeds or fails. Queue-full remains an explicit error; if both enqueue and release fail, PacketHandoffError preserves both failures. The future transmit worker must allocate a Wintun send buffer only when it is ready to copy and send the next queued packet, avoiding allocation while waiting for queue capacity. The native send API consumes the allocated send buffer; there is no separate discard/release operation for a successfully allocated send packet.
 
 This module does not load a DLL, poll Wintun events, mutate routes/DNS, forward traffic, or enable Connect.

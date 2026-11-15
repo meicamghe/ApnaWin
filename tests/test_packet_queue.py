@@ -185,3 +185,75 @@ def test_rejects_multidimensional_and_noncontiguous_packet_views():
         queue.put(multidimensional)
     with pytest.raises(ValueError, match="contiguous"):
         queue.put(noncontiguous)
+
+
+def test_handoff_received_packet_copies_then_releases_native_lease():
+    from apnawin.engines.packet_queue import handoff_received_packet
+
+    class Lease:
+        data = memoryview(b"native-packet")
+
+        def __init__(self):
+            self.releases = 0
+
+        def release(self):
+            self.releases += 1
+
+    queue = BoundedPacketQueue(max_packets=1, max_bytes=32, max_packet_size=32)
+    lease = Lease()
+    handoff_received_packet(queue, lease)
+    assert queue.get() == b"native-packet"
+    assert lease.releases == 1
+
+
+def test_handoff_releases_native_lease_when_queue_is_full():
+    from apnawin.engines.packet_queue import handoff_received_packet
+
+    class Lease:
+        data = memoryview(b"next")
+
+        def __init__(self):
+            self.releases = 0
+
+        def release(self):
+            self.releases += 1
+
+    queue = BoundedPacketQueue(max_packets=1, max_bytes=8, max_packet_size=8)
+    queue.put(b"full")
+    lease = Lease()
+    with pytest.raises(PacketQueueFull):
+        handoff_received_packet(queue, lease)
+    assert lease.releases == 1
+    assert queue.get() == b"full"
+
+
+def test_handoff_preserves_both_enqueue_and_release_failures():
+    from apnawin.engines.packet_queue import PacketHandoffError, handoff_received_packet
+
+    class Lease:
+        data = memoryview(b"next")
+
+        def release(self):
+            raise OSError("native release failed")
+
+    queue = BoundedPacketQueue(max_packets=1, max_bytes=8, max_packet_size=8)
+    queue.put(b"full")
+    with pytest.raises(PacketHandoffError) as caught:
+        handoff_received_packet(queue, Lease())
+    assert isinstance(caught.value.enqueue_error, PacketQueueFull)
+    assert isinstance(caught.value.release_error, OSError)
+
+
+def test_handoff_surfaces_release_failure_after_successful_copy():
+    from apnawin.engines.packet_queue import handoff_received_packet
+
+    class Lease:
+        data = memoryview(b"copied")
+
+        def release(self):
+            raise OSError("native release failed")
+
+    queue = BoundedPacketQueue(max_packets=1, max_bytes=8, max_packet_size=8)
+    with pytest.raises(OSError, match="native release failed"):
+        handoff_received_packet(queue, Lease())
+    assert queue.get() == b"copied"
