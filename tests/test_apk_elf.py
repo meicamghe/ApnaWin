@@ -65,6 +65,33 @@ def _elf32_with_jni_exports():
     return header + dynstr + dynsym + shstr + bytes(section_offset - shstr_offset - len(shstr)) + b"".join(sections)
 
 
+@pytest.mark.parametrize(
+    ("payload", "section_offset_field", "section_entry_size", "symbol_offset_field"),
+    [
+        (_elf64_with_jni_exports(), 40, 64, 24),
+        (_elf32_with_jni_exports(), 32, 40, 16),
+    ],
+)
+def test_inspect_elf_rejects_nonzero_null_symbol_entry(
+    payload, section_offset_field, section_entry_size, symbol_offset_field
+):
+    data = bytearray(payload)
+    section_offset = struct.unpack_from(
+        "<Q" if section_entry_size == 64 else "<I",
+        data,
+        section_offset_field,
+    )[0]
+    dynsym_header = section_offset + 2 * section_entry_size
+    symbol_offset = struct.unpack_from(
+        "<Q" if section_entry_size == 64 else "<I",
+        data,
+        dynsym_header + symbol_offset_field,
+    )[0]
+    data[symbol_offset] = 1  # STN_UNDEF requires st_name == 0 (and all other fields zero).
+    with pytest.raises(ValueError, match="null entry is not zero"):
+        inspect_elf_bytes(bytes(data))
+
+
 def _elf_with_symtab_shndx(
     payload, elf_class, *, link=2, info=0, entry_size=4,
     table_size=None, word_values=None, xindex_symbol=False,

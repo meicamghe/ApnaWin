@@ -215,6 +215,12 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                 symbol_table[4], symbol_table[5], symbol_table[9]
             )
             symbol_count = symbol_size // symbol_entry_size
+            # ELF reserves symbol-table entry zero for STN_UNDEF. Its
+            # class-specific symbol record must contain only zero fields.
+            if symbol_count and any(
+                data[symbol_offset:symbol_offset + expected_symbol]
+            ):
+                raise ValueError("ELF symbol table null entry is not zero")
             companion = companion_sections[0] if companion_sections else None
             if companion is not None:
                 companion_offset, companion_size = companion[4], companion[5]

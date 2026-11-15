@@ -235,9 +235,11 @@ in-range string-table section, use a nonzero entry size large enough for the
 ELF class, have a section size divisible by that entry size, and keep its
 symbol data and linked strings within the file. The local-symbol boundary
 must not exceed the number of entries, and the linked string table must begin
-with its required NUL byte. Invalid references or bounds cause that ELF
-member to be classified as invalid; static symbol names are not emitted or
-counted as JNI exports.
+with its required NUL byte. When present, symbol-table entry zero (STN_UNDEF)
+must have all-zero class-specific fields, as required for the reserved
+undefined symbol. Invalid references, null-entry contents, or bounds cause
+that ELF member to be classified as invalid; static symbol names are not
+emitted or counted as JNI exports.
 
 
 ## ELF relocation-section metadata
