@@ -24,7 +24,7 @@ _REMOTE_PROXY_PROTOCOLS = frozenset({
     "vless", "vmess", "trojan", "shadowsocks", "socks", "http",
     "wireguard", "hysteria", "masque",
 })
-_LOCAL_NONLEAKING_PROTOCOLS = frozenset({"blackhole", "dns"})
+_LOCAL_NONLEAKING_PROTOCOLS = frozenset({"blackhole"})
 from pathlib import Path
 
 from apnawin.domain.profile import ConnectionProfile, Transport

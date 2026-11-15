@@ -25,7 +25,7 @@ The runner accepts exactly one supported inbound. For TUN mode it requires:
 - both `0.0.0.0/0` and `::/0` in `autoSystemRoutingTable`;
 - `autoOutboundsInterface: "auto"` to prevent Xray's own server connections looping into the tunnel;
 - exactly `autoSystemWfpBlockLeak: ["allexceptlan", "dns"]`, which includes DNS leak blocking and blocks non-LAN traffic from escaping outside the TUN while preserving local-LAN traffic;
-- the first outbound must be a supported remote proxy protocol (`vless`, `vmess`, `trojan`, `shadowsocks`, `socks`, `http`, `wireguard`, `hysteria` or `masque`); direct `freedom`, local `loopback`, unsupported protocols and any later direct outbound are rejected. `blackhole` and `dns` are allowed only as non-primary auxiliary outbounds.
+- the first outbound must be a supported remote proxy protocol (`vless`, `vmess`, `trojan`, `shadowsocks`, `socks`, `http`, `wireguard`, `hysteria` or `masque`); direct `freedom`, local `loopback`, unsupported protocols and any later direct outbound are rejected. `blackhole` is allowed only as a non-primary auxiliary outbound. The special `dns` outbound is rejected until its resolver detour can be validated against the no-leak policy.
 
 The full config is then checked by Xray's own `run -test -c` command. The Python validator is deliberately stricter than the general Xray schema: it rejects partial/split-tunnel configurations and unsafe leak-protection settings for this product's full-tunnel mode.
 
