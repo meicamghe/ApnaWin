@@ -22,7 +22,7 @@ MAX_XRAY_CONFIG_BYTES = 16 * 1024 * 1024
 
 _REMOTE_PROXY_PROTOCOLS = frozenset({
     "vless", "vmess", "trojan", "shadowsocks", "socks", "http",
-    "wireguard", "hysteria", "hysteria2", "tuic",
+    "wireguard", "hysteria", "masque",
 })
 _LOCAL_NONLEAKING_PROTOCOLS = frozenset({"blackhole", "dns"})
 from pathlib import Path
