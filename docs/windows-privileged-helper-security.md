@@ -108,3 +108,20 @@ always inject the service-owned mutex; leaving the optional parameter unset is
 for isolated unit tests and non-privileged development only. This integration
 does not create the service, provision its service SID, or verify the final
 Windows object DACL.
+
+
+## Explicit object DACL builders
+
+`apnawin.services.windows_object_acl` provides pure SDDL builders for
+service-owned mutexes and local named pipes. The mutex DACL grants generic-all
+only to SYSTEM and the installed service SID. The pipe DACL grants generic-all
+to SYSTEM/service and generic read/write to one authenticated interactive-user
+SID. SID inputs are syntax-checked, including 32-bit subauthority bounds, to
+prevent SDDL injection and malformed identifiers.
+
+These helpers do not discover or authenticate SIDs. The service must obtain its
+own service SID from trusted installation/service configuration and obtain the
+client SID from the connected pipe's authenticated token. Never accept either
+SID from request JSON or a desktop-provided identity field. The pipe must still
+be created with `PIPE_REJECT_REMOTE_CLIENTS`, session checks, peer-token
+authentication and impersonation cleanup.
