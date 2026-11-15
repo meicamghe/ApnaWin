@@ -399,7 +399,6 @@ def _wait_for_tun_network_ready(
         adapter_name=inbound.name,
         timeout=min(5.0, float(timeout)),
     )
-    expected_dns = set(inbound.dns)
     deadline = monotonic() + float(timeout)
     ready_since = None
     last_error = None

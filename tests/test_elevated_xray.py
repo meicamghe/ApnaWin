@@ -405,6 +405,10 @@ def test_helper_supervises_xray_until_parent_exits(tmp_path, monkeypatch):
         elevated_xray, "_wait_for_tun_network_ready",
         lambda *_args, **_kwargs: None,
     )
+    monkeypatch.setattr(
+        elevated_xray, "_ensure_tun_adapter_available",
+        lambda *_args, **_kwargs: None,
+    )
 
     ready_name = "Local\\ApnaWinReady-" + "a" * 32
     stop_name = "Local\\ApnaWinStop-" + "b" * 32
