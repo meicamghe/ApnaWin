@@ -32,8 +32,20 @@ class PacketQueueTimeout(PacketQueueError):
 class PacketHandoffError(PacketQueueError):
     """Both queue insertion and native receive-buffer release failed."""
 
-    def __init__(self, enqueue_error: Exception, release_error: Exception) -> None:
-        super().__init__("packet enqueue and receive-buffer release both failed")
+    def __init__(
+        self,
+        *,
+        enqueued: bool,
+        enqueue_error: Exception | None,
+        release_error: Exception,
+    ) -> None:
+        message = (
+            "packet was queued but native receive-buffer release failed"
+            if enqueued
+            else "packet enqueue and native receive-buffer release both failed"
+        )
+        super().__init__(message)
+        self.enqueued = enqueued
         self.enqueue_error = enqueue_error
         self.release_error = release_error
 
@@ -206,8 +218,21 @@ def handoff_received_packet(
             lease.release()
         except BaseException as release_error:
             if isinstance(enqueue_error, Exception) and isinstance(release_error, Exception):
-                raise PacketHandoffError(enqueue_error, release_error) from release_error
+                raise PacketHandoffError(
+                    enqueued=False,
+                    enqueue_error=enqueue_error,
+                    release_error=release_error,
+                ) from release_error
             raise release_error from enqueue_error
         raise
     else:
-        lease.release()
+        try:
+            lease.release()
+        except BaseException as release_error:
+            if isinstance(release_error, Exception):
+                raise PacketHandoffError(
+                    enqueued=True,
+                    enqueue_error=None,
+                    release_error=release_error,
+                ) from release_error
+            raise

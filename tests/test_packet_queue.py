@@ -254,6 +254,9 @@ def test_handoff_surfaces_release_failure_after_successful_copy():
             raise OSError("native release failed")
 
     queue = BoundedPacketQueue(max_packets=1, max_bytes=8, max_packet_size=8)
-    with pytest.raises(OSError, match="native release failed"):
+    with pytest.raises(PacketHandoffError, match="was queued") as caught:
         handoff_received_packet(queue, Lease())
+    assert caught.value.enqueued is True
+    assert caught.value.enqueue_error is None
+    assert isinstance(caught.value.release_error, OSError)
     assert queue.get() == b"copied"
