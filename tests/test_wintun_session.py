@@ -179,3 +179,84 @@ def test_state_and_info_reads_are_safe_during_lifecycle():
         snapshots = [future.result() for future in futures]
     assert all(state in WintunSessionState for state, _ in snapshots)
     session.stop()
+
+
+def test_receive_lease_exposes_read_only_view_and_releases_once():
+    backend = FakeWintunBackend()
+    session = owner(backend)
+    session.start()
+    released = []
+    lease = session.lease_received_packet(bytearray(b"packet-data"), lambda: released.append(True))
+    assert session.outstanding_receive_leases == 1
+    assert lease.data.readonly
+    assert bytes(lease.data) == b"packet-data"
+    lease.release()
+    lease.release()
+    assert released == [True]
+    assert session.outstanding_receive_leases == 0
+    assert lease.released
+    session.stop()
+
+
+def test_session_stop_refuses_while_receive_lease_is_outstanding():
+    backend = FakeWintunBackend()
+    session = owner(backend)
+    session.start()
+    lease = session.lease_received_packet(b"payload", lambda: None)
+    with pytest.raises(WintunSessionError, match="leases are outstanding"):
+        session.stop()
+    assert session.state is WintunSessionState.SESSION_STARTED
+    assert "end_session" not in [call[0] for call in backend.calls]
+    lease.release()
+    session.stop()
+
+
+def test_receive_release_failure_retains_lease_for_retry():
+    backend = FakeWintunBackend()
+    session = owner(backend)
+    session.start()
+    calls = []
+
+    def flaky_release():
+        calls.append("release")
+        if len(calls) == 1:
+            raise OSError("release failed")
+
+    lease = session.lease_received_packet(b"payload", flaky_release)
+    with pytest.raises(OSError, match="release failed"):
+        lease.release()
+    assert not lease.released
+    assert session.outstanding_receive_leases == 1
+    lease.release()
+    assert lease.released
+    assert calls == ["release", "release"]
+    session.stop()
+
+
+def test_receive_lease_context_manager_releases_on_exception():
+    backend = FakeWintunBackend()
+    session = owner(backend)
+    session.start()
+    released = []
+    with pytest.raises(RuntimeError):
+        with session.lease_received_packet(b"payload", lambda: released.append(True)):
+            raise RuntimeError("consumer failed")
+    assert released == [True]
+    assert session.outstanding_receive_leases == 0
+    session.stop()
+
+
+def test_cannot_create_receive_lease_without_active_session():
+    session = owner(FakeWintunBackend())
+    with pytest.raises(WintunSessionError, match="started session"):
+        session.lease_received_packet(b"payload", lambda: None)
+
+
+@pytest.mark.parametrize("packet", [b"", memoryview(b"")])
+def test_receive_lease_rejects_empty_packet(packet):
+    backend = FakeWintunBackend()
+    session = owner(backend)
+    session.start()
+    with pytest.raises(ValueError, match="non-empty"):
+        session.lease_received_packet(packet, lambda: None)
+    session.stop()

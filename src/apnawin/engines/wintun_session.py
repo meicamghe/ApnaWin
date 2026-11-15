@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from threading import RLock
+from collections.abc import Callable
 from typing import Protocol
 
 
@@ -61,6 +62,81 @@ class WintunSessionInfo:
     ring_capacity: int
 
 
+class WintunReceiveLeaseTracker:
+    """Track receive buffers until their matching native release succeeds."""
+
+    def __init__(self) -> None:
+        self._lock = RLock()
+        self._next_token = 1
+        self._active: dict[int, tuple[memoryview, Callable[[], None]]] = {}
+
+    @property
+    def outstanding(self) -> int:
+        with self._lock:
+            return len(self._active)
+
+    def acquire(self, packet: bytes | bytearray | memoryview, release: Callable[[], None]) -> "WintunReceivePacketLease":
+        if not callable(release):
+            raise TypeError("release must be callable")
+        try:
+            view = memoryview(packet)
+        except TypeError as exc:
+            raise TypeError("packet must support the buffer protocol") from exc
+        if view.ndim != 1 or not view.contiguous or view.nbytes == 0:
+            raise ValueError("packet must be a non-empty contiguous one-dimensional buffer")
+        readonly = view.toreadonly()
+        with self._lock:
+            token = self._next_token
+            self._next_token += 1
+            self._active[token] = (readonly, release)
+        return WintunReceivePacketLease(self, token)
+
+    def _view(self, token: int) -> memoryview:
+        with self._lock:
+            try:
+                return self._active[token][0]
+            except KeyError as exc:
+                raise WintunSessionError("receive packet lease is already released") from exc
+
+    def _release(self, token: int) -> None:
+        with self._lock:
+            try:
+                _, callback = self._active[token]
+            except KeyError:
+                return
+            callback()
+            del self._active[token]
+
+
+class WintunReceivePacketLease:
+    """Single-owner view of one receive packet and its native release action."""
+
+    def __init__(self, tracker: WintunReceiveLeaseTracker, token: int) -> None:
+        self._tracker = tracker
+        self._token = token
+
+    @property
+    def data(self) -> memoryview:
+        return self._tracker._view(self._token)
+
+    @property
+    def released(self) -> bool:
+        try:
+            self._tracker._view(self._token)
+        except WintunSessionError:
+            return True
+        return False
+
+    def release(self) -> None:
+        self._tracker._release(self._token)
+
+    def __enter__(self) -> "WintunReceivePacketLease":
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        self.release()
+
+
 class WintunSessionOwner:
     """Own one adapter/session pair and release them in strict reverse order.
 
@@ -108,6 +184,17 @@ class WintunSessionOwner:
         self._info: WintunSessionInfo | None = None
         self._state = WintunSessionState.CLOSED
         self._lock = RLock()
+        self._receive_leases = WintunReceiveLeaseTracker()
+
+    @property
+    def outstanding_receive_leases(self) -> int:
+        return self._receive_leases.outstanding
+
+    def lease_received_packet(self, packet: bytes | bytearray | memoryview, release: Callable[[], None]) -> WintunReceivePacketLease:
+        with self._lock:
+            if self._state is not WintunSessionState.SESSION_STARTED:
+                raise WintunSessionError("cannot lease a packet without a started session")
+            return self._receive_leases.acquire(packet, release)
 
     @property
     def state(self) -> WintunSessionState:
@@ -171,6 +258,8 @@ class WintunSessionOwner:
     def _stop_locked(self) -> None:
         if self._state is WintunSessionState.CLOSED:
             return
+        if self._receive_leases.outstanding:
+            raise WintunSessionError("cannot end Wintun session while receive packet leases are outstanding")
         errors = self._release_resources()
         if errors:
             self._state = WintunSessionState.FAILED

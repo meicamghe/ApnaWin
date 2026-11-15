@@ -30,3 +30,14 @@ The adapter must own and validate every native handle. It must reject unexpected
 The actual Win32/Wintun FFI, packet buffer leases, receive/send loops, bounded queues, cancellation/wakeup events, MTU handling, IP address assignment, route/DNS integration, helper service, and end-to-end leak tests are not implemented. Do not interpret `SESSION_STARTED` as a working VPN connection.
 
 Connect remains disabled until the real backend and full Windows integration pass clean-machine and network acceptance tests.
+
+
+## Receive packet lease contract
+
+The owner can track one buffer returned by the native receive API. The lease exposes a read-only, contiguous view and requires release after packet processing. A successful native release removes the lease from the outstanding set; a failed release retains it so the caller can retry.
+
+Session stop refuses to call EndSession while any receive lease remains outstanding. This prevents teardown from invalidating a packet buffer still being consumed. Context-manager use guarantees a release attempt on normal exit and exception exit, but a release callback failure remains visible and retains ownership.
+
+The future FFI must bind the callback to WintunReleaseReceivePacket for the exact packet pointer. Consumers must not retain the memoryview beyond the lease lifetime. Python cannot revoke an already-copied memoryview reference, so the native adapter and packet-processing layer must enforce this lifetime rule.
+
+This abstraction does not implement packet polling, receive loops, send allocation, packet forwarding, or a native DLL.
