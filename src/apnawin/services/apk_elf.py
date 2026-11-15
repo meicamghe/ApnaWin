@@ -256,6 +256,60 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                 raise ValueError("ELF extended symbol-index section sh_info must be zero")
             if not any(index == linked_index for index, _ in symbol_tables):
                 raise ValueError("ELF extended symbol-index section has no associated symbol table")
+        # Dynamic sections link to their string tables and contain fixed-size
+        # Elf32_Dyn / Elf64_Dyn records. Do not interpret pointer-valued tags:
+        # their addresses require program-header mapping and ABI context.
+        dynamic_entry_size = 16 if elf_class == 2 else 8
+        for section in sections:
+            if section[1] != 6:  # SHT_DYNAMIC
+                continue
+            dynamic_offset, dynamic_size = section[4], section[5]
+            string_index, info, entry_size = section[6], section[7], section[9]
+            if string_index >= len(sections) or sections[string_index][1] != 3:
+                raise ValueError("ELF dynamic section has an invalid string-table reference")
+            if info != 0:
+                raise ValueError("ELF dynamic section sh_info must be zero")
+            if entry_size != dynamic_entry_size or dynamic_size % dynamic_entry_size:
+                raise ValueError("ELF dynamic section entry metadata is invalid")
+            if dynamic_offset > len(data) or dynamic_size > len(data) - dynamic_offset:
+                raise ValueError("ELF dynamic section data is out of bounds")
+        # The SysV SHT_HASH layout is class-independent: two 32-bit counts,
+        # followed by nbucket bucket words and nchain chain words. Both arrays
+        # contain indexes into the linked symbol table.
+        for section in sections:
+            if section[1] != 5:  # SHT_HASH
+                continue
+            hash_offset, hash_size = section[4], section[5]
+            symbol_index, info, entry_size = section[6], section[7], section[9]
+            if (
+                symbol_index >= len(sections)
+                or sections[symbol_index][1] not in (2, 11)
+            ):
+                raise ValueError("ELF hash section has an invalid symbol-table reference")
+            if info != 0:
+                raise ValueError("ELF hash section sh_info must be zero")
+            if entry_size != 4 or hash_size < 8 or hash_size % 4:
+                raise ValueError("ELF hash section entry metadata is invalid")
+            if hash_offset > len(data) or hash_size > len(data) - hash_offset:
+                raise ValueError("ELF hash section data is out of bounds")
+            bucket_count, chain_count = struct.unpack_from(endian + "II", data, hash_offset)
+            symbol_table = sections[symbol_index]
+            symbol_entry_size = symbol_table[9]
+            symbol_count = symbol_table[5] // symbol_entry_size
+            required_size = 8 + 4 * (bucket_count + chain_count)
+            if (
+                bucket_count == 0
+                or chain_count != symbol_count
+                or required_size > hash_size
+            ):
+                raise ValueError("ELF hash section table dimensions are invalid")
+            word_count = (required_size - 8) // 4
+            for word_index in range(word_count):
+                value = struct.unpack_from(
+                    endian + "I", data, hash_offset + 8 + word_index * 4
+                )[0]
+                if value >= chain_count:
+                    raise ValueError("ELF hash section contains an invalid symbol index")
         # SHT_GROUP is valid only in relocatable objects. A section may
         # belong to at most one group, and its group header precedes it.
         grouped_members = set()
