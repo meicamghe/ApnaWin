@@ -39,7 +39,7 @@ def verify_vpn_runtime(engine_dir: str | Path) -> dict:
             raw = stream.read(_MAX_MANIFEST_BYTES + 1)
         if len(raw) > _MAX_MANIFEST_BYTES:
             raise ValueError("manifest too large")
-        manifest = json.loads(raw.decode("utf-8"))
+        manifest = json.loads(raw.decode("utf-8-sig"))
     except (OSError, UnicodeError, ValueError) as exc:
         raise VpnRuntimeIntegrityError("VPN runtime manifest is invalid") from exc
 
