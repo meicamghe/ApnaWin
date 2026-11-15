@@ -93,7 +93,7 @@ def _elf_with_symtab_shndx(
         payload_bytes = payload_bytes[:actual_size]
     header = struct.pack(
         section_fmt, 0, 18, 0, 0, actual_offset, actual_size,
-        link, info, actual_alignment, actual_entry_size,
+        link, info, 4, 4,
     )
     struct.pack_into("<H", data, section_count_field, 5)
     data.extend(header)
@@ -172,7 +172,7 @@ def _elf_with_gnu_hash_section(
     actual_offset = len(data) + section_size if data_offset is None else data_offset
     header = struct.pack(
         section_fmt, 0, 0x6FFFFFF6, 0, 0, actual_offset, len(hash_payload),
-        link, info, 4, entry_size,
+        link, info, actual_alignment, actual_entry_size,
     )
     struct.pack_into("<H", data, section_count_field, 5)
     data.extend(header)
