@@ -6,24 +6,28 @@ The native Windows application shell, profile management, Xray process runner, W
 
 The Connect button remains intentionally disabled because a verified Windows tunnel/TUN integration and authorized end-to-end server configuration are not available.
 
+## Latest CI verification
+
+Workflow [43708339813](https://github.com/meicamghe/ApnaWin/actions/runs/43708339813) passed on commit `c28ff1f1c23ba501b0fb154c42763fb345599d65`: 599 tests passed (one expected warning from a duplicate ZIP-entry fixture); Windows x64 PyInstaller folder build, packaged executable smoke test and portable artifact upload all succeeded.
+
+CI validates configured tests and packaging, not live VPN connectivity.
+
 ## Windows network transaction
 
 - Wintun is the leading Layer-3 adapter candidate, pending pinned-binary architecture/hash/signature/license verification and clean-machine testing.
 - The privileged helper, packet-forwarding integration and route/DNS executor do not exist yet.
-- `windows_network_plan.py` validates immutable route/DNS intent without OS changes. It requires a physical-interface endpoint host route before tunnel default routes, prevents duplicate default routes per family, and binds DNS to the tunnel interface.
-- `windows-privileged-helper-security.md` specifies the unprivileged desktop / narrow local helper boundary, named-pipe controls, Windows IP Helper API mapping, and transaction ownership/recovery rules. It is a design document, not an implementation.
-- A valid plan does not prove that routes were applied or that traffic traverses a VPN.
+- `windows_network_plan.py` validates immutable route/DNS intent without OS changes.
+- `windows_network_journal.py` now provides a bounded versioned journal model and atomic snapshot persistence. It does not apply networking or implement recovery.
+- `windows-privileged-helper-security.md` specifies the unprivileged desktop / narrow local helper boundary and Windows API mapping.
+- The containing journal directory still needs a restrictive Windows ACL before privileged integration.
 
 ## Remote configuration
 
 Available evidence has not established a verified APNA endpoint, authentication scheme, signature format or upstream response schema. Do not invent any of these. No credentials or endpoints are hard-coded.
 
-## Latest verification
-
-Workflow `43707683054` passed on commit `6c35c124179106123bf68c0f022a22e143c6d9ae`: 574 tests passed, and the Windows PyInstaller folder build, packaged-app smoke test and artifact upload all succeeded. The latest network-plan commit `ee4aff5e46a9229b88a33084aa4d8d029e946484` passed its 594-test job; its Windows packaging job is being verified. CI verifies configured tests and packaging, not live VPN connectivity.
-
 ## Latest engineering changes
 
-- Connection lifecycle cleanup and validation semantics were hardened; cleanup failure retains the active profile for retry.
-- Windows route/DNS intent now has a pure immutable validation model; no privileged mutations are performed.
+- Connection lifecycle cleanup and validation semantics are hardened; a failed cleanup retains the active profile for retry.
+- Windows route/DNS intent is validated as an immutable model.
+- The transaction journal is durable and bounded at the file-replacement layer, but recovery reconciliation is not implemented.
 - Connect remains disabled until a production Windows tunnel passes end-to-end route, DNS, leak, disconnect and crash-recovery acceptance tests.
