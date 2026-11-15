@@ -296,3 +296,22 @@ more than once or shared between groups. Conversely, every section carrying
 SHF_GROUP must be referenced by exactly one group. Group records are not used to infer
 linker selection or runtime behavior; this is structural metadata validation
 only.
+
+
+## ELF dynamic and SysV hash section metadata
+
+SHT_DYNAMIC sections must link to an in-range SHT_STRTAB section, have
+sh_info equal to zero, use the class-specific Elf32_Dyn / Elf64_Dyn record
+size (8 bytes for ELF32 and 16 bytes for ELF64), and contain a whole number
+of records within the file bounds. Dynamic tag values and pointer-valued
+addresses are not resolved: doing so requires mapping program headers and
+applying ABI-specific interpretation.
+
+SHT_HASH sections must link to an in-range SHT_SYMTAB or SHT_DYNSYM section,
+have sh_info equal to zero, and use four-byte Elf32_Word entries. The parser
+checks the bounded SysV hash layout (nbucket, nchain, bucket array, chain
+array), requires a nonzero bucket count and nchain equal to the linked symbol
+table's entry count, and rejects bucket or chain indexes outside that table.
+It does not calculate symbol hashes or perform dynamic symbol resolution.
+These checks establish structural metadata only, not loader compatibility or
+runtime behavior.
