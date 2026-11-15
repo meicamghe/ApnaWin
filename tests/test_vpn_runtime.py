@@ -89,7 +89,10 @@ def test_runtime_verification_rejects_binary_symlink(tmp_path):
     root.mkdir()
     target = tmp_path / "xray.exe"
     target.write_bytes(b"binary")
-    (root / "xray.exe").symlink_to(target)
+    try:
+        (root / "xray.exe").symlink_to(target)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is unavailable")
     (root / "wintun.dll").write_bytes(b"wintun")
     manifest = {
         "schema_version": 1,
