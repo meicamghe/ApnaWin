@@ -43,6 +43,12 @@ jobs:
         run: python -m pip install -e ".[dev]"
       - name: Build Windows desktop application
         run: python -m PyInstaller --noconfirm --clean --windowed --name ApnaWin --paths src src/apnawin/__main__.py
+      - name: Build elevated Xray helper
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --uac-admin --name ApnaWinElevator --paths src src/apnawin/elevated_helper.py
+          Copy-Item -LiteralPath "dist/ApnaWinElevator.exe" -Destination "dist/ApnaWin/ApnaWinElevator.exe" -Force
+          Copy-Item -LiteralPath "scripts/Install-ApnaWin.ps1" -Destination "dist/ApnaWin/Install-ApnaWin.ps1" -Force
       - name: Install verified Xray and Wintun runtime
         shell: pwsh
         run: ./scripts/Install-VpnRuntime.ps1 -Destination "dist/ApnaWin/engine"

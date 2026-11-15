@@ -87,3 +87,10 @@ The profile UI now has an Xray JSON import action for XRAY profiles. Configs are
 ## Encrypted Xray config import
 
 The profile UI supports importing a complete Xray TUN JSON config for an XRAY profile. The config is validated and stored encrypted with current-user DPAPI; profile metadata exports omit credentials. Renames move the encrypted record, and profile deletion removes it. The UI deliberately leaves Connect disabled. The Windows elevation supervisor and end-to-end connection workflow remain outstanding.
+
+
+## Windows UAC helper — implementation in progress
+
+Added a fixed-path UAC helper design: parent-side ElevatedXrayProcess uses ShellExecuteExW(runas), ready/stop events, and a parent-process handle; the helper validates its Program Files location, decrypts the selected profile with current-user DPAPI, writes a temporary runtime config, starts the fixed Xray binary through XrayProcessRunner, and supervises it. The Windows build is being extended to package the helper with a requireAdministrator manifest and an installer that applies Program Files ACLs.
+
+Important: the helper currently stops Xray using the existing forceful Job Object stop path. It is not yet wired into the main window. Graceful TUN shutdown, route/DNS restoration, WFP leak tests and end-to-end Windows acceptance are still required. Keep Connect disabled.

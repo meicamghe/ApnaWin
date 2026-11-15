@@ -1,0 +1,237 @@
+import ctypes
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from apnawin.services import elevated_xray
+
+
+class FakeFunction:
+    def __init__(self, callback):
+        self.callback = callback
+        self.argtypes = None
+        self.restype = None
+
+    def __call__(self, *args):
+        return self.callback(*args)
+
+
+class FakeKernel32:
+    def __init__(self, *, ready=True, process_exits=False, parent_exits=False):
+        self.ready = ready
+        self.process_exits = process_exits
+        self.parent_exits = parent_exits
+        self.closed = []
+        self.set_events = []
+        self.terminated = []
+        self._wait_calls = {}
+        self._create_count = 0
+
+    def CreateEventW(self, _security, _manual, _initial, _name):
+        self._create_count += 1
+        return 100 + self._create_count
+
+    def WaitForSingleObject(self, handle, timeout):
+        if handle == 101:
+            return elevated_xray._WAIT_OBJECT_0 if self.ready else elevated_xray._WAIT_TIMEOUT
+        if handle == 200:
+            return elevated_xray._WAIT_OBJECT_0 if self.process_exits else elevated_xray._WAIT_TIMEOUT
+        if handle == 31 and self.parent_exits and timeout == 0:
+            count = self._wait_calls.get(handle, 0)
+            self._wait_calls[handle] = count + 1
+            return elevated_xray._WAIT_TIMEOUT if count == 0 else elevated_xray._WAIT_OBJECT_0
+        if handle == 33 and timeout == 100:
+            return elevated_xray._WAIT_TIMEOUT
+        if handle == 31 and timeout == 0:
+            return elevated_xray._WAIT_TIMEOUT
+        return elevated_xray._WAIT_OBJECT_0
+
+    def GetExitCodeProcess(self, _handle, pointer):
+        ctypes.cast(pointer, ctypes.POINTER(elevated_xray.wintypes.DWORD)).contents.value = 0
+        return True
+
+    def GetProcessId(self, _handle):
+        return 1234
+
+    def TerminateProcess(self, handle, code):
+        self.terminated.append((handle, code))
+        self.process_exits = True
+        return True
+
+    def CloseHandle(self, handle):
+        self.closed.append(handle)
+        return True
+
+    def SetEvent(self, handle):
+        self.set_events.append(handle)
+        if handle == 102:
+            self.process_exits = True
+        return True
+
+    def OpenProcess(self, _access, _inherit, _pid):
+        return 31
+
+    def OpenEventW(self, _access, _inherit, name):
+        return 32 if "Ready-" in name else 33
+
+
+class FakeShell32:
+    def __init__(self, *, success=True, handle=200):
+        self.success = success
+        self.handle = handle
+        self.info = None
+        self.ShellExecuteExW = FakeFunction(self._shell_execute)
+
+    def _shell_execute(self, pointer):
+        self.info = ctypes.cast(
+            pointer, ctypes.POINTER(elevated_xray._ShellExecuteInfo)
+        ).contents
+        self.info.hProcess = self.handle
+        return self.success
+
+
+class FakeApi:
+    def __init__(self, *, shell_success=True, ready=True, process_exits=False):
+        self.kernel32 = FakeKernel32(ready=ready, process_exits=process_exits)
+        self.shell32 = FakeShell32(success=shell_success)
+        self.error = 1223 if not shell_success else 0
+
+    def last_error(self):
+        return self.error
+
+
+def setup_install_paths(tmp_path, monkeypatch):
+    program_files = tmp_path / "Program Files"
+    appdata = tmp_path / "AppData"
+    helper = program_files / "ApnaWin" / "ApnaWinElevator.exe"
+    store = appdata / "ApnaWin" / "xray-configs.json"
+    helper.parent.mkdir(parents=True)
+    store.parent.mkdir(parents=True)
+    helper.write_bytes(b"helper")
+    store.write_bytes(b"encrypted store")
+    monkeypatch.setenv("ProgramFiles", str(program_files))
+    monkeypatch.setenv("APPDATA", str(appdata))
+    return helper, store
+
+
+def test_elevated_launcher_uses_runas_and_returns_supervisor_handle(tmp_path, monkeypatch):
+    helper, store = setup_install_paths(tmp_path, monkeypatch)
+    monkeypatch.setattr(elevated_xray.os, "name", "nt")
+    api = FakeApi()
+    process = elevated_xray.ElevatedXrayProcess.launch(
+        helper, store, "Office", api=api
+    )
+    assert api.shell32.info.lpVerb == "runas"
+    assert api.shell32.info.lpFile == str(helper)
+    assert "--profile-name Office" in api.shell32.info.lpParameters
+    assert "--stop-event" in api.shell32.info.lpParameters
+    assert process.pid == 1234
+    assert process.poll() is None
+    process.terminate()
+    assert api.kernel32.set_events == [102]
+    assert process.returncode == 0
+    process.close()
+    assert 200 in api.kernel32.closed
+    assert 102 in api.kernel32.closed
+
+
+def test_elevated_launcher_reports_cancelled_uac_consent(tmp_path, monkeypatch):
+    helper, store = setup_install_paths(tmp_path, monkeypatch)
+    monkeypatch.setattr(elevated_xray.os, "name", "nt")
+    api = FakeApi(shell_success=False)
+    with pytest.raises(elevated_xray.ElevatedXrayError, match="consent was cancelled"):
+        elevated_xray.ElevatedXrayProcess.launch(helper, store, "Office", api=api)
+
+
+def test_elevated_launcher_rejects_helper_outside_program_files(tmp_path, monkeypatch):
+    _helper, store = setup_install_paths(tmp_path, monkeypatch)
+    outside = tmp_path / "Downloads" / "ApnaWinElevator.exe"
+    outside.parent.mkdir()
+    outside.write_bytes(b"untrusted helper")
+    monkeypatch.setattr(elevated_xray.os, "name", "nt")
+    with pytest.raises(PermissionError, match="Program Files"):
+        elevated_xray.ElevatedXrayProcess.launch(outside, store, "Office", api=FakeApi())
+
+
+def test_elevated_launcher_rejects_config_store_outside_appdata(tmp_path, monkeypatch):
+    helper, _store = setup_install_paths(tmp_path, monkeypatch)
+    outside = tmp_path / "Downloads" / "xray-configs.json"
+    outside.parent.mkdir()
+    outside.write_bytes(b"not encrypted")
+    monkeypatch.setattr(elevated_xray.os, "name", "nt")
+    with pytest.raises(PermissionError, match="AppData"):
+        elevated_xray.ElevatedXrayProcess.launch(helper, outside, "Office", api=FakeApi())
+
+
+def test_elevated_launcher_rejects_symlinked_helper_or_store(tmp_path, monkeypatch):
+    helper, store = setup_install_paths(tmp_path, monkeypatch)
+    monkeypatch.setattr(elevated_xray.os, "name", "nt")
+    helper_link = helper.parent / "helper-link.exe"
+    store_link = store.parent / "store-link.json"
+    try:
+        helper_link.symlink_to(helper)
+        store_link.symlink_to(store)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unavailable")
+    with pytest.raises(PermissionError, match="symbolic link"):
+        elevated_xray.ElevatedXrayProcess.launch(helper_link, store, "Office", api=FakeApi())
+    with pytest.raises(PermissionError, match="symbolic link"):
+        elevated_xray.ElevatedXrayProcess.launch(helper, store_link, "Office", api=FakeApi())
+
+
+def test_helper_supervises_xray_until_parent_exits(tmp_path, monkeypatch):
+    monkeypatch.setattr(elevated_xray.os, "name", "nt")
+    monkeypatch.setattr(elevated_xray, "_open_helper_install_root", lambda: tmp_path)
+    monkeypatch.setattr(elevated_xray, "_validate_config_store_path", lambda path: Path(path))
+    monkeypatch.setattr(elevated_xray, "is_windows_elevated", lambda: True)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "LocalAppData"))
+    (tmp_path / "LocalAppData").mkdir()
+
+    class FakeStore:
+        def __init__(self, _path):
+            pass
+
+        def load(self, _profile_name):
+            return b'{"inbounds":[],"outbounds":[]}'
+
+    class FakeRunner:
+        instance = None
+
+        def __init__(self, executable, config):
+            self.executable = executable
+            self.config = config
+            self.running = False
+            self._process = SimpleNamespace(returncode=0)
+            FakeRunner.instance = self
+
+        @property
+        def is_running(self):
+            return self.running
+
+        def start(self, _profile):
+            self.running = True
+
+        def stop(self):
+            self.running = False
+
+    api = FakeApi()
+    api.kernel32 = FakeKernel32(parent_exits=True)
+    monkeypatch.setattr(elevated_xray, "_WinApi", lambda: api)
+    monkeypatch.setattr(elevated_xray, "XrayConfigStore", FakeStore)
+    monkeypatch.setattr(elevated_xray, "XrayProcessRunner", FakeRunner)
+
+    ready_name = "Local\\ApnaWinReady-" + "a" * 32
+    stop_name = "Local\\ApnaWinStop-" + "b" * 32
+    result = elevated_xray.elevated_helper_main([
+        "--parent-pid", "55",
+        "--ready-event", ready_name,
+        "--stop-event", stop_name,
+        "--config-store", str(tmp_path / "xray-configs.json"),
+        "--profile-name", "Office",
+    ])
+    assert result == 0
+    assert FakeRunner.instance is not None
+    assert FakeRunner.instance.running is False
+    assert api.kernel32.set_events == [32]
+    assert not list((tmp_path / "LocalAppData" / "ApnaWin" / "runtime").glob("xray-*.json"))
