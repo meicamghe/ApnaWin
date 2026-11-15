@@ -837,7 +837,9 @@ def test_inspect_elf_rejects_out_of_bounds_program_header_table(
 ):
     data = bytearray(payload)
     struct.pack_into("<H", data, count_offset, 1)
-    struct.pack_into(word_format, data, offset_offset, len(data) - 1)
+    alignment = 8 if word_format == "<Q" else 4
+    aligned_past_end = (len(data) + alignment - 1) // alignment * alignment
+    struct.pack_into(word_format, data, offset_offset, aligned_past_end)
     struct.pack_into("<H", data, entry_size_offset, entry_size)
     with pytest.raises(ValueError, match="program-header table is out of bounds"):
         inspect_elf_bytes(bytes(data))
