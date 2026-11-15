@@ -29,7 +29,11 @@ from PySide6.QtWidgets import (
 )
 
 from apnawin.domain.profile import ConnectionProfile, Transport
-from apnawin.engines.xray_process import MAX_XRAY_CONFIG_BYTES
+from apnawin.engines.xray_process import (
+    MAX_XRAY_CONFIG_BYTES,
+    inspect_tun_inbound,
+    parse_xray_config_bytes,
+)
 from apnawin.storage.profile_store import load_profiles, save_profiles
 from apnawin.storage.xray_config_store import XrayConfigStore
 
@@ -385,6 +389,8 @@ class MainWindow(QMainWindow):
                 config_bytes = stream.read(MAX_XRAY_CONFIG_BYTES + 1)
             if len(config_bytes) > MAX_XRAY_CONFIG_BYTES:
                 raise ValueError("Xray config exceeds the configured size limit")
+            config = parse_xray_config_bytes(config_bytes)
+            inspect_tun_inbound(config)
             self.xray_config_store.save(profile.name, config_bytes)
         except (OSError, TypeError, ValueError) as exc:
             QMessageBox.warning(

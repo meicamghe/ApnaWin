@@ -58,6 +58,8 @@ def test_inspect_xray_inbound_selects_tun_mode():
         (lambda c: c["inbounds"][0].update(port=1080), "port"),
         (lambda c: c["inbounds"][0].update(port=False), "port"),
         (lambda c: c["inbounds"][0]["settings"].update(listen="0.0.0.0"), "unsupported fields"),
+        (lambda c: c["inbounds"][0]["settings"].update(name="bad';command"), "safe Windows adapter alias"),
+        (lambda c: c["inbounds"][0]["settings"].update(name="bad\\nalias"), "safe Windows adapter alias"),
         (lambda c: c["inbounds"][0]["settings"].update(mtu=True), "MTU"),
         (lambda c: c["inbounds"][0]["settings"].update(mtu=9001), "MTU"),
         (lambda c: c["inbounds"][0]["settings"].update(gateway=["10.0.0.1/30"]), "one IPv4 and one IPv6"),
