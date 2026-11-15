@@ -186,9 +186,14 @@ class ElevatedXrayProcess:
         if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
             raise ValueError("parent_pid must be a positive integer")
         event_name = f"Local\\ApnaWinReady-{uuid.uuid4().hex}"
+        stop_event_name = f"Local\\ApnaWinStop-{uuid.uuid4().hex}"
         event_handle = win.kernel32.CreateEventW(None, True, False, event_name)
         if not event_handle:
-            raise OSError(win.last_error(), "CreateEventW failed")
+            raise OSError(win.last_error(), "CreateEventW(ready) failed")
+        stop_handle = win.kernel32.CreateEventW(None, True, False, stop_event_name)
+        if not stop_handle:
+            win.kernel32.CloseHandle(event_handle)
+            raise OSError(win.last_error(), "CreateEventW(stop) failed")
         process_handle = None
         try:
             parameters = subprocess.list2cmdline([
