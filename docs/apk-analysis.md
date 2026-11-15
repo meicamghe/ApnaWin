@@ -147,7 +147,9 @@ exported function symbols using the JNI-style `Java_...` naming convention and a
 Raw symbol names, symbol values, addresses, and binary contents are never
 included in the report. Per-library reads are capped at 64 MiB, aggregate
 reads at 256 MiB, analysis at 256 libraries, and each dynamic symbol table
-at 16 MiB. ELF extended section numbering is supported with the same
+at 16 MiB and dynamic symbol count at 262,144 entries. Symbol-name
+termination checks process sorted unique offsets to prevent repeated scans
+of the same string-table suffix. ELF extended section numbering is supported with the same
 section-count and bounds limits. Dynamic symbol tables must link to a valid
 ELF string-table section. The section-name string-table index is checked; referenced section names
 must be in range and NUL-terminated. A missing section-name table

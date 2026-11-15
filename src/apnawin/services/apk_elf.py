@@ -12,6 +12,7 @@ _MAX_SECTION_HEADERS = 4096
 _MAX_PROGRAM_HEADERS = 4096
 _MAX_GROUP_WORDS = 65536
 _MAX_DYNAMIC_SYMBOL_TABLE_BYTES = 16 * 1024 * 1024
+_MAX_DYNAMIC_SYMBOLS = 262144
 _MACHINE_NAMES = {3: "x86", 40: "arm", 62: "x86_64", 183: "aarch64", 243: "riscv"}
 
 # Expected ELF class and e_machine for Android ABI directory labels.
@@ -527,21 +528,44 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
         if not strings or strings[0] != 0:
             raise ValueError("ELF dynamic string table is missing its leading NUL")
         count = symbol_size // entry_size
+        if count > _MAX_DYNAMIC_SYMBOLS:
+            raise ValueError("ELF dynamic symbol count exceeds the analysis limit")
         if section[7] > count:
             raise ValueError("ELF dynamic symbol local-symbol boundary is invalid")
+        dynamic_symbols += count
+        # Validate every name offset in bounded O(n log n + string-table)
+        # time. Calling bytes.find independently for attacker-chosen offsets
+        # can otherwise repeatedly scan the same large suffix.
+        name_offsets = []
         for index in range(count):
-            symbol = struct.unpack_from(symbol_fmt, data, symbol_offset + index * entry_size)
+            symbol = struct.unpack_from(
+                symbol_fmt, data, symbol_offset + index * entry_size
+            )
+            name_offset = symbol[0]
+            if name_offset >= len(strings):
+                raise ValueError("ELF symbol name offset is invalid")
+            name_offsets.append(name_offset)
+        name_offsets.sort()
+        name_ends = {}
+        terminator = -1
+        previous_offset = -1
+        for name_offset in name_offsets:
+            if name_offset == previous_offset:
+                continue
+            if name_offset > terminator:
+                terminator = strings.find(b"\\x00", name_offset)
+                if terminator < 0:
+                    raise ValueError("ELF symbol name is not terminated")
+            name_ends[name_offset] = terminator
+            previous_offset = name_offset
+        for index in range(count):
+            symbol = struct.unpack_from(
+                symbol_fmt, data, symbol_offset + index * entry_size
+            )
             if elf_class == 2:
                 name_offset, info, other, section_index = symbol[:4]
             else:
                 name_offset, _value, _size, info, other, section_index = symbol
-            dynamic_symbols += 1
-            if name_offset >= len(strings):
-                raise ValueError("ELF symbol name offset is invalid")
-            end = strings.find(b"\x00", name_offset)
-            if end < 0:
-                raise ValueError("ELF symbol name is not terminated")
-            name = strings[name_offset:end]
             binding, symbol_type, visibility = info >> 4, info & 0x0F, other & 0x3
             if not section_index or binding not in (1, 2) or visibility not in (0, 3):
                 continue
@@ -549,6 +573,7 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             # name is not a callable JNI export.
             if symbol_type != 2:  # STT_FUNC
                 continue
+            name = strings[name_offset:name_ends[name_offset]]
             if name == b"JNI_OnLoad":
                 jni_onload = True
             elif name.startswith(b"Java_"):

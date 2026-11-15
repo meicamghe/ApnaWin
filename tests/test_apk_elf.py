@@ -72,6 +72,34 @@ def _elf32_with_jni_exports():
         (_elf32_with_jni_exports(), 32, 40, 16),
     ],
 )
+@pytest.mark.parametrize(
+    ("payload", "elf_class", "section_offset_field", "section_entry_size", "size_field", "entry_size"),
+    [
+        (_elf64_with_jni_exports(), 64, 40, 64, 32, 24),
+        (_elf32_with_jni_exports(), 32, 32, 40, 20, 16),
+    ],
+)
+def test_inspect_elf_rejects_excessive_dynamic_symbol_count(
+    payload, elf_class, section_offset_field, section_entry_size, size_field, entry_size
+):
+    data = bytearray(payload)
+    section_offset = struct.unpack_from(
+        "<Q" if elf_class == 64 else "<I", data, section_offset_field
+    )[0]
+    dynsym_header = section_offset + 2 * section_entry_size
+    symbol_count = 262145
+    symbol_size = symbol_count * entry_size
+    struct.pack_into(
+        "<Q" if elf_class == 64 else "<I",
+        data,
+        dynsym_header + size_field,
+        symbol_size,
+    )
+    data.extend(bytes(symbol_size))
+    with pytest.raises(ValueError, match="dynamic symbol count exceeds the analysis limit"):
+        inspect_elf_bytes(bytes(data))
+
+
 def test_inspect_elf_rejects_nonzero_null_symbol_entry(
     payload, section_offset_field, section_entry_size, symbol_offset_field
 ):
