@@ -29,6 +29,7 @@ from apnawin.engines.xray_process import (
 from apnawin.services.windows_tunnel_diagnostics import WindowsTunnelDiagnostics
 from apnawin.storage.xray_config_store import XrayConfigStore
 from apnawin.services.vpn_runtime import verify_vpn_runtime
+from apnawin.services.windows_tunnel_egress import probe_tun_egress
 
 
 _SEE_MASK_NOCLOSEPROCESS = 0x00000040
@@ -533,6 +534,9 @@ def elevated_helper_main(argv: list[str] | None = None) -> int:
             parent_handle=parent_handle,
             api=api,
         )
+        # A verified TLS handshake to an independent public endpoint must
+        # traverse the new TUN default route before the helper reports ready.
+        probe_tun_egress()
         if not runner.is_running:
             return 14
         if not api.kernel32.SetEvent(event_handle):

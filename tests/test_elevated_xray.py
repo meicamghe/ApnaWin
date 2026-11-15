@@ -429,6 +429,11 @@ def test_helper_supervises_xray_until_parent_exits(tmp_path, monkeypatch):
         elevated_xray, "_ensure_tun_adapter_available",
         lambda *_args, **_kwargs: None,
     )
+    egress_probes = []
+    monkeypatch.setattr(
+        elevated_xray, "probe_tun_egress",
+        lambda: egress_probes.append(True),
+    )
 
     ready_name = "Local\\ApnaWinReady-" + "a" * 32
     stop_name = "Local\\ApnaWinStop-" + "b" * 32
@@ -442,6 +447,7 @@ def test_helper_supervises_xray_until_parent_exits(tmp_path, monkeypatch):
     assert result == 0
     assert FakeRunner.instance is not None
     assert verified_runtime == [tmp_path / "engine"]
+    assert egress_probes == [True]
     assert FakeRunner.instance.running is False
     assert FakeRunner.instance.new_console is True
     assert api.kernel32.set_events == [32]
