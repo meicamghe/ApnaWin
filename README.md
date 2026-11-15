@@ -35,7 +35,7 @@ python -m apnawin
 
 ## Build artifact
 
-On pushes to `main` and pull requests, the Windows workflow runs tests first, then builds the native desktop app with PyInstaller. On a successful run, download the `ApnaWin-Windows-x64` artifact from the workflow run's **Artifacts** section. Extract the ZIP and launch `ApnaWin.exe` from the extracted `ApnaWin` folder. The artifact is temporary CI output (14-day retention), not a signed installer.
+On pushes to `main` and pull requests, the Windows workflow runs tests first, then builds the native desktop app with PyInstaller. On a successful run, download the `ApnaWin-Windows-x64` artifact from the workflow run's **Artifacts** section. Extract the ZIP and launch `ApnaWin.exe` from the extracted `ApnaWin` folder. The artifact is temporary CI output (14-day retention), not a signed installer. For the elevated TUN helper, extract the folder and run Install-ApnaWin.ps1 as Administrator; it installs under Program Files with standard-user read/execute ACLs. The helper is not Authenticode-signed.
 
 Run tests:
 
@@ -58,7 +58,8 @@ It does not store passwords, access tokens, private keys or other credentials. D
 - `src/apnawin/` — application package and desktop entry point
 - `src/apnawin/domain/` — transport-neutral domain models
 - `src/apnawin/engines/` — tunnel-engine contract, test-only mock and Xray process runner
-- `src/apnawin/storage/` — profile persistence
+- `src/apnawin/storage/` — profile and encrypted Xray-config persistence
+- `src/apnawin/services/` — UAC helper lifecycle and read-only Windows tunnel diagnostics
 - `tests/` — automated tests, including desktop profile workflow checks
 - `docs/architecture.md` — architecture, milestones and security boundaries
 - `docs/SESSION-HANDOFF.md` — durable implementation status and next engineering steps
@@ -67,10 +68,12 @@ It does not store passwords, access tokens, private keys or other credentials. D
 - `docs/engine-contract.md` — requirements for production tunnel adapters
 - `docs/profile-storage.md` — schema, atomic-write behavior and credential boundary
 - `docs/xray-process-runner.md` — scope and limitations of Xray process supervision
+- `docs/xray-tunnel-supervisor.md` — desktop helper lifecycle contract
+- `docs/windows-tunnel-diagnostics.md` — read-only adapter, route and DNS checks
 
 ## Important compatibility note
 
-Android ARM64 native libraries are not Windows binaries. The Windows client will need compatible Windows engine builds and a verified configuration/protocol path. APK class and library names are only clues; they do not prove backend compatibility. See the analysis document before making implementation assumptions.
+Android ARM64 native libraries are not Windows binaries. The current Windows path is an imported Xray TUN configuration plus a Windows Xray/Wintun runtime. No APNA-specific server endpoint, authentication schema or remote configuration protocol has been verified; the client does not fabricate these details. APK class and library names are only clues; they do not prove backend compatibility. See the analysis document before making implementation assumptions.
 
 ## Development direction
 
