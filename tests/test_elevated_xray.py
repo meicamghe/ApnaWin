@@ -143,6 +143,51 @@ def test_elevated_launcher_uses_runas_and_returns_supervisor_handle(tmp_path, mo
     assert 102 in api.kernel32.closed
 
 
+def test_ensure_tun_adapter_available_refuses_existing_adapter():
+    from types import SimpleNamespace
+
+    class Diagnostics:
+        def __init__(self, **kwargs):
+            assert kwargs["adapter_name"] == "ApnaWin"
+        def snapshot(self):
+            return SimpleNamespace(adapter_present=True)
+
+    inbound = SimpleNamespace(name="ApnaWin")
+    with pytest.raises(elevated_xray.ElevatedXrayError, match="refusing to reuse"):
+        elevated_xray._ensure_tun_adapter_available(
+            inbound, diagnostics_factory=Diagnostics
+        )
+
+
+def test_ensure_tun_adapter_available_accepts_absent_adapter():
+    from types import SimpleNamespace
+
+    class Diagnostics:
+        def __init__(self, **kwargs):
+            pass
+        def snapshot(self):
+            return SimpleNamespace(adapter_present=False)
+
+    inbound = SimpleNamespace(name="ApnaWin")
+    snapshot = elevated_xray._ensure_tun_adapter_available(
+        inbound, diagnostics_factory=Diagnostics
+    )
+    assert snapshot.adapter_present is False
+
+
+def test_tun_snapshot_matches_requires_every_configured_dns_server():
+    from types import SimpleNamespace
+
+    inbound = SimpleNamespace(dns=("1.1.1.1", "9.9.9.9"))
+    snapshot = SimpleNamespace(
+        routing_ready=True,
+        dns_servers=("1.1.1.1",),
+    )
+    assert not elevated_xray._tun_snapshot_matches(snapshot, inbound)
+    snapshot.dns_servers = ("1.1.1.1", "9.9.9.9", "8.8.8.8")
+    assert elevated_xray._tun_snapshot_matches(snapshot, inbound)
+
+
 def test_wait_for_tun_network_ready_requires_stable_routes_and_dns():
     from types import SimpleNamespace
 
