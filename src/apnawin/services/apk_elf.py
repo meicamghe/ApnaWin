@@ -273,6 +273,14 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                 raise ValueError("ELF dynamic section entry metadata is invalid")
             if dynamic_offset > len(data) or dynamic_size > len(data) - dynamic_offset:
                 raise ValueError("ELF dynamic section data is out of bounds")
+            # DT_NULL terminates the dynamic array and must be its final entry.
+            # Read only d_tag; d_un may contain an ABI-specific pointer or value.
+            if dynamic_size < dynamic_entry_size:
+                raise ValueError("ELF dynamic section is missing its DT_NULL terminator")
+            tag_format = endian + ("q" if elf_class == 2 else "i")
+            final_tag = struct.unpack_from(tag_format, data, dynamic_offset + dynamic_size - dynamic_entry_size)[0]
+            if final_tag != 0:
+                raise ValueError("ELF dynamic section is missing its DT_NULL terminator")
         # The SysV SHT_HASH layout is class-independent: two 32-bit counts,
         # followed by nbucket bucket words and nchain chain words. Both arrays
         # contain indexes into the linked symbol table.

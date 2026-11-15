@@ -103,14 +103,15 @@ def _elf_with_symtab_shndx(
 
 def _elf_with_dynamic_section(
     payload, elf_class, *, link=1, info=0, entry_size=None, dynamic_size=None,
-    data_offset=None,
+    data_offset=None, dynamic_tag=0,
 ):
     data = bytearray(payload)
     section_count_field = 60 if elf_class == 64 else 48
     section_size = 64 if elf_class == 64 else 40
     section_fmt = "<IIQQQQIIQQ" if elf_class == 64 else "<IIIIIIIIII"
     record_size = 16 if elf_class == 64 else 8
-    record = bytes(record_size)
+    tag_format = "<q" if elf_class == 64 else "<i"
+    record = struct.pack(tag_format, dynamic_tag) + bytes(record_size - struct.calcsize(tag_format))
     actual_size = record_size if dynamic_size is None else dynamic_size
     actual_offset = len(data) + section_size if data_offset is None else data_offset
     header = struct.pack(
@@ -308,6 +309,17 @@ def test_inspect_elf_rejects_unrepresentable_extended_symbol_index(payload, elf_
 )
 def test_inspect_elf_accepts_valid_dynamic_section(payload, elf_class):
     assert inspect_elf_bytes(_elf_with_dynamic_section(payload, elf_class))["inspection_status"] == "complete"
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_rejects_dynamic_section_without_final_dt_null(payload, elf_class):
+    with pytest.raises(ValueError, match="missing its DT_NULL terminator"):
+        inspect_elf_bytes(
+            _elf_with_dynamic_section(payload, elf_class, dynamic_tag=1)
+        )
 
 
 @pytest.mark.parametrize(

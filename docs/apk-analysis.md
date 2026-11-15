@@ -303,9 +303,10 @@ only.
 SHT_DYNAMIC sections must link to an in-range SHT_STRTAB section, have
 sh_info equal to zero, use the class-specific Elf32_Dyn / Elf64_Dyn record
 size (8 bytes for ELF32 and 16 bytes for ELF64), and contain a whole number
-of records within the file bounds. Dynamic tag values and pointer-valued
-addresses are not resolved: doing so requires mapping program headers and
-applying ABI-specific interpretation.
+of records within the file bounds. The final record must carry the
+DT_NULL tag that terminates the dynamic array; the parser reads only that tag.
+Other dynamic tag values and pointer-valued addresses are not resolved: doing
+so requires mapping program headers and applying ABI-specific interpretation.
 
 SHT_HASH sections must link to an in-range SHT_SYMTAB or SHT_DYNSYM section,
 have sh_info equal to zero, and use four-byte Elf32_Word entries. The parser
