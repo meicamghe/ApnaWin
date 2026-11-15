@@ -1082,6 +1082,16 @@ def test_inspect_elf_accepts_valid_group_section(payload, elf_class):
     ("payload", "elf_class"),
     [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
 )
+def test_inspect_elf_rejects_oversized_group_section(payload, elf_class):
+    oversized_group = (1,) + (6,) * 65536
+    with pytest.raises(ValueError, match="section group exceeds the analysis limit"):
+        inspect_elf_bytes(_elf_with_group_section(payload, elf_class, oversized_group))
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
 def test_inspect_elf_rejects_group_member_without_shf_group(payload, elf_class):
     data = bytearray(_elf_with_group_section(payload, elf_class))
     section_offset = struct.unpack_from(

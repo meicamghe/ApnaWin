@@ -10,6 +10,7 @@ _MAX_TOTAL_ELF_BYTES = 256 * 1024 * 1024
 _MAX_ANALYZED_LIBRARIES = 256
 _MAX_SECTION_HEADERS = 4096
 _MAX_PROGRAM_HEADERS = 4096
+_MAX_GROUP_WORDS = 65536
 _MAX_DYNAMIC_SYMBOL_TABLE_BYTES = 16 * 1024 * 1024
 _MACHINE_NAMES = {3: "x86", 40: "arm", 62: "x86_64", 183: "aarch64", 243: "riscv"}
 
@@ -421,6 +422,8 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                 raise ValueError("ELF section group signature symbol index is invalid")
             if entry_size != 4 or group_size < 8 or group_size % 4:
                 raise ValueError("ELF section group entry metadata is invalid")
+            if group_size // 4 > _MAX_GROUP_WORDS:
+                raise ValueError("ELF section group exceeds the analysis limit")
             if group_offset > len(data) or group_size > len(data) - group_offset:
                 raise ValueError("ELF section group data is out of bounds")
             group_words = struct.unpack_from(
