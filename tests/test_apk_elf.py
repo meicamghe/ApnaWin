@@ -93,7 +93,7 @@ def _elf_with_symtab_shndx(
         payload_bytes = payload_bytes[:actual_size]
     header = struct.pack(
         section_fmt, 0, 18, 0, 0, actual_offset, actual_size,
-        link, info, 4, 4,
+        link, info, 4, entry_size,
     )
     struct.pack_into("<H", data, section_count_field, 5)
     data.extend(header)
