@@ -28,7 +28,9 @@ from PySide6.QtWidgets import (
 )
 
 from apnawin.domain.profile import ConnectionProfile, Transport
+from apnawin.engines.xray_process import MAX_XRAY_CONFIG_BYTES
 from apnawin.storage.profile_store import load_profiles, save_profiles
+from apnawin.storage.xray_config_store import XrayConfigStore
 
 
 def profile_file_path() -> Path:
@@ -94,19 +96,27 @@ class ProfileDialog(QDialog):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, profiles_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        profiles_path: Path | None = None,
+        xray_config_store: XrayConfigStore | None = None,
+    ) -> None:
         super().__init__()
         self.setWindowTitle("ApnaWin")
         self.resize(760, 520)
         self.profiles_path = profiles_path or profile_file_path()
+        self.xray_config_store = xray_config_store or XrayConfigStore(
+            self.profiles_path.with_name("xray-configs.json")
+        )
         self.profiles: list[ConnectionProfile] = []
         self.profile_storage_writable = True
 
         heading = QLabel("ApnaWin")
         heading.setObjectName("heading")
         self.status_label = QLabel(
-            "Disconnected — tunnel engine is not configured yet."
+            "Disconnected — no verified VPN connection."
         )
+        self.status_label.setTextFormat(Qt.TextFormat.PlainText)
 
         self.profile_list = QListWidget()
         self.profile_list.currentRowChanged.connect(self._show_selected_profile)
@@ -125,6 +135,9 @@ class MainWindow(QMainWindow):
         self.import_button.clicked.connect(self._import_profiles)
         self.export_button = QPushButton("Export…")
         self.export_button.clicked.connect(self._export_profiles)
+        self.import_xray_config_button = QPushButton("Import Xray config…")
+        self.import_xray_config_button.clicked.connect(self._import_xray_config)
+        self.import_xray_config_button.setEnabled(False)
         self.edit_button.setEnabled(False)
         self.remove_button.setEnabled(False)
 
@@ -134,12 +147,13 @@ class MainWindow(QMainWindow):
         profile_actions.addWidget(self.remove_button)
         profile_actions.addWidget(self.import_button)
         profile_actions.addWidget(self.export_button)
+        profile_actions.addWidget(self.import_xray_config_button)
         profile_actions.addStretch(1)
 
         self.connect_button = QPushButton("Connect")
         self.connect_button.setEnabled(False)
         self.connect_button.setToolTip(
-            "Connection will be enabled after a real Windows tunnel engine is integrated."
+            "Connection remains disabled until the elevation workflow and live VPN acceptance tests are complete."
         )
 
         layout = QVBoxLayout()
@@ -167,6 +181,7 @@ class MainWindow(QMainWindow):
             self.profile_storage_writable = False
             self.add_button.setEnabled(False)
             self.import_button.setEnabled(False)
+            self.import_xray_config_button.setEnabled(False)
             self.status_label.setText(
                 "Profile storage is unavailable — editing is disabled to protect existing data."
             )
@@ -208,13 +223,32 @@ class MainWindow(QMainWindow):
         self.edit_button.setEnabled(editable)
         self.remove_button.setEnabled(editable)
         if not selected:
+            self.import_xray_config_button.setEnabled(False)
             self.profile_details.setText("No profile selected.")
             return
         profile = self.profiles[row]
-        self.profile_details.setText(
+        has_xray_config = False
+        config_store_ok = True
+        try:
+            has_xray_config = self.xray_config_store.has_config(profile.name)
+        except (OSError, ValueError) as exc:
+            config_store_ok = False
+            self.status_label.setText(
+                "Encrypted Xray config storage is unavailable; config import is disabled. "
+                f"({type(exc).__name__})"
+            )
+        self.import_xray_config_button.setEnabled(
+            self.profile_storage_writable
+            and config_store_ok
+            and profile.transport == Transport.XRAY
+        )
+        details = (
             f"{profile.transport.value.upper()}  •  "
             f"{profile.endpoint_host}:{profile.endpoint_port}"
         )
+        if has_xray_config:
+            details += "\nXray TUN config: imported and encrypted for this Windows user"
+        self.profile_details.setText(details)
 
     def _add_profile(self) -> None:
         if not self.profile_storage_writable:
@@ -246,10 +280,40 @@ class MainWindow(QMainWindow):
         ):
             QMessageBox.warning(self, "Duplicate profile", "A profile with this name already exists.")
             return
+        original = self.profiles[row]
         updated = list(self.profiles)
         updated[row] = profile
+        renamed_config = original.name.casefold() != profile.name.casefold()
+        if renamed_config:
+            try:
+                self.xray_config_store.rename(original.name, profile.name)
+            except (OSError, ValueError) as exc:
+                QMessageBox.warning(
+                    self,
+                    "Could not rename encrypted config",
+                    "The profile was not changed because its encrypted Xray config "
+                    f"could not be moved. ({type(exc).__name__})",
+                )
+                return
         if self._save_profiles(updated):
+            if profile.transport != Transport.XRAY:
+                try:
+                    self.xray_config_store.remove(profile.name)
+                except (OSError, ValueError) as exc:
+                    QMessageBox.warning(
+                        self,
+                        "Encrypted config cleanup",
+                        f"The profile was saved, but its unused Xray config remains stored. ({type(exc).__name__})",
+                    )
             self._refresh_profiles(row)
+        elif renamed_config:
+            try:
+                self.xray_config_store.rename(profile.name, original.name)
+            except (OSError, ValueError):
+                self.status_label.setText(
+                    "Profile save failed and encrypted config rename-back also failed; "
+                    "check the encrypted config store."
+                )
 
     def _import_profiles(self) -> None:
         """Import validated metadata profiles, rejecting name collisions as a batch."""
@@ -292,6 +356,49 @@ class MainWindow(QMainWindow):
             self._refresh_profiles(len(updated) - 1)
             self.status_label.setText(f"Imported {len(imported)} profile(s).")
 
+    def _import_xray_config(self) -> None:
+        """Import a full-tunnel Xray JSON config and encrypt it with current-user DPAPI."""
+        if not self.profile_storage_writable:
+            return
+        row = self.profile_list.currentRow()
+        if not 0 <= row < len(self.profiles):
+            return
+        profile = self.profiles[row]
+        if profile.transport != Transport.XRAY:
+            QMessageBox.warning(
+                self,
+                "Xray config",
+                "Select an Xray profile before importing a TUN configuration.",
+            )
+            return
+        filename, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Import Xray TUN configuration",
+            "",
+            "Xray JSON configuration (*.json);;JSON files (*.json);;All files (*)",
+        )
+        if not filename:
+            return
+        try:
+            with Path(filename).open("rb") as stream:
+                config_bytes = stream.read(MAX_XRAY_CONFIG_BYTES + 1)
+            if len(config_bytes) > MAX_XRAY_CONFIG_BYTES:
+                raise ValueError("Xray config exceeds the configured size limit")
+            self.xray_config_store.save(profile.name, config_bytes)
+        except (OSError, TypeError, ValueError) as exc:
+            QMessageBox.warning(
+                self,
+                "Xray config import failed",
+                "The configuration was not stored. No plaintext copy was created by ApnaWin. "
+                f"({type(exc).__name__})",
+            )
+            return
+        self.status_label.setText(
+            f"Xray TUN config imported and encrypted for {profile.name}. "
+            "Connect remains disabled until the elevation and live-tunnel workflow is complete."
+        )
+        self._show_selected_profile(row)
+
     def _export_profiles(self) -> None:
         """Export all currently loaded non-secret profile metadata."""
         if not self.profiles:
@@ -309,7 +416,9 @@ class MainWindow(QMainWindow):
         except (OSError, TypeError, ValueError) as exc:
             QMessageBox.critical(self, "Export failed", str(exc))
             return
-        self.status_label.setText(f"Exported {len(self.profiles)} profile(s).")
+        self.status_label.setText(
+            f"Exported {len(self.profiles)} profile(s). Xray credentials/configs are not included."
+        )
 
     def _remove_profile(self) -> None:
         if not self.profile_storage_writable:
@@ -328,6 +437,14 @@ class MainWindow(QMainWindow):
         updated = list(self.profiles)
         updated.pop(row)
         if self._save_profiles(updated):
+            try:
+                self.xray_config_store.remove(profile.name)
+            except (OSError, ValueError) as exc:
+                QMessageBox.warning(
+                    self,
+                    "Encrypted config cleanup",
+                    f"The profile was removed, but its encrypted Xray config remains stored. ({type(exc).__name__})",
+                )
             self._refresh_profiles(min(row, len(updated) - 1))
 
 

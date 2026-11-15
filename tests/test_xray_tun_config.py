@@ -130,7 +130,8 @@ def test_windows_tun_rejects_non_elevated_process(monkeypatch, tmp_path):
         runner._validate_inputs(profile)
 
 
-def test_is_windows_elevated_returns_false_outside_windows():
+def test_is_windows_elevated_returns_false_outside_windows(monkeypatch):
+    monkeypatch.setattr(xray_process.os, "name", "posix")
     assert xray_process.is_windows_elevated() is False
 
 

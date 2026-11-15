@@ -74,6 +74,16 @@ Primary upstream references:
 - https://github.com/XTLS/Xray-core/blob/main/proxy/tun/handler.go
 
 
-## Engine runtime package — pending CI verification
+## Engine runtime package — verified
 
-A Windows PowerShell build step now downloads the pinned Xray-core v26.11.9 Windows x64 archive and Wintun 0.14.1 archive, checks SHA-256, checks PE x64, verifies the Wintun Authenticode signer, validates the Xray version, and packages the runtime plus licenses and a generated manifest. This step is part of the next CI run and must pass before calling the runtime package verified.
+CI run 43722164563 passed the Windows runtime installation step: Xray-core v26.11.9 and Wintun 0.14.1 archives passed SHA-256 checks, PE x64 checks, Wintun Authenticode signer validation and Xray version validation. The portable artifact includes both runtime binaries, licenses and a generated runtime manifest. Artifact ID 14165260184 is 67,672,626 bytes and is not expired.
+
+
+## Encrypted Xray configuration import
+
+The profile UI now has an Xray JSON import action for XRAY profiles. Configs are structurally validated as strict full-tunnel TUN JSON and encrypted at rest using current-user Windows DPAPI with application-specific entropy. Profile rename/remove updates the encrypted config record; metadata export deliberately excludes secrets. The Connect button remains disabled because the UI still lacks the elevation supervisor, Xray config-test/start integration, real authorized APNA config source and live traffic acceptance tests. A Windows DPAPI round-trip integration test is included in CI.
+
+
+## Encrypted Xray config import
+
+The profile UI supports importing a complete Xray TUN JSON config for an XRAY profile. The config is validated and stored encrypted with current-user DPAPI; profile metadata exports omit credentials. Renames move the encrypted record, and profile deletion removes it. The UI deliberately leaves Connect disabled. The Windows elevation supervisor and end-to-end connection workflow remain outstanding.
