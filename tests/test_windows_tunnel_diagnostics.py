@@ -110,6 +110,25 @@ def test_rejects_invalid_timeout():
         WindowsTunnelDiagnostics(timeout=float("nan"))
 
 
+def test_snapshot_script_checks_effective_route_and_interface_metrics(monkeypatch):
+    import base64
+
+    monkeypatch.setattr(os, "name", "nt")
+    observed = {}
+
+    def runner(command, **kwargs):
+        observed["script"] = base64.b64decode(command[-1]).decode("utf-16le")
+        return subprocess.CompletedProcess(command, 0, json.dumps(payload()), "")
+
+    WindowsTunnelDiagnostics(runner=runner).snapshot()
+    script = observed["script"]
+    assert "Get-NetIPInterface" in script
+    assert "RouteMetric" in script
+    assert "InterfaceMetric" in script
+    assert "$best4" in script and "$best6" in script
+    assert "Where-Object { $_ -ne $idx }" in script
+
+
 def test_snapshot_accepts_single_dns_address_as_string(monkeypatch):
     monkeypatch.setattr(os, "name", "nt")
     document = payload(dns_servers="1.1.1.1")
