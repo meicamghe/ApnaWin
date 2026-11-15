@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from threading import RLock
 from typing import Protocol
 
 
@@ -106,16 +107,23 @@ class WintunSessionOwner:
         self._session: object | None = None
         self._info: WintunSessionInfo | None = None
         self._state = WintunSessionState.CLOSED
+        self._lock = RLock()
 
     @property
     def state(self) -> WintunSessionState:
-        return self._state
+        with self._lock:
+            return self._state
 
     @property
     def info(self) -> WintunSessionInfo | None:
-        return self._info
+        with self._lock:
+            return self._info
 
     def start(self) -> WintunSessionInfo:
+        with self._lock:
+            return self._start_locked()
+
+    def _start_locked(self) -> WintunSessionInfo:
         if self._state is not WintunSessionState.CLOSED:
             raise WintunSessionError(f"cannot start while state is {self._state.value}")
         try:
@@ -157,6 +165,10 @@ class WintunSessionOwner:
             ) from exc
 
     def stop(self) -> None:
+        with self._lock:
+            self._stop_locked()
+
+    def _stop_locked(self) -> None:
         if self._state is WintunSessionState.CLOSED:
             return
         errors = self._release_resources()

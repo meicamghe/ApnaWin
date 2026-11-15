@@ -244,3 +244,45 @@ def test_rejects_non_prepared_or_pre_marked_journal(tmp_path):
     with pytest.raises(NetworkTransactionError, match="applied mutations"):
         tx.execute(marked)
     assert adapter.calls == []
+
+
+def test_execute_refuses_to_overwrite_nonterminal_persisted_journal(tmp_path):
+    adapter = MemoryAdapter()
+    store = WindowsNetworkJournalStore(tmp_path / "journal.json")
+    existing = make_journal(count=1)
+    store.save(existing)
+    with pytest.raises(NetworkTransactionError, match="existing non-terminal"):
+        WindowsNetworkTransaction(store, adapter).execute(make_journal(count=1))
+    assert store.load() == existing
+    assert adapter.calls == []
+
+
+def test_execute_fails_closed_on_corrupt_existing_journal(tmp_path):
+    adapter = MemoryAdapter()
+    path = tmp_path / "journal.json"
+    path.write_text("{broken", encoding="utf-8")
+    store = WindowsNetworkJournalStore(path)
+    with pytest.raises(Exception):
+        WindowsNetworkTransaction(store, adapter).execute(make_journal(count=1))
+    assert path.read_text(encoding="utf-8") == "{broken"
+    assert adapter.calls == []
+
+
+def test_rollback_refuses_stale_persisted_revision(tmp_path):
+    adapter = MemoryAdapter()
+    store = WindowsNetworkJournalStore(tmp_path / "journal.json")
+    tx = WindowsNetworkTransaction(store, adapter)
+    committed = tx.execute(make_journal(count=1))
+    newer = WindowsNetworkJournal(
+        committed.transaction_id,
+        committed.revision + 1,
+        JournalPhase.COMMITTED,
+        committed.mutations,
+    )
+    store.save(newer)
+    with pytest.raises(NetworkTransactionError, match="stale journal revision"):
+        tx.rollback(committed)
+    assert store.load() == newer
+    assert adapter.resources[(ResourceKind.ROUTE, "route-0")] == {
+        "present": True, "metric": 1
+    }

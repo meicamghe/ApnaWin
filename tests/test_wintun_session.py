@@ -141,3 +141,41 @@ def test_rejects_reentrant_start():
     with pytest.raises(WintunSessionError, match="cannot start"):
         session.start()
     session.stop()
+
+
+def test_concurrent_start_calls_are_serialized():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    backend = FakeWintunBackend()
+    session = owner(backend)
+    barrier = Barrier(3)
+
+    def start():
+        barrier.wait()
+        try:
+            return session.start()
+        except WintunSessionError:
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(start) for _ in range(2)]
+        barrier.wait()
+        results = [future.result() for future in futures]
+
+    assert sum(result is not None for result in results) == 1
+    assert [call[0] for call in backend.calls].count("create_adapter") == 1
+    session.stop()
+
+
+def test_state_and_info_reads_are_safe_during_lifecycle():
+    from concurrent.futures import ThreadPoolExecutor
+
+    backend = FakeWintunBackend()
+    session = owner(backend)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [pool.submit(lambda: (session.state, session.info)) for _ in range(20)]
+        session.start()
+        snapshots = [future.result() for future in futures]
+    assert all(state in WintunSessionState for state, _ in snapshots)
+    session.stop()

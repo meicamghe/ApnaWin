@@ -85,6 +85,15 @@ class WindowsNetworkTransaction:
         if any(item.applied for item in journal.mutations):
             raise NetworkTransactionError("PREPARED transaction cannot contain applied mutations")
 
+        # A durable non-terminal journal owns the single transaction slot. Never
+        # overwrite it; a corrupt existing record also fails closed via load().
+        if self.store.path.exists():
+            persisted = self.store.load()
+            if persisted.phase is not JournalPhase.ROLLED_BACK:
+                raise NetworkTransactionError(
+                    "an existing non-terminal journal must be recovered before a new transaction"
+                )
+
         current = journal
         # No OS mutation is permitted unless the complete PREPARED snapshot is durable.
         self.store.save(current)
@@ -162,6 +171,13 @@ class WindowsNetworkTransaction:
     def rollback(self, journal: WindowsNetworkJournal) -> WindowsNetworkJournal:
         """Restore only resources still matching this transaction's after-state."""
         with self._lock:
+            if not self.store.path.exists():
+                raise NetworkTransactionError("cannot roll back without a persisted journal")
+            persisted = self.store.load()
+            if persisted != journal:
+                raise NetworkTransactionError(
+                    "stale journal revision; refusing to overwrite newer persisted state"
+                )
             if journal.phase is JournalPhase.ROLLED_BACK:
                 return journal
             if journal.phase not in {
