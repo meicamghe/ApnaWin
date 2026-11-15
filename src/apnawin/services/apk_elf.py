@@ -318,6 +318,71 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                 )[0]
                 if value >= chain_count:
                     raise ValueError("ELF hash section contains an invalid symbol index")
+        # SHT_GNU_HASH uses four 32-bit header words, class-sized Bloom
+        # words, then 32-bit buckets and chains. Chain words are hashes, not
+        # symbol indexes; their low bit marks the end of a bucket chain.
+        gnu_bloom_word_size = 8 if elf_class == 2 else 4
+        for section in sections:
+            if section[1] != 0x6FFFFFF6:  # SHT_GNU_HASH
+                continue
+            hash_offset, hash_size = section[4], section[5]
+            symbol_index, info, entry_size = section[6], section[7], section[9]
+            if (
+                symbol_index >= len(sections)
+                or sections[symbol_index][1] != 11  # SHT_DYNSYM
+            ):
+                raise ValueError("ELF GNU hash section has an invalid dynamic-symbol-table reference")
+            if info != 0:
+                raise ValueError("ELF GNU hash section sh_info must be zero")
+            if entry_size != 4 or hash_size < 16:
+                raise ValueError("ELF GNU hash section entry metadata is invalid")
+            if hash_offset > len(data) or hash_size > len(data) - hash_offset:
+                raise ValueError("ELF GNU hash section data is out of bounds")
+            bucket_count, symbol_offset, bloom_count, bloom_shift = struct.unpack_from(
+                endian + "IIII", data, hash_offset
+            )
+            symbol_table = sections[symbol_index]
+            symbol_count = symbol_table[5] // symbol_table[9]
+            if (
+                bucket_count == 0
+                or bloom_count == 0
+                or bloom_count & (bloom_count - 1)
+                or symbol_offset > symbol_count
+            ):
+                raise ValueError("ELF GNU hash section table dimensions are invalid")
+            bloom_bytes = bloom_count * gnu_bloom_word_size
+            bucket_bytes = bucket_count * 4
+            chain_count = symbol_count - symbol_offset
+            chain_bytes = chain_count * 4
+            required_size = 16 + bloom_bytes + bucket_bytes + chain_bytes
+            if required_size != hash_size:
+                raise ValueError("ELF GNU hash section table dimensions are invalid")
+            bucket_offset = hash_offset + 16 + bloom_bytes
+            chain_offset = bucket_offset + bucket_bytes
+            # Every non-empty bucket must start at a represented dynamic
+            # symbol, and its forward chain must reach a low-bit terminator.
+            # Cache visited chain words so malformed overlapping buckets
+            # cannot cause repeated quadratic scans.
+            visited_chains = bytearray(chain_count)
+            for bucket_index in range(bucket_count):
+                first_symbol = struct.unpack_from(
+                    endian + "I", data, bucket_offset + bucket_index * 4
+                )[0]
+                if first_symbol == 0:
+                    continue
+                if first_symbol < symbol_offset or first_symbol >= symbol_count:
+                    raise ValueError("ELF GNU hash section contains an invalid bucket symbol index")
+                chain_index = first_symbol - symbol_offset
+                while chain_index < chain_count and not visited_chains[chain_index]:
+                    visited_chains[chain_index] = 1
+                    chain_hash = struct.unpack_from(
+                        endian + "I", data, chain_offset + chain_index * 4
+                    )[0]
+                    if chain_hash & 1:
+                        break
+                    chain_index += 1
+                else:
+                    raise ValueError("ELF GNU hash section contains an unterminated chain")
         # SHT_GROUP is valid only in relocatable objects. A section may
         # belong to at most one group, and its group header precedes it.
         grouped_members = set()

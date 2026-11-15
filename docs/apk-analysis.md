@@ -308,6 +308,19 @@ DT_NULL tag that terminates the dynamic array; the parser reads only that tag.
 Other dynamic tag values and pointer-valued addresses are not resolved: doing
 so requires mapping program headers and applying ABI-specific interpretation.
 
+SHT_GNU_HASH sections must link to an in-range SHT_DYNSYM section, have
+sh_info equal to zero, and use four-byte header, bucket, and chain words.
+The parser checks the four-word header, class-sized Bloom-filter array
+(4-byte words for ELF32 and 8-byte words for ELF64), nonzero bucket count,
+a nonzero power-of-two Bloom count, the symbol-offset boundary, and exact
+section bounds for the bucket and chain arrays. Non-empty buckets must point
+to dynamic-symbol indexes at or after the symbol offset and within the linked
+symbol table. Each referenced forward chain must reach a hash word whose low
+bit marks the end of that chain. Hash values and Bloom-filter bits are not
+recomputed, and no symbol names or runtime lookups are performed. These checks
+establish bounded structural metadata only, not loader compatibility.
+
+
 SHT_HASH sections must link to an in-range SHT_SYMTAB or SHT_DYNSYM section,
 have sh_info equal to zero, and use four-byte Elf32_Word entries. The parser
 checks the bounded SysV hash layout (nbucket, nchain, bucket array, chain

@@ -148,6 +148,37 @@ def _elf_with_hash_section(
     return bytes(data)
 
 
+
+def _elf_with_gnu_hash_section(
+    payload, elf_class, *, link=2, info=0, entry_size=4,
+    bucket_count=1, symbol_offset=1, bloom_count=1, bloom_shift=5,
+    buckets=None, chains=None, data_offset=None,
+):
+    data = bytearray(payload)
+    section_count_field = 60 if elf_class == 64 else 48
+    section_size = 64 if elf_class == 64 else 40
+    section_fmt = "<IIQQQQIIQQ" if elf_class == 64 else "<IIIIIIIIII"
+    bloom_word_size = 8 if elf_class == 64 else 4
+    actual_buckets = [1] if buckets is None else list(buckets)
+    actual_chains = [2, 4, 5] if chains is None else list(chains)
+    hash_payload = struct.pack(
+        "<IIII", bucket_count, symbol_offset, bloom_count, bloom_shift
+    )
+    hash_payload += bytes(bloom_word_size * bloom_count)
+    hash_payload += b"".join(struct.pack("<I", value) for value in actual_buckets)
+    hash_payload += b"".join(struct.pack("<I", value) for value in actual_chains)
+    actual_offset = len(data) + section_size if data_offset is None else data_offset
+    header = struct.pack(
+        section_fmt, 0, 0x6FFFFFF6, 0, 0, actual_offset, len(hash_payload),
+        link, info, 4, entry_size,
+    )
+    struct.pack_into("<H", data, section_count_field, 5)
+    data.extend(header)
+    if data_offset is None:
+        data.extend(hash_payload)
+    return bytes(data)
+
+
 def _elf_with_relr_section(payload, elf_class, *, file_type=3, entry_size=None, relr_size=None, relr_offset=None):
     data = bytearray(payload)
     section_offset_field = 40 if elf_class == 64 else 32
@@ -374,6 +405,42 @@ def test_inspect_elf_rejects_invalid_sysv_hash_section_metadata(
 ):
     with pytest.raises(ValueError, match=message):
         inspect_elf_bytes(_elf_with_hash_section(payload, elf_class, **kwargs))
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_accepts_valid_gnu_hash_section(payload, elf_class):
+    assert inspect_elf_bytes(
+        _elf_with_gnu_hash_section(payload, elf_class)
+    )["inspection_status"] == "complete"
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class", "kwargs", "message"),
+    [
+        (_elf64_with_jni_exports(), 64, {"link": 1}, "dynamic-symbol-table reference"),
+        (_elf32_with_jni_exports(), 32, {"link": 1}, "dynamic-symbol-table reference"),
+        (_elf64_with_jni_exports(), 64, {"info": 1}, "sh_info must be zero"),
+        (_elf32_with_jni_exports(), 32, {"info": 1}, "sh_info must be zero"),
+        (_elf64_with_jni_exports(), 64, {"entry_size": 8}, "entry metadata is invalid"),
+        (_elf32_with_jni_exports(), 32, {"bucket_count": 0}, "table dimensions are invalid"),
+        (_elf64_with_jni_exports(), 64, {"bloom_count": 0}, "table dimensions are invalid"),
+        (_elf32_with_jni_exports(), 32, {"bloom_count": 3}, "table dimensions are invalid"),
+        (_elf64_with_jni_exports(), 64, {"symbol_offset": 5}, "table dimensions are invalid"),
+        (_elf32_with_jni_exports(), 32, {"buckets": [4]}, "invalid bucket symbol index"),
+        (_elf64_with_jni_exports(), 64, {"chains": [2, 4, 4]}, "unterminated chain"),
+        (_elf32_with_jni_exports(), 32, {"data_offset": 0x7FFFFFFF}, "data is out of bounds"),
+    ],
+)
+def test_inspect_elf_rejects_invalid_gnu_hash_section_metadata(
+    payload, elf_class, kwargs, message
+):
+    with pytest.raises(ValueError, match=message):
+        inspect_elf_bytes(
+            _elf_with_gnu_hash_section(payload, elf_class, **kwargs)
+        )
 
 
 def test_inspect_elf_bytes_counts_only_exported_jni_symbol_names():
