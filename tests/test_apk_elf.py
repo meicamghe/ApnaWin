@@ -34,6 +34,37 @@ def _elf64_with_jni_exports():
     return header + dynstr + dynsym + shstr + bytes(section_offset - shstr_offset - len(shstr)) + b"".join(sections)
 
 
+
+def _elf32_with_jni_exports():
+    ident = b"\\x7fELF" + bytes([1, 1, 1]) + bytes(9)
+    dynstr = b"\\x00JNI_OnLoad\\x00Java_org_example_Tunnel_start\\x00ordinary\\x00"
+    names = {
+        "jni_onload": dynstr.index(b"JNI_OnLoad"),
+        "jni_method": dynstr.index(b"Java_org_example_Tunnel_start"),
+        "ordinary": dynstr.index(b"ordinary"),
+    }
+    symbols = [bytes(16)]
+    for key in ("jni_onload", "jni_method", "ordinary"):
+        symbols.append(struct.pack("<IIIBBH", names[key], 0, 0, 0x12, 0, 1))
+    dynsym = b"".join(symbols)
+    shstr = b"\\x00.dynstr\\x00.dynsym\\x00.shstrtab\\x00"
+    dynstr_offset = 52
+    dynsym_offset = dynstr_offset + len(dynstr)
+    shstr_offset = dynsym_offset + len(dynsym)
+    section_offset = (shstr_offset + len(shstr) + 3) & ~3
+    sections = [
+        bytes(40),
+        struct.pack("<IIIIIIIIII", 1, 3, 0, 0, dynstr_offset, len(dynstr), 0, 0, 1, 0),
+        struct.pack("<IIIIIIIIII", 9, 11, 0, 0, dynsym_offset, len(dynsym), 1, 1, 4, 16),
+        struct.pack("<IIIIIIIIII", 17, 3, 0, 0, shstr_offset, len(shstr), 0, 0, 1, 0),
+    ]
+    header = struct.pack(
+        "<16sHHIIIIIHHHHHH",
+        ident, 3, 40, 1, 0, 0, section_offset, 0, 52, 0, 0, 40, 4, 3,
+    )
+    return header + dynstr + dynsym + shstr + bytes(section_offset - shstr_offset - len(shstr)) + b"".join(sections)
+
+
 def _elf_with_relr_section(payload, elf_class, *, file_type=3, entry_size=None, relr_size=None, relr_offset=None):
     data = bytearray(payload)
     section_offset_field = 40 if elf_class == 64 else 32
