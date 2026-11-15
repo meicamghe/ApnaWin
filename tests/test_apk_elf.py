@@ -66,13 +66,6 @@ def _elf32_with_jni_exports():
 
 
 @pytest.mark.parametrize(
-    ("payload", "section_offset_field", "section_entry_size", "symbol_offset_field"),
-    [
-        (_elf64_with_jni_exports(), 40, 64, 24),
-        (_elf32_with_jni_exports(), 32, 40, 16),
-    ],
-)
-@pytest.mark.parametrize(
     ("payload", "elf_class", "section_offset_field", "section_entry_size", "size_field", "entry_size"),
     [
         (_elf64_with_jni_exports(), 64, 40, 64, 32, 24),
@@ -100,6 +93,13 @@ def test_inspect_elf_rejects_excessive_dynamic_symbol_count(
         inspect_elf_bytes(bytes(data))
 
 
+@pytest.mark.parametrize(
+    ("payload", "section_offset_field", "section_entry_size", "symbol_offset_field"),
+    [
+        (_elf64_with_jni_exports(), 40, 64, 24),
+        (_elf32_with_jni_exports(), 32, 40, 16),
+    ],
+)
 def test_inspect_elf_rejects_nonzero_null_symbol_entry(
     payload, section_offset_field, section_entry_size, symbol_offset_field
 ):
