@@ -143,6 +143,118 @@ def test_elevated_launcher_uses_runas_and_returns_supervisor_handle(tmp_path, mo
     assert 102 in api.kernel32.closed
 
 
+def test_wait_for_tun_network_ready_requires_stable_routes_and_dns():
+    from types import SimpleNamespace
+
+    class Clock:
+        now = 0.0
+        def monotonic(self):
+            return self.now
+        def sleep(self, seconds):
+            self.now += seconds
+
+    class Kernel:
+        def WaitForSingleObject(self, _handle, _timeout):
+            return elevated_xray._WAIT_TIMEOUT
+
+    class Api:
+        kernel32 = Kernel()
+
+    class Runner:
+        is_running = True
+
+    class Diagnostics:
+        def __init__(self, **kwargs):
+            assert kwargs["adapter_name"] == "ApnaWin"
+        def snapshot(self):
+            return SimpleNamespace(
+                routing_ready=True,
+                dns_servers=("1.1.1.1", "2606:4700:4700::1111"),
+            )
+
+    clock = Clock()
+    inbound = SimpleNamespace(
+        name="ApnaWin",
+        dns=("1.1.1.1", "2606:4700:4700::1111"),
+    )
+    snapshot = elevated_xray._wait_for_tun_network_ready(
+        Runner(), inbound,
+        stop_handle=11, parent_handle=12, api=Api(),
+        timeout=3, poll_interval=0.25, stable_for=0.5,
+        diagnostics_factory=Diagnostics,
+        monotonic=clock.monotonic, sleep=clock.sleep,
+    )
+    assert snapshot.routing_ready
+
+
+def test_wait_for_tun_network_ready_rejects_missing_configured_dns():
+    from types import SimpleNamespace
+
+    class Clock:
+        now = 0.0
+        def monotonic(self):
+            return self.now
+        def sleep(self, seconds):
+            self.now += seconds
+
+    class Kernel:
+        def WaitForSingleObject(self, _handle, _timeout):
+            return elevated_xray._WAIT_TIMEOUT
+
+    class Api:
+        kernel32 = Kernel()
+
+    class Runner:
+        is_running = True
+
+    class Diagnostics:
+        def __init__(self, **kwargs):
+            pass
+        def snapshot(self):
+            return SimpleNamespace(
+                routing_ready=True,
+                dns_servers=("1.1.1.1",),
+            )
+
+    clock = Clock()
+    inbound = SimpleNamespace(name="ApnaWin", dns=("9.9.9.9",))
+    with pytest.raises(TimeoutError, match="configured DNS"):
+        elevated_xray._wait_for_tun_network_ready(
+            Runner(), inbound,
+            stop_handle=11, parent_handle=12, api=Api(),
+            timeout=0.5, poll_interval=0.25, stable_for=0.25,
+            diagnostics_factory=Diagnostics,
+            monotonic=clock.monotonic, sleep=clock.sleep,
+        )
+
+
+def test_wait_for_tun_network_ready_aborts_when_desktop_exits():
+    class Kernel:
+        def WaitForSingleObject(self, handle, _timeout):
+            return (
+                elevated_xray._WAIT_OBJECT_0
+                if handle == 12 else elevated_xray._WAIT_TIMEOUT
+            )
+
+    class Api:
+        kernel32 = Kernel()
+
+    class Runner:
+        is_running = True
+
+    class Diagnostics:
+        def __init__(self, **kwargs):
+            pytest.fail("diagnostics must not run after desktop exit")
+
+    inbound = type("Inbound", (), {"name": "ApnaWin", "dns": ("1.1.1.1",)})()
+    with pytest.raises(InterruptedError, match="Desktop process exited"):
+        elevated_xray._wait_for_tun_network_ready(
+            Runner(), inbound,
+            stop_handle=11, parent_handle=12, api=Api(),
+            diagnostics_factory=Diagnostics,
+        )
+
+
 def test_elevated_launcher_reports_cancelled_uac_consent(tmp_path, monkeypatch):
     helper, store = setup_install_paths(tmp_path, monkeypatch)
     monkeypatch.setattr(elevated_xray.os, "name", "nt")
@@ -217,6 +329,22 @@ def test_helper_supervises_xray_until_parent_exits(tmp_path, monkeypatch):
         def is_running(self):
             return self.running
 
+        def _read_config(self):
+            return {
+                "inbounds": [{
+                    "protocol": "tun",
+                    "settings": {
+                        "name": "ApnaWin",
+                        "gateway": ["10.0.0.1/30", "fd00::1/126"],
+                        "dns": ["1.1.1.1"],
+                        "autoSystemRoutingTable": ["0.0.0.0/0", "::/0"],
+                        "autoOutboundsInterface": "auto",
+                        "autoSystemWfpBlockLeak": ["allexceptlan", "dns"],
+                    },
+                }],
+                "outbounds": [{"protocol": "freedom"}],
+            }
+
         def start(self, _profile):
             self.running = True
 
@@ -228,6 +356,10 @@ def test_helper_supervises_xray_until_parent_exits(tmp_path, monkeypatch):
     monkeypatch.setattr(elevated_xray, "_WinApi", lambda: api)
     monkeypatch.setattr(elevated_xray, "XrayConfigStore", FakeStore)
     monkeypatch.setattr(elevated_xray, "XrayProcessRunner", FakeRunner)
+    monkeypatch.setattr(
+        elevated_xray, "_wait_for_tun_network_ready",
+        lambda *_args, **_kwargs: None,
+    )
 
     ready_name = "Local\\ApnaWinReady-" + "a" * 32
     stop_name = "Local\\ApnaWinStop-" + "b" * 32

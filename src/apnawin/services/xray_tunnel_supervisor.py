@@ -18,7 +18,7 @@ class XrayTunnelSupervisor:
         helper_path: str | Path,
         config_store: XrayConfigStore,
         *,
-        readiness_timeout: float = 20.0,
+        readiness_timeout: float = 45.0,
         stop_timeout: float = 15.0,
         process_factory: Callable[..., ElevatedXrayProcess] | None = None,
     ) -> None:

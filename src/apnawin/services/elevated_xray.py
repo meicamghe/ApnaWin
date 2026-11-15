@@ -21,7 +21,12 @@ from ctypes import wintypes
 from pathlib import Path
 
 from apnawin.domain.profile import ConnectionProfile, Transport
-from apnawin.engines.xray_process import XrayProcessRunner, is_windows_elevated
+from apnawin.engines.xray_process import (
+    XrayProcessRunner,
+    inspect_tun_inbound,
+    is_windows_elevated,
+)
+from apnawin.services.windows_tunnel_diagnostics import WindowsTunnelDiagnostics
 from apnawin.storage.xray_config_store import XrayConfigStore
 
 
@@ -236,8 +241,22 @@ class ElevatedXrayProcess:
                     raise TimeoutError("Elevated Xray helper did not become ready in time")
         except Exception:
             if process_handle:
-                win.kernel32.TerminateProcess(process_handle, 1)
-                win.kernel32.WaitForSingleObject(process_handle, 5000)
+                # Let the helper unwind Xray's TUN/WFP state before force-killing it.
+                stopped = False
+                if stop_handle:
+                    try:
+                        if win.kernel32.SetEvent(stop_handle):
+                            stopped = (
+                                win.kernel32.WaitForSingleObject(process_handle, 5000)
+                                == _WAIT_OBJECT_0
+                            )
+                    except Exception:
+                        stopped = False
+                if not stopped:
+                    try:
+                        win.kernel32.TerminateProcess(process_handle, 1)
+                    finally:
+                        win.kernel32.WaitForSingleObject(process_handle, 5000)
                 win.kernel32.CloseHandle(process_handle)
             win.kernel32.CloseHandle(stop_handle)
             raise
@@ -330,6 +349,79 @@ def _open_helper_install_root() -> Path:
     return executable.parent
 
 
+def _wait_for_tun_network_ready(
+    runner,
+    inbound,
+    *,
+    stop_handle,
+    parent_handle,
+    api,
+    timeout: float = 30.0,
+    poll_interval: float = 0.25,
+    stable_for: float = 1.0,
+    diagnostics_factory=WindowsTunnelDiagnostics,
+    monotonic=time.monotonic,
+    sleep=time.sleep,
+):
+    """Wait for stable dual-stack routes and configured DNS before signaling ready."""
+    for value, name in (
+        (timeout, "timeout"),
+        (poll_interval, "poll_interval"),
+        (stable_for, "stable_for"),
+    ):
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not math.isfinite(value)
+            or value <= 0
+        ):
+            raise ValueError(f"{name} must be a positive finite number")
+
+    diagnostics = diagnostics_factory(
+        adapter_name=inbound.name,
+        timeout=min(5.0, float(timeout)),
+    )
+    expected_dns = set(inbound.dns)
+    deadline = monotonic() + float(timeout)
+    ready_since = None
+    last_error = None
+
+    while True:
+        if api.kernel32.WaitForSingleObject(stop_handle, 0) == _WAIT_OBJECT_0:
+            raise InterruptedError("VPN startup was cancelled")
+        if api.kernel32.WaitForSingleObject(parent_handle, 0) == _WAIT_OBJECT_0:
+            raise InterruptedError("Desktop process exited during VPN startup")
+        if not runner.is_running:
+            raise ElevatedXrayError(
+                "Xray exited before its TUN adapter, routes and DNS became ready"
+            )
+        try:
+            snapshot = diagnostics.snapshot()
+            dns_matches = expected_dns.issubset(set(snapshot.dns_servers))
+            if snapshot.routing_ready and dns_matches:
+                now = monotonic()
+                if ready_since is None:
+                    ready_since = now
+                elif now - ready_since >= stable_for:
+                    return snapshot
+            else:
+                ready_since = None
+        except (OSError, RuntimeError, ValueError) as exc:
+            last_error = exc
+            ready_since = None
+
+        now = monotonic()
+        if now >= deadline:
+            error = TimeoutError(
+                "Windows TUN adapter, IPv4/IPv6 default routes and configured DNS "
+                "did not become ready and remain stable"
+            )
+            if last_error is not None:
+                raise error from last_error
+            raise error
+        sleep(min(float(poll_interval), deadline - now))
+
+
 def _cleanup_stale_configs(runtime_dir: Path) -> None:
     cutoff = time.time() - 24 * 60 * 60
     for candidate in runtime_dir.glob("xray-*.json"):
@@ -410,9 +502,20 @@ def elevated_helper_main(argv: list[str] | None = None) -> int:
         profile = ConnectionProfile(
             args.profile_name, Transport.XRAY, "127.0.0.1", 443
         )
+        # Reject SOCKS-only or incomplete configs on the privileged TUN path.
+        tun_inbound = inspect_tun_inbound(runner._read_config())
         runner.start(profile)
         if not runner.is_running:
             return 10
+        _wait_for_tun_network_ready(
+            runner,
+            tun_inbound,
+            stop_handle=stop_handle,
+            parent_handle=parent_handle,
+            api=api,
+        )
+        if not runner.is_running:
+            return 14
         if not api.kernel32.SetEvent(event_handle):
             return 11
 
