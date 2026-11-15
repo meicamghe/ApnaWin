@@ -9,7 +9,7 @@ A native Windows 10/11 desktop client project inspired by the workflow of APNA T
 - Add, edit, select and remove connection profiles.
 - Strict local JSON persistence for non-secret profile metadata, with unique same-directory atomic temp files, flush/fsync, duplicate-key/schema validation and duplicate-name rejection.
 - Import of complete Xray TUN JSON configs for XRAY profiles, encrypted at rest with current-user Windows DPAPI; profile metadata exports exclude credentials.
-- A dedicated fixed-path UAC helper design and Program Files installer script; the helper keeps the desktop at normal integrity and supervises Xray in a Job Object.
+- A dedicated fixed-path UAC helper, a desktop-side Xray tunnel supervisor wrapper, and a Program Files installer script; the helper keeps the desktop at normal integrity and supervises Xray in a Job Object.
 - Strict Xray config parsing that rejects duplicate JSON keys and non-finite constants before execution.
 - A transport-neutral profile model and tunnel-engine contract.
 - A test-only mock engine that does not touch the network.
