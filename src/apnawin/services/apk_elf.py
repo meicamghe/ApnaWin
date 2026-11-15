@@ -588,6 +588,21 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                 jni_onload = True
             elif name.startswith(b"Java_"):
                 jni_symbols += 1
+    # Static symbol tables do not contribute to JNI export counts, but their
+    # sh_info boundary is still structural ELF metadata and must be enforced.
+    # Dynamic tables were checked above, after validating their symbol names.
+    symbol_info_offset = 4 if elf_class == 2 else 12
+    for section in sections:
+        if section[1] != 2:  # SHT_SYMTAB (SHT_DYNSYM checked above)
+            continue
+        symbol_offset, symbol_size, entry_size = section[4], section[5], section[9]
+        count = symbol_size // entry_size
+        for symbol_index in range(count):
+            record_offset = symbol_offset + symbol_index * entry_size
+            symbol_info = data[record_offset + symbol_info_offset]
+            is_local = (symbol_info >> 4) == 0  # STB_LOCAL
+            if (symbol_index < section[7]) != is_local:
+                raise ValueError("ELF symbol table local-symbol ordering is invalid")
     return {
         "elf_valid": True,
         "elf_class": 64 if elf_class == 2 else 32,
