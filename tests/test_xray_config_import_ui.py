@@ -129,6 +129,7 @@ def test_import_xray_config_rejects_invalid_tun_policy_without_overwrite(
     "raw_config",
     [
         b'{"inbounds":[{"protocol":"socks","listen":"127.0.0.1","port":1080}],"outbounds":[{"protocol":"freedom"}]}',
+        b'{"inbounds":[{"protocol":"tun","settings":{"name":"ApnaWin","gateway":["10.0.0.1/30","fd00::1/126"],"dns":["1.1.1.1"],"autoSystemRoutingTable":["0.0.0.0/0","::/0"],"autoOutboundsInterface":"auto","autoSystemWfpBlockLeak":["dns","allexceptlan"]}}],"outbounds":[{"protocol":"freedom"}]}',
         b'{"inbounds":[],"inbounds":[],"outbounds":[]}',
         b'{"inbounds":[{"protocol":"tun","settings":{"name":"ApnaWin"}}],"outbounds":[]}',
         b'{"inbounds":[{"protocol":"tun","settings":{"name":"ApnaWin","gateway":["10.0.0.1/30","fd00::1/126"],"dns":["1.1.1.1"],"autoSystemRoutingTable":["0.0.0.0/0","::/0"],"autoOutboundsInterface":"auto","autoSystemWfpBlockLeak":["dns","allexceptlan"]}}],"outbounds":[],"bad":NaN}',

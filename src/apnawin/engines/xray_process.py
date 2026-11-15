@@ -19,6 +19,12 @@ from dataclasses import dataclass
 
 
 MAX_XRAY_CONFIG_BYTES = 16 * 1024 * 1024
+
+_REMOTE_PROXY_PROTOCOLS = frozenset({
+    "vless", "vmess", "trojan", "shadowsocks", "socks", "http",
+    "wireguard", "hysteria", "hysteria2", "tuic",
+})
+_LOCAL_NONLEAKING_PROTOCOLS = frozenset({"blackhole", "dns"})
 from pathlib import Path
 
 from apnawin.domain.profile import ConnectionProfile, Transport
@@ -241,6 +247,20 @@ def inspect_tun_inbound(config: dict) -> XrayTunInbound:
     outbounds = config.get("outbounds")
     if not isinstance(outbounds, list) or not outbounds:
         raise ValueError("Xray TUN config must contain at least one outbound")
+    outbound_protocols: list[str] = []
+    for outbound in outbounds:
+        if not isinstance(outbound, dict) or not isinstance(outbound.get("protocol"), str):
+            raise ValueError("Xray TUN outbounds must be protocol objects")
+        protocol = outbound["protocol"]
+        if protocol not in _REMOTE_PROXY_PROTOCOLS | _LOCAL_NONLEAKING_PROTOCOLS:
+            raise ValueError(
+                "Xray TUN config must not contain direct or unsupported outbound protocols"
+            )
+        outbound_protocols.append(protocol)
+    if outbound_protocols[0] not in _REMOTE_PROXY_PROTOCOLS:
+        raise ValueError(
+            "The first Xray TUN outbound must be a remote proxy, not direct, DNS or blackhole"
+        )
 
     return XrayTunInbound(
         name=name,

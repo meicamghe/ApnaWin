@@ -74,6 +74,10 @@ def test_inspect_xray_inbound_selects_tun_mode():
         (lambda c: c["inbounds"][0]["settings"].update(autoSystemDnsToGateway=True), "must be false"),
         (lambda c: c["inbounds"][0]["settings"].update(autoSystemDnsToGateway="false"), "must be false"),
         (lambda c: c["inbounds"][0]["settings"].update(extra="no"), "unsupported fields"),
+        (lambda c: c["outbounds"][0].update(protocol="freedom"), "direct or unsupported outbound"),
+        (lambda c: c["outbounds"][0].update(protocol="blackhole"), "first Xray TUN outbound must be a remote proxy"),
+        (lambda c: c["outbounds"].append({"protocol": "freedom", "tag": "direct"}), "direct or unsupported outbound"),
+        (lambda c: c["outbounds"][0].update(protocol="unknown-protocol"), "direct or unsupported outbound"),
         (lambda c: c["outbounds"].clear(), "at least one outbound"),
     ],
 )
