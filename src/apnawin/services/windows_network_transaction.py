@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from threading import Lock, RLock
 from typing import Any, Protocol
 
+from apnawin.services.windows_named_mutex import WindowsNamedMutex
 from apnawin.services.windows_network_journal import (
     JournalMutation,
     JournalPhase,
@@ -87,14 +88,31 @@ class WindowsNetworkTransaction:
 
     store: WindowsNetworkJournalStore
     adapter: NetworkResourceAdapter
+    mutex: WindowsNamedMutex | None = None
+    mutex_timeout_ms: int = 5000
     _lock: RLock = field(default_factory=RLock, init=False, repr=False)
 
     def __post_init__(self) -> None:
+        if (
+            isinstance(self.mutex_timeout_ms, bool)
+            or not isinstance(self.mutex_timeout_ms, int)
+            or not 0 <= self.mutex_timeout_ms <= 0xFFFFFFFE
+        ):
+            raise ValueError("mutex_timeout_ms must be a finite non-negative DWORD")
         self._lock = _lock_for_store(self.store)
+
+    def _with_mutex(self, operation):
+        if self.mutex is None:
+            return operation()
+        with self.mutex.acquire(
+            self.mutex_timeout_ms,
+            recover_abandoned=self._recover_locked,
+        ):
+            return operation()
 
     def execute(self, journal: WindowsNetworkJournal) -> WindowsNetworkJournal:
         with self._lock:
-            return self._execute(journal)
+            return self._with_mutex(lambda: self._execute(journal))
 
     def _execute(self, journal: WindowsNetworkJournal) -> WindowsNetworkJournal:
         if not isinstance(journal, WindowsNetworkJournal):
@@ -158,64 +176,67 @@ class WindowsNetworkTransaction:
             ) from exc
 
     def recover(self) -> WindowsNetworkJournal:
-        """Conservatively reconcile the persisted journal after process restart.
-
-        PREPARED means no mutation was authorized to run. APPLYING,
-        ROLLING_BACK, ROLLBACK_FAILED and COMMITTED are reconciled against fresh
-        adapter reads and compensated in reverse order. A corrupt/missing journal
-        raises from the store and is never silently replaced.
-        """
+        """Recover under the process lock and optional service-owned OS mutex."""
         with self._lock:
-            journal = self.store.load()
-            if journal.phase is JournalPhase.ROLLED_BACK:
-                return journal
-            if journal.phase not in {
-                JournalPhase.PREPARED,
-                JournalPhase.APPLYING,
-                JournalPhase.COMMITTED,
-                JournalPhase.ROLLING_BACK,
-                JournalPhase.ROLLBACK_FAILED,
-            }:
-                raise NetworkTransactionError(
-                    f"journal phase cannot be recovered: {journal.phase.value}"
-                )
-            errors = self._rollback(journal)
-            if errors:
-                raise NetworkTransactionError(
-                    "startup recovery was incomplete; journal must be retained",
-                    rollback_errors=errors,
-                )
-            return self.store.load()
+            return self._with_mutex(self._recover_locked)
+
+    def _recover_locked(self) -> WindowsNetworkJournal:
+        """Reconcile the journal while the caller owns the serialization lock."""
+        journal = self.store.load()
+        if journal.phase is JournalPhase.ROLLED_BACK:
+            return journal
+        if journal.phase not in {
+            JournalPhase.PREPARED,
+            JournalPhase.APPLYING,
+            JournalPhase.COMMITTED,
+            JournalPhase.ROLLING_BACK,
+            JournalPhase.ROLLBACK_FAILED,
+        }:
+            raise NetworkTransactionError(
+                f"journal phase cannot be recovered: {journal.phase.value}"
+            )
+        errors = self._rollback(journal)
+        if errors:
+            raise NetworkTransactionError(
+                "startup recovery was incomplete; journal must be retained",
+                rollback_errors=errors,
+            )
+        return self.store.load()
 
     def rollback(self, journal: WindowsNetworkJournal) -> WindowsNetworkJournal:
         """Restore only resources still matching this transaction's after-state."""
         with self._lock:
-            if not self.store.path.exists():
-                raise NetworkTransactionError("cannot roll back without a persisted journal")
-            persisted = self.store.load()
-            if persisted != journal:
-                raise NetworkTransactionError(
-                    "stale journal revision; refusing to overwrite newer persisted state"
-                )
-            if journal.phase is JournalPhase.ROLLED_BACK:
-                return journal
-            if journal.phase not in {
-                JournalPhase.APPLYING,
-                JournalPhase.COMMITTED,
-                JournalPhase.ROLLING_BACK,
-                JournalPhase.ROLLBACK_FAILED,
-                JournalPhase.PREPARED,
-            }:
-                raise NetworkTransactionError(
-                    f"journal phase cannot be rolled back: {journal.phase.value}"
-                )
-            errors = self._rollback(journal)
-            if errors:
-                raise NetworkTransactionError(
-                    "network rollback was incomplete; journal must be retained",
-                    rollback_errors=errors,
-                )
-            return self.store.load()
+            return self._with_mutex(lambda: self._rollback_public_locked(journal))
+
+    def _rollback_public_locked(
+        self, journal: WindowsNetworkJournal
+    ) -> WindowsNetworkJournal:
+        if not self.store.path.exists():
+            raise NetworkTransactionError("cannot roll back without a persisted journal")
+        persisted = self.store.load()
+        if persisted != journal:
+            raise NetworkTransactionError(
+                "stale journal revision; refusing to overwrite newer persisted state"
+            )
+        if journal.phase is JournalPhase.ROLLED_BACK:
+            return journal
+        if journal.phase not in {
+            JournalPhase.APPLYING,
+            JournalPhase.COMMITTED,
+            JournalPhase.ROLLING_BACK,
+            JournalPhase.ROLLBACK_FAILED,
+            JournalPhase.PREPARED,
+        }:
+            raise NetworkTransactionError(
+                f"journal phase cannot be rolled back: {journal.phase.value}"
+            )
+        errors = self._rollback(journal)
+        if errors:
+            raise NetworkTransactionError(
+                "network rollback was incomplete; journal must be retained",
+                rollback_errors=errors,
+            )
+        return self.store.load()
 
     def _rollback(self, journal: WindowsNetworkJournal) -> tuple[Exception, ...]:
         errors: list[Exception] = []

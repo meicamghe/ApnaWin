@@ -20,13 +20,19 @@ remaining importable on non-Windows development hosts. The native backend uses
 
 ## Current integration boundary
 
-This primitive is not yet wired around `WindowsNetworkTransaction.execute()`,
-`recover()` and `rollback()`. The helper/service integration must hold one
-service-owned mutex over the entire journal read/check, network mutation,
-verification and persistence sequence. It must also establish and verify the
-service-owned DACL; `CreateMutexW` does not replace the ACL on an already
-existing named object. A Windows multi-process integration test is still
-required before this primitive is considered production-ready.
+`WindowsNetworkTransaction` can now accept this mutex and acquires it around
+`execute()`, `recover()` and `rollback()`, holding ownership across journal
+reads, adapter mutation, verification and persistence. When acquisition reports
+`WAIT_ABANDONED`, the transaction recovery callback runs while the mutex is
+owned and before the requested operation proceeds. The mutex remains optional
+for platform-neutral tests; production helper construction must supply a
+service-owned instance and finite timeout.
+
+The helper/service still must establish and verify the service-owned DACL;
+`CreateMutexW` does not replace the ACL on an already existing named object.
+The native Windows CI tests validate cross-process exclusion and abandoned
+owner behavior, but not service SID provisioning or the complete service
+lifecycle.
 
 The unit tests use an injected backend to validate ownership, timeout,
 abandoned-owner recovery ordering, failure cleanup and input validation. They

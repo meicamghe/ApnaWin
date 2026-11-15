@@ -139,14 +139,6 @@ def _hold_mutex_in_child(name, sddl, acquired, release):
             raise RuntimeError("parent did not release child test mutex")
 
 
-def _abandon_mutex_in_child(name, sddl, acquired):
-    import os
-    from apnawin.services.windows_named_mutex import WindowsNamedMutex
-
-    mutex = WindowsNamedMutex(name, sddl)
-    with mutex.acquire(5000):
-        acquired.set()
-        os._exit(0)
 
 
 @pytest.mark.skipif(__import__("os").name != "nt", reason="native named mutex requires Windows")
@@ -185,11 +177,19 @@ def test_native_abandoned_mutex_requires_and_runs_recovery():
     name = "Local\\ApnaWin-" + uuid4().hex
     sddl = "D:P(A;;GA;;;OW)"
     acquired = ctx.Event()
-    child = ctx.Process(target=_abandon_mutex_in_child, args=(name, sddl, acquired))
+    release = ctx.Event()
+    child = ctx.Process(target=_hold_mutex_in_child, args=(name, sddl, acquired, release))
     child.start()
-    assert acquired.wait(5)
-    child.join(10)
-    assert child.exitcode == 0
+    try:
+        assert acquired.wait(5)
+        # TerminateProcess the owning process while its thread holds the mutex.
+        child.terminate()
+        child.join(10)
+        assert child.exitcode is not None
+    finally:
+        if child.is_alive():
+            child.terminate()
+            child.join(5)
 
     recovered = []
     mutex = WindowsNamedMutex(name, sddl)

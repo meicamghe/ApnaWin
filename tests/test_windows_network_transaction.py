@@ -350,3 +350,85 @@ def test_executor_instances_share_lock_for_equivalent_resolved_paths(tmp_path):
         WindowsNetworkJournalStore(second_path), MemoryAdapter()
     )
     assert first._lock is second._lock
+
+
+def test_abandoned_mutex_recovers_existing_journal_before_new_execute(tmp_path):
+    from contextlib import contextmanager
+
+    class FakeMutex:
+        def __init__(self):
+            self.events = []
+            self.abandoned = True
+
+        @contextmanager
+        def acquire(self, timeout_ms, *, recover_abandoned=None):
+            self.events.append(("acquire", timeout_ms))
+            if self.abandoned:
+                self.abandoned = False
+                assert callable(recover_abandoned)
+                recover_abandoned()
+                self.events.append(("recovered", None))
+            try:
+                yield
+            finally:
+                self.events.append(("release", None))
+
+    adapter = MemoryAdapter()
+    store = WindowsNetworkJournalStore(tmp_path / "journal.json")
+    prior = make_journal(count=1)
+    applying = WindowsNetworkJournal(
+        prior.transaction_id,
+        2,
+        JournalPhase.APPLYING,
+        (JournalMutation(
+            prior.mutations[0].kind,
+            prior.mutations[0].resource_key,
+            prior.mutations[0].before_json,
+            prior.mutations[0].after_json,
+            applied=True,
+        ),),
+    )
+    store.save(applying)
+    adapter.resources[(ResourceKind.ROUTE, "route-0")] = {"present": True, "metric": 1}
+    mutex = FakeMutex()
+    tx = WindowsNetworkTransaction(store, adapter, mutex=mutex)
+    result = tx.execute(make_journal(count=1))
+    assert result.phase is JournalPhase.COMMITTED
+    assert mutex.events == [("acquire", 5000), ("recovered", None), ("release", None)]
+    assert adapter.resources[(ResourceKind.ROUTE, "route-0")] == {
+        "present": True, "metric": 1
+    }
+
+
+def test_transaction_mutex_timeout_configuration_is_validated(tmp_path):
+    for value in (-1, 0xFFFFFFFF, True, 1.5):
+        with pytest.raises(ValueError, match="mutex_timeout_ms"):
+            WindowsNetworkTransaction(
+                WindowsNetworkJournalStore(tmp_path / "journal.json"),
+                MemoryAdapter(),
+                mutex_timeout_ms=value,
+            )
+
+
+def test_execute_rollback_and_recover_acquire_optional_mutex(tmp_path):
+    from contextlib import contextmanager
+
+    class FakeMutex:
+        def __init__(self):
+            self.calls = []
+
+        @contextmanager
+        def acquire(self, timeout_ms, *, recover_abandoned=None):
+            self.calls.append(timeout_ms)
+            yield
+
+    mutex = FakeMutex()
+    adapter = MemoryAdapter()
+    store = WindowsNetworkJournalStore(tmp_path / "journal.json")
+    tx = WindowsNetworkTransaction(store, adapter, mutex=mutex, mutex_timeout_ms=250)
+    committed = tx.execute(make_journal(count=1))
+    assert mutex.calls == [250]
+    tx.rollback(committed)
+    assert mutex.calls == [250, 250]
+    tx.recover()
+    assert mutex.calls == [250, 250, 250]
