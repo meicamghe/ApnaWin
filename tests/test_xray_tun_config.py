@@ -27,7 +27,7 @@ def valid_tun_config():
                 "dns": ["1.1.1.1", "2606:4700:4700::1111"],
                 "autoSystemRoutingTable": ["0.0.0.0/0", "::/0"],
                 "autoOutboundsInterface": "auto",
-                "autoSystemWfpBlockLeak": ["allexceptlan"],
+                "autoSystemWfpBlockLeak": ["allexceptlan", "dns"],
             },
         }],
         "outbounds": [{"protocol": "vless", "settings": {}}],
@@ -43,7 +43,7 @@ def test_inspect_tun_inbound_accepts_full_dual_stack_wfp_protected_config():
     assert inbound.dns == ("1.1.1.1", "2606:4700:4700::1111")
     assert inbound.routes == ("0.0.0.0/0", "::/0")
     assert inbound.auto_outbounds_interface == "auto"
-    assert inbound.leak_protection == ("allexceptlan",)
+    assert inbound.leak_protection == ("allexceptlan", "dns")
 
 
 def test_inspect_xray_inbound_selects_tun_mode():
@@ -66,9 +66,9 @@ def test_inspect_xray_inbound_selects_tun_mode():
         (lambda c: c["inbounds"][0]["settings"].update(dns=[]), "1 to 8"),
         (lambda c: c["inbounds"][0]["settings"].update(dns=["1.1.1.1", "1.1.1.1"]), "unique"),
         (lambda c: c["inbounds"][0]["settings"].update(autoSystemRoutingTable=["0.0.0.0/0"]), "both IPv4 and IPv6"),
-        (lambda c: c["inbounds"][0]["settings"].update(autoSystemRoutingTable=["0.0.0.0/1", "::/0"]), "both 0.0.0.0/0 and ::/0"),
+        (lambda c: c["inbounds"][0]["settings"].update(autoSystemRoutingTable=["0.0.0.0/1", "::/0"]), "unique IPv4 and IPv6 defaults"),
         (lambda c: c["inbounds"][0]["settings"].update(autoOutboundsInterface=""), "autoOutboundsInterface"),
-        (lambda c: c["inbounds"][0]["settings"].update(autoSystemWfpBlockLeak=[]), "allexceptlan"),
+        (lambda c: c["inbounds"][0]["settings"].update(autoSystemWfpBlockLeak=[]), "allexceptlan and dns"),
         (lambda c: c["inbounds"][0]["settings"].update(autoSystemDnsToGateway=True), "must be false"),
         (lambda c: c["inbounds"][0]["settings"].update(autoSystemDnsToGateway="false"), "must be false"),
         (lambda c: c["inbounds"][0]["settings"].update(extra="no"), "unsupported fields"),

@@ -195,8 +195,15 @@ def inspect_tun_inbound(config: dict) -> XrayTunInbound:
         raise ValueError("Xray TUN must set autoOutboundsInterface to 'auto' to avoid routing loops")
 
     leak_raw = settings.get("autoSystemWfpBlockLeak")
-    if not isinstance(leak_raw, list) or leak_raw != ["allexceptlan"]:
-        raise ValueError("Xray TUN must enable the allexceptlan WFP leak-protection policy")
+    if (
+        not isinstance(leak_raw, list)
+        or len(leak_raw) != 2
+        or any(not isinstance(value, str) for value in leak_raw)
+        or set(leak_raw) != {"allexceptlan", "dns"}
+    ):
+        raise ValueError(
+            "Xray TUN must enable allexceptlan and dns WFP leak-protection filters"
+        )
     if "autoSystemDnsToGateway" in settings:
         value = settings["autoSystemDnsToGateway"]
         if not isinstance(value, bool) or value:

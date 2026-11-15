@@ -53,7 +53,22 @@ Available evidence has not established a verified APNA endpoint, authentication 
 ## Connection-critical update — 2026-11-15
 
 - Added explicit SDDL builders for the service-owned mutex and local named pipe. The client SID validator now requires a full account SID with a terminal RID; the SYSTEM SID is rejected through the distinct-identity rule.
-- CI run 43721142816 passed the full Windows test job after the SID validation correction; the Windows packaging job is still in progress. Do not describe the packaging run as complete until its artifact upload succeeds.
+- CI run 43721142816 passed: 756 tests, Windows x64 PyInstaller build, packaged-app smoke test and portable artifact upload. CI run 43721386311 also passed the experimental native Wintun FFI branch; that duplicate FFI was subsequently removed after the Xray-native TUN path was verified.
 - A standalone Python Wintun ctypes adapter was prototyped, then identified as redundant and removed from the product path: Xray-core already owns Wintun, packet I/O, interface setup, routes, DNS and WFP for its native Windows TUN inbound. Do not maintain a second Wintun adapter.
-- The critical path remains: verified Wintun binary and adapter integration; real packet pump; privileged local helper with authenticated named-pipe IPC; IP/MTU configuration; transactional route and DNS adapters; real Xray/APNA credentials and config source; leak, reachability, disconnect and crash-recovery tests.
+- The critical path is now: pin and package compatible Xray/Wintun binaries; implement the Windows elevation strategy; obtain a real authorized APNA/Xray outbound configuration; run Xray's native TUN inbound with strict dual-stack routes, DNS and WFP filters; verify actual traffic, disconnect and crash recovery. Do not build a second Wintun packet engine or duplicate route/DNS stack.
 - No test or build in CI currently establishes a live VPN tunnel. Keep Connect disabled.
+
+
+## Architecture correction — native Xray TUN
+
+The upstream Xray-core TUN inbound has native Windows support. Its Windows implementation creates/reuses the Wintun adapter, owns packet I/O, configures interface addresses/MTU/routes/DNS, binds Xray's own outbound sockets to the physical interface, and can install WFP leak filters. Its graceful Close path flushes routes, IP addresses and DNS, closes WFP state, ends the Wintun session and closes the adapter. The standalone Python Wintun FFI experiment was removed as duplicate work.
+
+The runner now accepts a strict TUN inbound and requires both IPv4/IPv6 default routes, one gateway prefix per family, DNS servers, `autoOutboundsInterface: "auto"`, and `autoSystemWfpBlockLeak: ["allexceptlan", "dns"]`. The additional `dns` filter is intentional: Xray's WFP implementation leaves LAN destinations open under `allexceptlan`; the explicit DNS filter also blocks DNS queries to local-LAN resolvers.
+
+On Windows, Xray requires `wintun.dll` beside `xray.exe`. The current process runner only checks that the DLL exists; binary pinning, protected installation, elevation and startup recovery remain incomplete. Xray's dynamic WFP session is removed when the process dies, but route/address/DNS cleanup after forced termination must be verified rather than assumed.
+
+Primary upstream references:
+- https://xtls.github.io/en/config/inbounds/tun.html
+- https://github.com/XTLS/Xray-core/blob/main/proxy/tun/tun_windows.go
+- https://github.com/XTLS/Xray-core/blob/main/proxy/tun/tun_windows_wfp.go
+- https://github.com/XTLS/Xray-core/blob/main/proxy/tun/handler.go

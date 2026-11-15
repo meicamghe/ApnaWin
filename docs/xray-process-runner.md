@@ -70,7 +70,7 @@ orchestration; it does not enable the UI Connect action.
 
 ## Native Windows TUN mode
 
-The runner now recognizes a second, system-wide mode: one Xray `tun` inbound. It validates the full dual-stack policy before invoking Xray: IPv4 and IPv6 default routes, one gateway prefix per family, explicit DNS servers, `autoOutboundsInterface: "auto"` to keep Xray's own outbound sockets on the physical interface, and `autoSystemWfpBlockLeak: ["allexceptlan"]` for a Windows Filtering Platform kill switch that keeps LAN access while blocking non-LAN traffic outside the tunnel. The Xray config-test command remains the final engine-schema check.
+The runner now recognizes a second, system-wide mode: one Xray `tun` inbound. It validates the full dual-stack policy before invoking Xray: IPv4 and IPv6 default routes, one gateway prefix per family, explicit DNS servers, `autoOutboundsInterface: "auto"` to keep Xray's own outbound sockets on the physical interface, and `autoSystemWfpBlockLeak: ["allexceptlan", "dns"]` for a Windows Filtering Platform kill switch that keeps LAN access while blocking non-LAN traffic outside the tunnel. The Xray config-test command remains the final engine-schema check.
 
 On Windows, the runner also requires `wintun.dll` beside `xray.exe`; Xray's own Windows TUN implementation loads Wintun and owns the adapter, packet I/O, IP addresses, MTU, routes, DNS and WFP filters. The separate Python Wintun FFI and duplicate route/DNS engine are not part of the production design.
 

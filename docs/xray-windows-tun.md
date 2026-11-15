@@ -24,7 +24,7 @@ The runner accepts exactly one supported inbound. For TUN mode it requires:
 - one to eight unique DNS server addresses;
 - both `0.0.0.0/0` and `::/0` in `autoSystemRoutingTable`;
 - `autoOutboundsInterface: "auto"` to prevent Xray's own server connections looping into the tunnel;
-- exactly `autoSystemWfpBlockLeak: ["allexceptlan"]`, which includes DNS leak blocking and blocks non-LAN traffic from escaping outside the TUN while preserving local-LAN traffic;
+- exactly `autoSystemWfpBlockLeak: ["allexceptlan", "dns"]`, which includes DNS leak blocking and blocks non-LAN traffic from escaping outside the TUN while preserving local-LAN traffic;
 - at least one Xray outbound.
 
 The full config is then checked by Xray's own `run -test -c` command. The Python validator is deliberately stricter than the general Xray schema: it rejects partial/split-tunnel configurations and unsafe leak-protection settings for this product's full-tunnel mode.
@@ -55,3 +55,6 @@ Creating a Wintun adapter and modifying Windows routes, DNS and WFP requires an 
 - Xray TUN lifecycle handler: https://github.com/XTLS/Xray-core/blob/main/proxy/tun/handler.go
 - Xray TUN Windows WFP implementation: https://github.com/XTLS/Xray-core/blob/main/proxy/tun/tun_windows_wfp.go
 - Wintun deployment guidance: https://github.com/WireGuard/wintun
+
+
+The separate `dns` filter is intentional in addition to `allexceptlan`: Xray's WFP implementation leaves local-LAN destinations open under `allexceptlan`, and its own source explicitly notes that a router DNS resolver may remain reachable there. Adding `dns` applies the DNS block to those LAN exceptions as well, preventing the physical-interface DNS path from bypassing the TUN.
