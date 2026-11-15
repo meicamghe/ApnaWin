@@ -11,6 +11,7 @@ import ipaddress
 import json
 import math
 import os
+import re
 import socket
 import subprocess
 import time
@@ -138,8 +139,11 @@ def inspect_tun_inbound(config: dict) -> XrayTunInbound:
     name = settings.get("name")
     if not isinstance(name, str) or not name.strip() or len(name) > 128:
         raise ValueError("Xray TUN name must contain 1 to 128 characters")
-    if name != name.strip() or any(ord(ch) < 32 or 127 <= ord(ch) <= 159 for ch in name):
-        raise ValueError("Xray TUN name must be trimmed printable text")
+    if (
+        name != name.strip()
+        or not re.fullmatch(r"[A-Za-z0-9 _.-]+", name)
+    ):
+        raise ValueError("Xray TUN name must use safe Windows adapter alias characters")
     desc = settings.get("desc", "Wintun")
     if not isinstance(desc, str) or not desc.strip() or len(desc) > 128:
         raise ValueError("Xray TUN desc must contain 1 to 128 characters")
