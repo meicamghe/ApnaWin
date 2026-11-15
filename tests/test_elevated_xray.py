@@ -302,6 +302,11 @@ def test_elevated_launcher_rejects_symlinked_helper_or_store(tmp_path, monkeypat
 def test_helper_supervises_xray_until_parent_exits(tmp_path, monkeypatch):
     monkeypatch.setattr(elevated_xray.os, "name", "nt")
     monkeypatch.setattr(elevated_xray, "_open_helper_install_root", lambda: tmp_path)
+    verified_runtime = []
+    monkeypatch.setattr(
+        elevated_xray, "verify_vpn_runtime",
+        lambda path: verified_runtime.append(Path(path)),
+    )
     monkeypatch.setattr(elevated_xray, "_validate_config_store_path", lambda path: Path(path))
     monkeypatch.setattr(elevated_xray, "is_windows_elevated", lambda: True)
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "LocalAppData"))
@@ -372,6 +377,7 @@ def test_helper_supervises_xray_until_parent_exits(tmp_path, monkeypatch):
     ])
     assert result == 0
     assert FakeRunner.instance is not None
+    assert verified_runtime == [tmp_path / "engine"]
     assert FakeRunner.instance.running is False
     assert FakeRunner.instance.new_console is True
     assert api.kernel32.set_events == [32]
