@@ -54,3 +54,15 @@ The current profile's host and port do not specify protocol, security, flow, cre
 4. Only then implement a real `TunnelEngine` adapter and enable the Connect button.
 
 The automated tests use fake processes and sockets; they verify command construction, configuration checks and local-listener diagnostics, not a real Xray binary or network tunnel.
+
+
+## Bounded SOCKS protocol readiness wait
+
+The Xray runner provides `wait_for_socks_protocol_ready()` to poll the
+configured loopback listener until SOCKS5 no-auth negotiation succeeds or a
+caller-supplied monotonic deadline expires. Each probe timeout is capped by
+the remaining overall budget, and each sleep is similarly bounded. This is
+only a local proxy readiness signal: it does not prove that an outbound
+connection succeeds, that traffic uses a TUN interface, or that system DNS
+and routes are correct. The method is a building block for later connection
+orchestration; it does not enable the UI Connect action.

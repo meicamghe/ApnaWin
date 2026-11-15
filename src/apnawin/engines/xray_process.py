@@ -12,6 +12,7 @@ import math
 import os
 import socket
 import subprocess
+import time
 from dataclasses import dataclass
 
 
@@ -180,6 +181,33 @@ class XrayProcessRunner:
                 return True
         except OSError:
             return False
+
+    def wait_for_socks_protocol_ready(
+        self,
+        *,
+        timeout: float = 5.0,
+        poll_interval: float = 0.1,
+        probe_timeout: float = 0.5,
+    ) -> bool:
+        """Wait a bounded time for local SOCKS5 no-auth negotiation to succeed.
+
+        This is a local proxy-readiness check only. It does not verify an
+        outbound destination, tunnel routing, DNS behavior, or VPN health.
+        """
+        self._validate_timeout(timeout)
+        self._validate_timeout(poll_interval, "poll_interval")
+        self._validate_timeout(probe_timeout, "probe_timeout")
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            if self.is_socks_protocol_ready(timeout=min(probe_timeout, remaining)):
+                return True
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            time.sleep(min(poll_interval, remaining))
 
     def is_socks_protocol_ready(self, *, timeout: float = 1.0) -> bool:
         """Negotiate SOCKS5 no-auth on localhost; does not test remote traffic.

@@ -817,3 +817,65 @@ def test_read_config_accepts_file_at_configured_size_limit(tmp_path, monkeypatch
     config.write_bytes(raw)
 
     assert XrayProcessRunner(executable, config)._read_config() == {"inbounds": []}
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"timeout": 0},
+        {"poll_interval": 0},
+        {"probe_timeout": float("inf")},
+    ],
+)
+def test_wait_for_socks_protocol_ready_rejects_invalid_timeouts(files, kwargs):
+    _, config, _ = files
+    runner = XrayProcessRunner("xray.exe", config)
+    with pytest.raises(ValueError):
+        runner.wait_for_socks_protocol_ready(**kwargs)
+
+
+def test_wait_for_socks_protocol_ready_returns_when_protocol_responds(monkeypatch, files):
+    _, config, _ = files
+    runner = XrayProcessRunner("xray.exe", config)
+    responses = iter([False, True])
+    sleeps = []
+    clock = [0.0]
+    monkeypatch.setattr(runner, "is_socks_protocol_ready", lambda **kwargs: next(responses))
+    monkeypatch.setattr(xray_module.time, "monotonic", lambda: clock[0])
+
+    def fake_sleep(delay):
+        sleeps.append(delay)
+        clock[0] += delay
+
+    monkeypatch.setattr(xray_module.time, "sleep", fake_sleep)
+
+    assert runner.wait_for_socks_protocol_ready(timeout=1.0, poll_interval=0.1)
+    assert sleeps == [0.1]
+
+
+def test_wait_for_socks_protocol_ready_stops_at_deadline(monkeypatch, files):
+    _, config, _ = files
+    runner = XrayProcessRunner("xray.exe", config)
+    sleeps = []
+    clock = [0.0]
+    probe_timeouts = []
+
+    def unavailable(**kwargs):
+        probe_timeouts.append(kwargs["timeout"])
+        return False
+
+    monkeypatch.setattr(runner, "is_socks_protocol_ready", unavailable)
+    monkeypatch.setattr(xray_module.time, "monotonic", lambda: clock[0])
+
+    def fake_sleep(delay):
+        sleeps.append(delay)
+        clock[0] += delay
+
+    monkeypatch.setattr(xray_module.time, "sleep", fake_sleep)
+
+    assert not runner.wait_for_socks_protocol_ready(
+        timeout=0.25, poll_interval=0.1, probe_timeout=0.2
+    )
+    assert sleeps == pytest.approx([0.1, 0.1, 0.05])
+    assert probe_timeouts[0] == pytest.approx(0.2)
+    assert probe_timeouts[-1] == pytest.approx(0.05)
