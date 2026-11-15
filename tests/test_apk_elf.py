@@ -36,8 +36,8 @@ def _elf64_with_jni_exports():
 
 
 def _elf32_with_jni_exports():
-    ident = b"\\x7fELF" + bytes([1, 1, 1]) + bytes(9)
-    dynstr = b"\\x00JNI_OnLoad\\x00Java_org_example_Tunnel_start\\x00ordinary\\x00"
+    ident = b"\x7fELF" + bytes([1, 1, 1]) + bytes(9)
+    dynstr = b"\x00JNI_OnLoad\x00Java_org_example_Tunnel_start\x00ordinary\x00"
     names = {
         "jni_onload": dynstr.index(b"JNI_OnLoad"),
         "jni_method": dynstr.index(b"Java_org_example_Tunnel_start"),
@@ -47,7 +47,7 @@ def _elf32_with_jni_exports():
     for key in ("jni_onload", "jni_method", "ordinary"):
         symbols.append(struct.pack("<IIIBBH", names[key], 0, 0, 0x12, 0, 1))
     dynsym = b"".join(symbols)
-    shstr = b"\\x00.dynstr\\x00.dynsym\\x00.shstrtab\\x00"
+    shstr = b"\x00.dynstr\x00.dynsym\x00.shstrtab\x00"
     dynstr_offset = 52
     dynsym_offset = dynstr_offset + len(dynstr)
     shstr_offset = dynsym_offset + len(dynsym)
