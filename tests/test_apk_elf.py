@@ -120,7 +120,7 @@ def _elf_with_dynamic_section(
     struct.pack_into("<H", data, section_count_field, 5)
     data.extend(header)
     if data_offset is None:
-        data.extend(record[:actual_size].ljust(actual_size, b"\\x00"))
+        data.extend(record[:actual_size].ljust(actual_size, b"\x00"))
     return bytes(data)
 
 
