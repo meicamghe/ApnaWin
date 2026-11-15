@@ -9,6 +9,7 @@ _MAX_ELF_BYTES = 64 * 1024 * 1024
 _MAX_TOTAL_ELF_BYTES = 256 * 1024 * 1024
 _MAX_ANALYZED_LIBRARIES = 256
 _MAX_SECTION_HEADERS = 4096
+_MAX_PROGRAM_HEADERS = 4096
 _MAX_DYNAMIC_SYMBOL_TABLE_BYTES = 16 * 1024 * 1024
 _MACHINE_NAMES = {3: "x86", 40: "arm", 62: "x86_64", 183: "aarch64", 243: "riscv"}
 
@@ -467,6 +468,33 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
         if header[13] != 0:
             raise ValueError("ELF section-name index requires a section table")
         sections = []
+    # Validate the program-header table envelope without interpreting
+    # segment types, virtual addresses, or file-to-memory mappings.
+    program_offset, program_entry_size, program_count = header[5], header[9], header[10]
+    expected_program_entry = 56 if elf_class == 2 else 32
+    if program_count == 0xFFFF:  # PN_XNUM: actual count is sh_info in section zero.
+        if not sections:
+            raise ValueError("ELF extended program-header count requires section zero")
+        program_count = sections[0][7]
+        if program_count == 0:
+            raise ValueError("ELF extended program-header count is invalid")
+    if program_count > _MAX_PROGRAM_HEADERS:
+        raise ValueError("ELF has too many program headers")
+    if program_count:
+        if not program_offset:
+            raise ValueError("ELF program-header table offset is missing")
+        if program_entry_size < expected_program_entry:
+            raise ValueError("ELF program-header entry size is invalid")
+        required_program_alignment = 8 if elf_class == 2 else 4
+        if program_offset % required_program_alignment:
+            raise ValueError("ELF program-header table is misaligned")
+        if (
+            program_offset > len(data)
+            or program_count * program_entry_size > len(data) - program_offset
+        ):
+            raise ValueError("ELF program-header table is out of bounds")
+    elif program_offset:
+        raise ValueError("ELF program-header table offset exists without entries")
     dynamic_symbols = 0
     jni_symbols = 0
     jni_onload = False

@@ -807,6 +807,60 @@ def test_inspect_elf_bytes_rejects_invalid_header_size_or_version(
 
 
 
+@pytest.mark.parametrize(
+    ("payload", "count_offset", "offset_offset", "entry_size_offset", "word_format", "entry_size"),
+    [
+        (_elf64_with_jni_exports(), 56, 32, 54, "<Q", 56),
+        (_elf32_with_jni_exports(), 44, 28, 42, "<I", 32),
+    ],
+)
+def test_inspect_elf_rejects_program_header_count_without_table(
+    payload, count_offset, offset_offset, entry_size_offset, word_format, entry_size
+):
+    data = bytearray(payload)
+    struct.pack_into("<H", data, count_offset, 1)
+    struct.pack_into(word_format, data, offset_offset, 0)
+    struct.pack_into("<H", data, entry_size_offset, entry_size)
+    with pytest.raises(ValueError, match="program-header table offset is missing"):
+        inspect_elf_bytes(bytes(data))
+
+
+@pytest.mark.parametrize(
+    ("payload", "count_offset", "offset_offset", "entry_size_offset", "word_format", "entry_size"),
+    [
+        (_elf64_with_jni_exports(), 56, 32, 54, "<Q", 56),
+        (_elf32_with_jni_exports(), 44, 28, 42, "<I", 32),
+    ],
+)
+def test_inspect_elf_rejects_out_of_bounds_program_header_table(
+    payload, count_offset, offset_offset, entry_size_offset, word_format, entry_size
+):
+    data = bytearray(payload)
+    struct.pack_into("<H", data, count_offset, 1)
+    struct.pack_into(word_format, data, offset_offset, len(data) - 1)
+    struct.pack_into("<H", data, entry_size_offset, entry_size)
+    with pytest.raises(ValueError, match="program-header table is out of bounds"):
+        inspect_elf_bytes(bytes(data))
+
+
+@pytest.mark.parametrize(
+    ("payload", "count_offset", "offset_offset", "entry_size_offset", "word_format"),
+    [
+        (_elf64_with_jni_exports(), 56, 32, 54, "<Q"),
+        (_elf32_with_jni_exports(), 44, 28, 42, "<I"),
+    ],
+)
+def test_inspect_elf_rejects_invalid_program_header_entry_size(
+    payload, count_offset, offset_offset, entry_size_offset, word_format
+):
+    data = bytearray(payload)
+    struct.pack_into("<H", data, count_offset, 1)
+    struct.pack_into(word_format, data, offset_offset, 64 if word_format == "<Q" else 52)
+    struct.pack_into("<H", data, entry_size_offset, 1)
+    with pytest.raises(ValueError, match="program-header entry size is invalid"):
+        inspect_elf_bytes(bytes(data))
+
+
 def test_inspect_elf_bytes_rejects_misaligned_section_header_table():
     data = bytearray(_elf64_with_jni_exports())
     struct.pack_into("<Q", data, 40, 65)

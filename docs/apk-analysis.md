@@ -207,6 +207,13 @@ and that each section's declared alignment is either zero, one, or a power of
 two. These checks reject structurally inconsistent alignment metadata; they
 do not attempt to map sections into memory or prove loader compatibility.
 
+The ELF program-header table envelope is validated without interpreting
+segment types or mapping addresses: a non-empty table must have a nonzero,
+class-aligned offset, class-sized-or-larger entries, a bounded entry count,
+and a complete in-file range. The extended PN_XNUM count is read from
+section-zero sh_info and is subject to the same limit. Segment contents,
+virtual addresses, and file-to-memory mappings are not interpreted.
+
 Every file-backed section (other than the special null section) is also
 checked to ensure its declared byte range lies within the ELF input.
 SHT_NOBITS sections are exempt because they occupy memory size but have no
