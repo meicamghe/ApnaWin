@@ -173,6 +173,8 @@ class XrayConfigStore:
         self._unprotect = unprotect
 
     def _read_records(self) -> dict[str, str]:
+        if self.path.is_symlink():
+            raise OSError("Encrypted Xray config store must not be a symbolic link")
         try:
             with self.path.open("rb") as stream:
                 raw = stream.read(_MAX_STORE_BYTES + 1)

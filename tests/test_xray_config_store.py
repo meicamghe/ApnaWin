@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import json
 
 import pytest
@@ -26,12 +28,17 @@ def valid_config_bytes():
 
 def fake_crypto():
     def protect(data):
-        return b"test-encrypted:" + data[::-1]
+        return b"test-encrypted:" + hashlib.sha256(data).digest() + data[::-1]
 
     def unprotect(data):
         if not data.startswith(b"test-encrypted:"):
             raise ValueError("ciphertext integrity failure")
-        return data[len(b"test-encrypted:"):][::-1]
+        payload = data[len(b"test-encrypted:"):]
+        digest, reversed_plaintext = payload[:32], payload[32:]
+        plaintext = reversed_plaintext[::-1]
+        if hashlib.sha256(plaintext).digest() != digest:
+            raise ValueError("ciphertext integrity failure")
+        return plaintext
 
     return protect, unprotect
 
@@ -46,7 +53,8 @@ def test_store_round_trips_encrypted_config_without_plaintext_on_disk(tmp_path):
     assert store.has_config("office")
     assert store.load("OFFICE") == config
     assert secret not in path.read_bytes()
-    assert b"test-encrypted:" in path.read_bytes()
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    assert base64.b64decode(stored["configs"]["office"]).startswith(b"test-encrypted:")
 
 
 def test_store_renames_and_removes_profile_config(tmp_path):
