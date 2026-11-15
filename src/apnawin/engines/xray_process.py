@@ -76,6 +76,167 @@ def inspect_local_socks_inbound(config: dict) -> LocalSocksInbound:
     return LocalSocksInbound(host, port)
 
 
+@dataclass(frozen=True, slots=True)
+class XrayTunInbound:
+    """Validated full-tunnel inbound managed by Xray's native Windows TUN backend."""
+
+    name: str
+    desc: str
+    mtu: int
+    gateway: tuple[str, ...]
+    dns: tuple[str, ...]
+    routes: tuple[str, ...]
+    auto_outbounds_interface: str
+    leak_protection: tuple[str, ...]
+
+
+def inspect_tun_inbound(config: dict) -> XrayTunInbound:
+    """Validate the strict Windows full-tunnel policy before running Xray."""
+    inbounds = config.get("inbounds")
+    if not isinstance(inbounds, list) or len(inbounds) != 1:
+        raise ValueError("Xray TUN config must define exactly one inbound")
+    inbound = inbounds[0]
+    if not isinstance(inbound, dict) or inbound.get("protocol") != "tun":
+        raise ValueError("Xray's single inbound must use the TUN protocol")
+    if set(inbound) - {"tag", "protocol", "settings", "port"}:
+        raise ValueError("Xray TUN inbound contains unsupported fields")
+    if "port" in inbound:
+        port = inbound["port"]
+        if isinstance(port, bool) or not isinstance(port, int) or port != 0:
+            raise ValueError("Xray TUN inbound port must be omitted or zero")
+    settings = inbound.get("settings")
+    allowed = {
+        "name", "desc", "mtu", "gateway", "dns", "userLevel",
+        "autoSystemRoutingTable", "autoOutboundsInterface",
+        "autoSystemDnsToGateway", "autoSystemWfpBlockLeak",
+    }
+    if not isinstance(settings, dict) or set(settings) - allowed:
+        raise ValueError("Xray TUN settings are missing or contain unsupported fields")
+
+    name = settings.get("name")
+    if not isinstance(name, str) or not name.strip() or len(name) > 128:
+        raise ValueError("Xray TUN name must contain 1 to 128 characters")
+    if name != name.strip() or any(ord(ch) < 32 or 127 <= ord(ch) <= 159 for ch in name):
+        raise ValueError("Xray TUN name must be trimmed printable text")
+    desc = settings.get("desc", "Wintun")
+    if not isinstance(desc, str) or not desc.strip() or len(desc) > 128:
+        raise ValueError("Xray TUN desc must contain 1 to 128 characters")
+    if desc != desc.strip() or any(ord(ch) < 32 or 127 <= ord(ch) <= 159 for ch in desc):
+        raise ValueError("Xray TUN desc must be trimmed printable text")
+
+    mtu = settings.get("mtu", 1500)
+    if isinstance(mtu, bool) or not isinstance(mtu, int) or not 576 <= mtu <= 9000:
+        raise ValueError("Xray TUN MTU must be an integer from 576 through 9000")
+
+    gateway_raw = settings.get("gateway")
+    if not isinstance(gateway_raw, list) or len(gateway_raw) != 2:
+        raise ValueError("Xray TUN gateway must define one IPv4 and one IPv6 prefix")
+    gateway: list[str] = []
+    gateway_families: set[int] = set()
+    for value in gateway_raw:
+        if not isinstance(value, str):
+            raise ValueError("Xray TUN gateway entries must be CIDR strings")
+        try:
+            interface = ipaddress.ip_interface(value)
+        except ValueError as exc:
+            raise ValueError("Xray TUN gateway contains an invalid IP prefix") from exc
+        address = interface.ip
+        if address.is_unspecified or address.is_multicast or address.is_link_local:
+            raise ValueError("Xray TUN gateway addresses must be usable unicast addresses")
+        if address.version in gateway_families:
+            raise ValueError("Xray TUN gateway must contain one prefix per IP family")
+        gateway_families.add(address.version)
+        gateway.append(str(interface))
+    if gateway_families != {4, 6}:
+        raise ValueError("Xray TUN gateway must include IPv4 and IPv6")
+
+    dns_raw = settings.get("dns")
+    if not isinstance(dns_raw, list) or not 1 <= len(dns_raw) <= 8:
+        raise ValueError("Xray TUN DNS must contain 1 to 8 server addresses")
+    dns: list[str] = []
+    for value in dns_raw:
+        if not isinstance(value, str):
+            raise ValueError("Xray TUN DNS entries must be IP address strings")
+        try:
+            address = ipaddress.ip_address(value)
+        except ValueError as exc:
+            raise ValueError("Xray TUN DNS contains an invalid IP address") from exc
+        if address.is_unspecified or address.is_multicast or address.is_link_local:
+            raise ValueError("Xray TUN DNS servers must be usable unicast addresses")
+        normalized = str(address)
+        if normalized in dns:
+            raise ValueError("Xray TUN DNS server addresses must be unique")
+        dns.append(normalized)
+
+    routes_raw = settings.get("autoSystemRoutingTable")
+    if not isinstance(routes_raw, list) or len(routes_raw) != 2:
+        raise ValueError("Xray TUN must route both IPv4 and IPv6 default routes")
+    routes: list[str] = []
+    route_networks: set[ipaddress.IPv4Network | ipaddress.IPv6Network] = set()
+    for value in routes_raw:
+        if not isinstance(value, str):
+            raise ValueError("Xray TUN routes must be CIDR strings")
+        try:
+            network = ipaddress.ip_network(value, strict=True)
+        except ValueError as exc:
+            raise ValueError("Xray TUN route contains an invalid network prefix") from exc
+        if network.prefixlen != 0 or network in route_networks:
+            raise ValueError("Xray TUN routes must contain unique IPv4 and IPv6 defaults")
+        route_networks.add(network)
+        routes.append(str(network))
+    if route_networks != {
+        ipaddress.ip_network("0.0.0.0/0"),
+        ipaddress.ip_network("::/0"),
+    }:
+        raise ValueError("Xray TUN must route both 0.0.0.0/0 and ::/0")
+
+    outbound_interface = settings.get("autoOutboundsInterface")
+    if outbound_interface != "auto":
+        raise ValueError("Xray TUN must set autoOutboundsInterface to 'auto' to avoid routing loops")
+
+    leak_raw = settings.get("autoSystemWfpBlockLeak")
+    if not isinstance(leak_raw, list) or leak_raw != ["allexceptlan"]:
+        raise ValueError("Xray TUN must enable the allexceptlan WFP leak-protection policy")
+    if "autoSystemDnsToGateway" in settings:
+        value = settings["autoSystemDnsToGateway"]
+        if not isinstance(value, bool) or value:
+            raise ValueError("autoSystemDnsToGateway must be false on Windows")
+    user_level = settings.get("userLevel", 0)
+    if isinstance(user_level, bool) or not isinstance(user_level, int) or not 0 <= user_level <= 0xFFFFFFFF:
+        raise ValueError("Xray TUN userLevel must be an unsigned 32-bit integer")
+
+    outbounds = config.get("outbounds")
+    if not isinstance(outbounds, list) or not outbounds:
+        raise ValueError("Xray TUN config must contain at least one outbound")
+
+    return XrayTunInbound(
+        name=name,
+        desc=desc,
+        mtu=mtu,
+        gateway=tuple(gateway),
+        dns=tuple(dns),
+        routes=tuple(routes),
+        auto_outbounds_interface=outbound_interface,
+        leak_protection=tuple(leak_raw),
+    )
+
+
+def inspect_xray_inbound(config: dict) -> LocalSocksInbound | XrayTunInbound:
+    """Accept either a protected loopback SOCKS config or a strict full TUN config."""
+    inbounds = config.get("inbounds")
+    if not isinstance(inbounds, list) or len(inbounds) != 1:
+        raise ValueError("Xray config must contain exactly one supported inbound")
+    inbound = inbounds[0]
+    if not isinstance(inbound, dict):
+        raise ValueError("Xray inbound must be an object")
+    protocol = inbound.get("protocol")
+    if protocol == "socks":
+        return inspect_local_socks_inbound(config)
+    if protocol == "tun":
+        return inspect_tun_inbound(config)
+    raise ValueError("Xray inbound must use SOCKS or TUN protocol")
+
+
 class XrayProcessRunner:
     """Run Xray with an explicit config without shell interpolation.
 
@@ -131,10 +292,15 @@ class XrayProcessRunner:
         if not self.config_path.is_file():
             raise FileNotFoundError(f"Xray config not found: {self.config_path}")
         config = self._read_config()
-        # The runner exposes this local proxy to the desktop client. Refuse
-        # wildcard/non-loopback binds before either validation or launch so a
-        # malformed profile cannot accidentally publish an unauthenticated proxy.
-        inspect_local_socks_inbound(config)
+        inbound = inspect_xray_inbound(config)
+        if isinstance(inbound, XrayTunInbound) and os.name == "nt":
+            # Xray's Windows TUN backend dynamically loads Wintun from beside
+            # xray.exe. Never let the engine silently fall back to SOCKS-only.
+            wintun_dll = self.executable.parent / "wintun.dll"
+            if not wintun_dll.is_file():
+                raise FileNotFoundError(
+                    "Windows TUN mode requires the matching wintun.dll beside xray.exe"
+                )
 
     def local_socks_inbound(self) -> LocalSocksInbound:
         """Return the single explicitly configured loopback SOCKS endpoint."""

@@ -66,3 +66,14 @@ only a local proxy readiness signal: it does not prove that an outbound
 connection succeeds, that traffic uses a TUN interface, or that system DNS
 and routes are correct. The method is a building block for later connection
 orchestration; it does not enable the UI Connect action.
+
+
+## Native Windows TUN mode
+
+The runner now recognizes a second, system-wide mode: one Xray `tun` inbound. It validates the full dual-stack policy before invoking Xray: IPv4 and IPv6 default routes, one gateway prefix per family, explicit DNS servers, `autoOutboundsInterface: "auto"` to keep Xray's own outbound sockets on the physical interface, and `autoSystemWfpBlockLeak: ["allexceptlan"]` for a Windows Filtering Platform kill switch that keeps LAN access while blocking non-LAN traffic outside the tunnel. The Xray config-test command remains the final engine-schema check.
+
+On Windows, the runner also requires `wintun.dll` beside `xray.exe`; Xray's own Windows TUN implementation loads Wintun and owns the adapter, packet I/O, IP addresses, MTU, routes, DNS and WFP filters. The separate Python Wintun FFI and duplicate route/DNS engine are not part of the production design.
+
+Xray's Windows TUN handler explicitly flushes interface routes, IP addresses and DNS, closes WFP filters, ends the Wintun session and closes the adapter during graceful shutdown. Forced process termination does not run application cleanup code; crash/reboot recovery, route persistence and WFP behavior must be tested on clean Windows 10/11 systems before enabling Connect.
+
+The `allexceptlan` policy is intentionally strict: it can disrupt captive portals, other VPNs and local-network arrangements that do not use private/link-local ranges. It is not silently downgraded if WFP filters cannot be installed. The Connect action remains disabled pending a real authorized server profile, elevation strategy, end-to-end traffic verification and crash-recovery acceptance.
