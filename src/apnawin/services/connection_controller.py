@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from threading import Lock
+
 from apnawin.domain.profile import ConnectionProfile
 from apnawin.domain.state import ConnectionState
 from apnawin.engines.base import TunnelEngine
@@ -16,11 +18,12 @@ class ConnectionLifecycleError(RuntimeError):
 
 
 class ConnectionController:
-    """Serialize synchronous engine operations and never infer connection health.
+    """Serialize engine operations and never infer connection health.
 
-    The controller is intentionally not wired to the desktop Connect action.
-    A production engine must independently verify its required readiness before
-    reporting CONNECTED; this coordinator only enforces lifecycle transitions.
+    Profile validation is performed exactly once by the controller before the
+    engine enters CONNECTING. Engine adapters must treat connect() as operating
+    on an already-validated profile and independently verify their readiness
+    before reporting CONNECTED.
     """
 
     def __init__(self, engine: TunnelEngine) -> None:
@@ -29,53 +32,67 @@ class ConnectionController:
         self._engine = engine
         self._state = ConnectionState.DISCONNECTED
         self._profile: ConnectionProfile | None = None
+        self._lock = Lock()
 
     @property
     def state(self) -> ConnectionState:
-        return self._state
+        with self._lock:
+            return self._state
 
     @property
     def active_profile(self) -> ConnectionProfile | None:
-        return self._profile
+        with self._lock:
+            return self._profile
 
     def connect(self, profile: ConnectionProfile) -> None:
-        if self._state is not ConnectionState.DISCONNECTED:
-            raise ConnectionLifecycleError(
-                f"Cannot connect while state is {self._state.value}"
-            )
-        self._engine.validate_profile(profile)
-        self._state = ConnectionState.CONNECTING
-        self._profile = profile
-        try:
-            self._engine.connect(profile)
-            if self._engine.state is not ConnectionState.CONNECTED:
+        with self._lock:
+            if self._state is not ConnectionState.DISCONNECTED:
                 raise ConnectionLifecycleError(
-                    "Engine returned without confirming CONNECTED state"
+                    f"Cannot connect while state is {self._state.value}"
                 )
-        except Exception as exc:
-            cleanup_error = None
+
+            # Validation failure must not mutate lifecycle state or request cleanup.
+            self._engine.validate_profile(profile)
+            self._state = ConnectionState.CONNECTING
+            self._profile = profile
             try:
-                self._engine.disconnect()
-            except Exception as cleanup_exc:  # retain failed cleanup for retry/diagnostics
-                cleanup_error = cleanup_exc
-            self._state = ConnectionState.ERROR
-            self._profile = None
-            raise ConnectionLifecycleError(
-                "Connection attempt failed; engine cleanup was requested",
-                cleanup_error=cleanup_error,
-            ) from exc
-        self._state = ConnectionState.CONNECTED
+                self._engine.connect(profile)
+                if self._engine.state is not ConnectionState.CONNECTED:
+                    raise ConnectionLifecycleError(
+                        "Engine returned without confirming CONNECTED state"
+                    )
+            except Exception as exc:
+                cleanup_error = None
+                try:
+                    self._engine.disconnect()
+                except Exception as cleanup_exc:
+                    cleanup_error = cleanup_exc
+
+                self._state = ConnectionState.ERROR
+                # Retain ownership information if cleanup did not complete. This
+                # allows diagnostics and a later disconnect retry to target it.
+                if cleanup_error is None:
+                    self._profile = None
+                message = f"{exc}; engine cleanup was requested"
+                if cleanup_error is not None:
+                    message += f"; cleanup also failed: {cleanup_error}"
+                raise ConnectionLifecycleError(
+                    message, cleanup_error=cleanup_error
+                ) from exc
+
+            self._state = ConnectionState.CONNECTED
 
     def disconnect(self) -> None:
-        if self._state is ConnectionState.DISCONNECTED:
-            return
-        self._state = ConnectionState.DISCONNECTING
-        try:
-            self._engine.disconnect()
-        except Exception as exc:
-            self._state = ConnectionState.ERROR
-            raise ConnectionLifecycleError(
-                "Disconnect failed; engine resources may still be active"
-            ) from exc
-        self._profile = None
-        self._state = ConnectionState.DISCONNECTED
+        with self._lock:
+            if self._state is ConnectionState.DISCONNECTED:
+                return
+            self._state = ConnectionState.DISCONNECTING
+            try:
+                self._engine.disconnect()
+            except Exception as exc:
+                self._state = ConnectionState.ERROR
+                raise ConnectionLifecycleError(
+                    "Disconnect failed; engine resources may still be active"
+                ) from exc
+            self._profile = None
+            self._state = ConnectionState.DISCONNECTED

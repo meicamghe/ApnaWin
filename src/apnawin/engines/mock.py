@@ -27,7 +27,7 @@ class MockTunnelEngine:
             raise TypeError("profile must be a ConnectionProfile")
 
     def connect(self, profile: ConnectionProfile) -> None:
-        self.validate_profile(profile)
+        # ConnectionController owns preflight validation; do not validate twice.
         if self._state is not ConnectionState.DISCONNECTED:
             raise RuntimeError(f"Cannot connect while state is {self._state.value}")
         self._state = ConnectionState.CONNECTING

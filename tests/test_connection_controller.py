@@ -62,14 +62,14 @@ def test_controller_failed_connect_requests_cleanup_and_enters_error(profile):
     engine = RecordingEngine()
     engine.connect_error = OSError("start failed")
     controller = ConnectionController(engine)
-    with pytest.raises(ConnectionLifecycleError, match="cleanup was requested"):
+    with pytest.raises(ConnectionLifecycleError, match="start failed.*cleanup was requested"):
         controller.connect(profile)
     assert engine.disconnect_calls == 1
     assert controller.state is ConnectionState.ERROR
     assert controller.active_profile is None
 
 
-def test_controller_retains_cleanup_failure(profile):
+def test_controller_retains_cleanup_failure_and_profile_for_retry(profile):
     engine = RecordingEngine()
     engine.connect_error = OSError("start failed")
     engine.disconnect_error = OSError("cleanup failed")
@@ -77,7 +77,9 @@ def test_controller_retains_cleanup_failure(profile):
     with pytest.raises(ConnectionLifecycleError) as captured:
         controller.connect(profile)
     assert isinstance(captured.value.cleanup_error, OSError)
+    assert "cleanup failed" in str(captured.value)
     assert controller.state is ConnectionState.ERROR
+    assert controller.active_profile == profile
 
 
 def test_controller_rejects_engine_that_does_not_confirm_connected(profile):
@@ -88,6 +90,17 @@ def test_controller_rejects_engine_that_does_not_confirm_connected(profile):
         controller.connect(profile)
     assert engine.disconnect_calls == 1
     assert controller.state is ConnectionState.ERROR
+    assert controller.active_profile is None
+
+
+def test_controller_validation_failure_does_not_change_state_or_cleanup():
+    engine = RecordingEngine()
+    controller = ConnectionController(engine)
+    with pytest.raises(TypeError, match="ConnectionProfile"):
+        controller.connect(object())
+    assert controller.state is ConnectionState.DISCONNECTED
+    assert controller.active_profile is None
+    assert engine.disconnect_calls == 0
 
 
 def test_controller_disconnects_and_clears_profile(profile):
