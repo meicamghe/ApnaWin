@@ -419,6 +419,24 @@ def test_inspect_elf_accepts_valid_gnu_hash_section(payload, elf_class):
     )["inspection_status"] == "complete"
 
 
+def test_inspect_elf_accepts_gnu_hash_before_later_section(payload, elf_class):
+    data = bytearray(_elf_with_gnu_hash_section(payload, elf_class))
+    section_offset = struct.unpack_from(
+        "<Q" if elf_class == 64 else "<I",
+        data,
+        40 if elf_class == 64 else 32,
+    )[0]
+    section_size = 64 if elf_class == 64 else 40
+    # Put GNU_HASH before the section-name table so its alignment cannot be
+    # accidentally taken from the final section-header iteration.
+    gnu_header = bytes(data[section_offset + 4 * section_size:section_offset + 5 * section_size])
+    names_header = bytes(data[section_offset + 3 * section_size:section_offset + 4 * section_size])
+    data[section_offset + 3 * section_size:section_offset + 4 * section_size] = gnu_header
+    data[section_offset + 4 * section_size:section_offset + 5 * section_size] = names_header
+    struct.pack_into("<H", data, 62 if elf_class == 64 else 50, 4)
+    assert inspect_elf_bytes(bytes(data))["inspection_status"] == "complete"
+
+
 @pytest.mark.parametrize(
     ("payload", "elf_class", "kwargs", "message"),
     [

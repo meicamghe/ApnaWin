@@ -326,7 +326,7 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             if section[1] != 0x6FFFFFF6:  # SHT_GNU_HASH
                 continue
             hash_offset, hash_size = section[4], section[5]
-            symbol_index, info, entry_size = section[6], section[7], section[9]
+            symbol_index, info, alignment, entry_size = section[6], section[7], section[8], section[9]
             if (
                 symbol_index >= len(sections)
                 or sections[symbol_index][1] != 11  # SHT_DYNSYM
