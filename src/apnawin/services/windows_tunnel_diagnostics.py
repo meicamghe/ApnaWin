@@ -89,15 +89,36 @@ if ($null -eq $a) {{
     exit 0
 }}
 $idx = [int]$a.ifIndex
-$r4 = @(Get-NetRoute -DestinationPrefix '0.0.0.0/0' -InterfaceIndex $idx -ErrorAction SilentlyContinue)
-$r6 = @(Get-NetRoute -DestinationPrefix '::/0' -InterfaceIndex $idx -ErrorAction SilentlyContinue)
+# Require the best combined route/interface metric to select only the TUN.
+$r4 = @(Get-NetRoute -DestinationPrefix '0.0.0.0/0' -PolicyStore ActiveStore -ErrorAction SilentlyContinue | ForEach-Object {{
+    $ipif = Get-NetIPInterface -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -ne $ipif) {{
+        [pscustomobject]@{{ InterfaceIndex = [int]$_.InterfaceIndex; Metric = [long]$_.RouteMetric + [long]$ipif.InterfaceMetric }}
+    }}
+}})
+$r6 = @(Get-NetRoute -DestinationPrefix '::/0' -PolicyStore ActiveStore -ErrorAction SilentlyContinue | ForEach-Object {{
+    $ipif = Get-NetIPInterface -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv6 -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -ne $ipif) {{
+        [pscustomobject]@{{ InterfaceIndex = [int]$_.InterfaceIndex; Metric = [long]$_.RouteMetric + [long]$ipif.InterfaceMetric }}
+    }}
+}})
+$best4 = @()
+if ($r4.Count -gt 0) {{
+    $metric4 = ($r4 | Measure-Object -Property Metric -Minimum).Minimum
+    $best4 = @($r4 | Where-Object {{ $_.Metric -eq $metric4 }} | Select-Object -ExpandProperty InterfaceIndex -Unique)
+}}
+$best6 = @()
+if ($r6.Count -gt 0) {{
+    $metric6 = ($r6 | Measure-Object -Property Metric -Minimum).Minimum
+    $best6 = @($r6 | Where-Object {{ $_.Metric -eq $metric6 }} | Select-Object -ExpandProperty InterfaceIndex -Unique)
+}}
 $dns = @(Get-DnsClientServerAddress -InterfaceIndex $idx -ErrorAction SilentlyContinue | ForEach-Object {{ $_.ServerAddresses }} | Where-Object {{ $_ }})
 [pscustomobject]@{{
     adapter_present = $true
     adapter_status = [string]$a.Status
     interface_index = $idx
-    ipv4_default_route = ($r4.Count -gt 0)
-    ipv6_default_route = ($r6.Count -gt 0)
+    ipv4_default_route = ($best4.Count -gt 0 -and @($best4 | Where-Object {{ $_ -ne $idx }}).Count -eq 0)
+    ipv6_default_route = ($best6.Count -gt 0 -and @($best6 | Where-Object {{ $_ -ne $idx }}).Count -eq 0)
     dns_servers = $dns
 }} | ConvertTo-Json -Compress -Depth 4
 """
