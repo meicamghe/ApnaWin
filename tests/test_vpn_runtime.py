@@ -37,7 +37,7 @@ def test_runtime_verification_accepts_utf8_bom_manifest(tmp_path):
     root = tmp_path / "engine"
     manifest = _write_runtime(root)
     (root / "runtime-manifest.json").write_bytes(
-        b"\\xef\\xbb\\xbf" + json.dumps(manifest).encode("utf-8")
+        b"\xef\xbb\xbf" + json.dumps(manifest).encode("utf-8")
     )
     assert verify_vpn_runtime(root) == manifest
 
