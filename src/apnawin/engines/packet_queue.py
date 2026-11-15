@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from threading import Condition
+from math import isfinite
+from threading import Condition, TIMEOUT_MAX
 from time import monotonic
 
 
@@ -35,6 +36,22 @@ class PacketQueueStats:
     max_bytes: int
     max_packet_size: int
     closed: bool
+
+
+def _deadline_for_timeout(timeout: float | None) -> float | None:
+    if timeout is None:
+        return None
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+        raise ValueError("timeout must be a finite non-negative number or None")
+    try:
+        valid = isfinite(timeout) and timeout >= 0
+        duration = float(timeout)
+    except (OverflowError, TypeError, ValueError):
+        valid = False
+        duration = 0.0
+    if not valid:
+        raise ValueError("timeout must be a finite non-negative number or None")
+    return monotonic() + duration
 
 
 class BoundedPacketQueue:
@@ -84,16 +101,17 @@ class BoundedPacketQueue:
     def put(self, packet: bytes | bytearray | memoryview, *, timeout: float | None = 0) -> None:
         """Enqueue a packet; timeout=0 is non-blocking, None waits indefinitely."""
         try:
-            payload = bytes(packet)
-        except (TypeError, ValueError) as exc:
+            view = memoryview(packet)
+        except TypeError as exc:
             raise TypeError("packet must support the buffer protocol") from exc
+        if view.ndim != 1 or not view.contiguous:
+            raise ValueError("packet must be a contiguous one-dimensional buffer")
+        payload = view.tobytes()
         if not payload:
             raise ValueError("packet must not be empty")
         if len(payload) > self._max_packet_size:
             raise ValueError("packet exceeds max_packet_size")
-        if timeout is not None and timeout < 0:
-            raise ValueError("timeout cannot be negative")
-        deadline = None if timeout is None else monotonic() + timeout
+        deadline = _deadline_for_timeout(timeout)
         with self._condition:
             while True:
                 if self._closed:
@@ -112,13 +130,13 @@ class BoundedPacketQueue:
                 remaining = None if deadline is None else deadline - monotonic()
                 if remaining is not None and remaining <= 0:
                     raise PacketQueueTimeout("timed out waiting for packet queue capacity")
-                self._condition.wait(remaining)
+                self._condition.wait(
+                    None if remaining is None else min(remaining, TIMEOUT_MAX)
+                )
 
     def get(self, *, timeout: float | None = 0) -> bytes:
         """Remove the oldest packet; queued packets remain drainable after close."""
-        if timeout is not None and timeout < 0:
-            raise ValueError("timeout cannot be negative")
-        deadline = None if timeout is None else monotonic() + timeout
+        deadline = _deadline_for_timeout(timeout)
         with self._condition:
             while not self._items:
                 if self._closed:
@@ -128,7 +146,9 @@ class BoundedPacketQueue:
                 remaining = None if deadline is None else deadline - monotonic()
                 if remaining is not None and remaining <= 0:
                     raise PacketQueueTimeout("timed out waiting for a packet")
-                self._condition.wait(remaining)
+                self._condition.wait(
+                    None if remaining is None else min(remaining, TIMEOUT_MAX)
+                )
             payload = self._items.popleft()
             self._queued_bytes -= len(payload)
             self._condition.notify_all()

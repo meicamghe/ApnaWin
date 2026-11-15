@@ -32,3 +32,10 @@ Available evidence has not established a verified APNA endpoint, authentication 
 - Windows route/DNS intent is validated as an immutable model.
 - Journal persistence and conservative recovery orchestration are implemented behind a fakeable adapter interface.
 - Connect remains disabled until a production Windows tunnel passes end-to-end route, DNS, leak, disconnect and crash-recovery acceptance tests.
+
+
+## Latest engineering update
+
+- Added a bounded FIFO packet handoff queue with packet-count, total-byte and per-packet limits; it copies packet data to immutable bytes, provides explicit backpressure/timeouts and supports graceful drain or discard on close. This remains disconnected from native Wintun.
+- Hardened queue inputs to require contiguous one-dimensional buffers and finite non-negative timeout values.
+- Network transaction executors in one process now share a re-entrant lock keyed by canonical journal path. Cross-process serialization still requires an OS-level mutex in the privileged helper.

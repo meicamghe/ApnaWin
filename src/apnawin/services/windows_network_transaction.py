@@ -5,8 +5,9 @@ The adapter is injected: this module never calls Windows APIs or elevates privil
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
-from threading import Lock
+from threading import Lock, RLock
 from typing import Any, Protocol
 
 from apnawin.services.windows_network_journal import (
@@ -60,18 +61,36 @@ def _snapshot(mutation: JournalMutation, *, after: bool) -> dict[str, Any]:
     return json.loads(mutation.after_json if after else mutation.before_json)
 
 
+_PATH_LOCKS_GUARD = Lock()
+_PATH_LOCKS: dict[str, RLock] = {}
+
+
+def _lock_for_store(store: WindowsNetworkJournalStore) -> RLock:
+    """Return the process-local lock shared by a canonical journal path."""
+    key = os.path.normcase(str(store.path.resolve()))
+    with _PATH_LOCKS_GUARD:
+        lock = _PATH_LOCKS.get(key)
+        if lock is None:
+            lock = RLock()
+            _PATH_LOCKS[key] = lock
+        return lock
+
+
 @dataclass(slots=True)
 class WindowsNetworkTransaction:
     """Apply, recover and compensate journaled resources.
 
-    The instance lock serializes calls made through this executor instance. The
-    production helper must additionally enforce a process-wide single transaction
-    owner because multiple processes can instantiate separate executors.
+    Instances in the same process that target the same canonical journal path
+    share a lock. The production helper must additionally enforce an OS-level
+    mutex because separate processes do not share Python locks.
     """
 
     store: WindowsNetworkJournalStore
     adapter: NetworkResourceAdapter
-    _lock: Lock = field(default_factory=Lock, init=False, repr=False)
+    _lock: RLock = field(default_factory=RLock, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self._lock = _lock_for_store(self.store)
 
     def execute(self, journal: WindowsNetworkJournal) -> WindowsNetworkJournal:
         with self._lock:

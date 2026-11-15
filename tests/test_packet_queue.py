@@ -159,3 +159,29 @@ def test_nonblocking_empty_and_timed_operations_are_explicit():
     queue.put(b"12345678")
     with pytest.raises(PacketQueueTimeout):
         queue.put(b"x", timeout=0.01)
+
+
+@pytest.mark.parametrize("packet", [7, object()])
+def test_rejects_values_that_do_not_support_the_buffer_protocol(packet):
+    queue = BoundedPacketQueue(max_packets=1, max_bytes=8, max_packet_size=8)
+    with pytest.raises(TypeError, match="buffer protocol"):
+        queue.put(packet)
+
+
+@pytest.mark.parametrize("timeout", [-1, float("nan"), float("inf"), True, "1", 10**1000])
+def test_rejects_invalid_timeouts(timeout):
+    queue = BoundedPacketQueue(max_packets=1, max_bytes=8, max_packet_size=8)
+    with pytest.raises(ValueError, match="finite non-negative"):
+        queue.put(b"x", timeout=timeout)
+    with pytest.raises(ValueError, match="finite non-negative"):
+        queue.get(timeout=timeout)
+
+
+def test_rejects_multidimensional_and_noncontiguous_packet_views():
+    queue = BoundedPacketQueue(max_packets=1, max_bytes=8, max_packet_size=8)
+    multidimensional = memoryview(bytearray(b"1234")).cast("B", shape=(2, 2))
+    noncontiguous = memoryview(bytearray(b"1234"))[::2]
+    with pytest.raises(ValueError, match="one-dimensional"):
+        queue.put(multidimensional)
+    with pytest.raises(ValueError, match="contiguous"):
+        queue.put(noncontiguous)

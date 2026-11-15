@@ -34,7 +34,7 @@ A production Windows adapter must:
 - provide read-after-write semantics and report API failures;
 - preserve concurrent external changes and avoid broad route-table or DNS resets.
 
-The executor lock serializes calls through one instance only. The production helper must additionally enforce a process-wide single transaction owner. Before privileged use, the journal directory needs a restrictive Windows ACL and a service-owned location. The current store does not defend against a hostile local administrator or reparse-point manipulation.
+All executor instances in the same Python process that target the same canonical journal path share one re-entrant lock. This prevents two in-process instances from racing between checking the journal slot and persisting their own transaction. This lock is process-local only; the production helper must additionally acquire an OS-level named mutex around recovery, execute and rollback. Before privileged use, the journal directory needs a restrictive Windows ACL and a service-owned location. The current store does not defend against a hostile local administrator or reparse-point manipulation.
 
 ## Limitations
 

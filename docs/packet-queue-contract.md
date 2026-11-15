@@ -11,7 +11,7 @@ apnawin.engines.packet_queue.BoundedPacketQueue is a platform-neutral FIFO for p
 - close(discard=True) discards queued copies, returns the discarded byte count, and wakes all waiters.
 - All state and byte accounting are protected by one condition lock.
 
-The queue copies inputs into immutable bytes, so a producer cannot mutate a packet after enqueue. This is intentionally a safe handoff abstraction rather than a zero-copy Wintun ring implementation.
+The queue accepts only contiguous one-dimensional buffer-protocol inputs and copies them into immutable bytes, so a producer cannot mutate a packet after enqueue. Timeout values must be finite non-negative numbers or None; extremely large waits are safely chunked to the platform's supported condition-wait limit. This is intentionally a safe handoff abstraction rather than a zero-copy Wintun ring implementation.
 
 ## Integration boundary
 

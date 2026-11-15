@@ -286,3 +286,67 @@ def test_rollback_refuses_stale_persisted_revision(tmp_path):
     assert adapter.resources[(ResourceKind.ROUTE, "route-0")] == {
         "present": True, "metric": 1
     }
+
+
+def test_executor_instances_share_lock_and_prevent_same_process_journal_race(tmp_path):
+    import threading
+    import time
+
+    path = tmp_path / "shared-journal.json"
+    store_one = WindowsNetworkJournalStore(path)
+    store_two = WindowsNetworkJournalStore(path)
+    entered_adapter = threading.Event()
+    release_adapter = threading.Event()
+
+    class BlockingAdapter(MemoryAdapter):
+        def read(self, kind, resource_key):
+            entered_adapter.set()
+            assert release_adapter.wait(2)
+            return super().read(kind, resource_key)
+
+    adapter_one = BlockingAdapter()
+    adapter_two = MemoryAdapter()
+    first = WindowsNetworkTransaction(store_one, adapter_one)
+    second = WindowsNetworkTransaction(store_two, adapter_two)
+    first_result = []
+    second_errors = []
+
+    def run_first():
+        first_result.append(first.execute(make_journal(count=1)))
+
+    def run_second():
+        try:
+            second.execute(make_journal(count=1))
+        except Exception as exc:
+            second_errors.append(exc)
+
+    thread_one = threading.Thread(target=run_first)
+    thread_one.start()
+    assert entered_adapter.wait(1)
+    thread_two = threading.Thread(target=run_second)
+    thread_two.start()
+    time.sleep(0.03)
+    assert thread_two.is_alive()
+    release_adapter.set()
+    thread_one.join(2)
+    thread_two.join(2)
+
+    assert not thread_one.is_alive()
+    assert not thread_two.is_alive()
+    assert len(first_result) == 1
+    assert len(second_errors) == 1
+    assert isinstance(second_errors[0], NetworkTransactionError)
+    assert "existing non-terminal journal" in str(second_errors[0])
+    assert adapter_two.calls == []
+
+
+def test_executor_instances_share_lock_for_equivalent_resolved_paths(tmp_path):
+    first_path = tmp_path / "journal.json"
+    second_path = tmp_path / "." / "journal.json"
+    first = WindowsNetworkTransaction(
+        WindowsNetworkJournalStore(first_path), MemoryAdapter()
+    )
+    second = WindowsNetworkTransaction(
+        WindowsNetworkJournalStore(second_path), MemoryAdapter()
+    )
+    assert first._lock is second._lock
