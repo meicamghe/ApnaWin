@@ -48,3 +48,12 @@ Available evidence has not established a verified APNA endpoint, authentication 
 - Clarified receive handoff error semantics: a release failure after successful enqueue reports `enqueued=True`; callers retry only native release, avoiding duplicate queue insertion.
 
 - Split non-blocking queue errors into `PacketQueueFull` for producer backpressure and `PacketQueueEmpty` for an empty consumer read.
+
+
+## Connection-critical update — 2026-11-15
+
+- Added explicit SDDL builders for the service-owned mutex and local named pipe. The client SID validator now requires a full account SID with a terminal RID; the SYSTEM SID is rejected through the distinct-identity rule.
+- CI run 43721142816 passed the full Windows test job after the SID validation correction; the Windows packaging job is still in progress. Do not describe the packaging run as complete until its artifact upload succeeds.
+- A native Windows x64 Wintun ctypes adapter is prepared for review. It requires a pinned SHA-256, validates PE architecture, loads only an explicit DLL path using restricted DLL search flags, binds adapter/session/send/receive APIs, and exposes the native receive-release callback. The DLL is not bundled or downloaded, and the adapter is not yet connected to the service, packet pump, or network configuration.
+- The critical path remains: verified Wintun binary and adapter integration; real packet pump; privileged local helper with authenticated named-pipe IPC; IP/MTU configuration; transactional route and DNS adapters; real Xray/APNA credentials and config source; leak, reachability, disconnect and crash-recovery tests.
+- No test or build in CI currently establishes a live VPN tunnel. Keep Connect disabled.
