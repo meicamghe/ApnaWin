@@ -76,7 +76,10 @@ def test_runtime_verification_rejects_missing_or_symlinked_manifest(tmp_path):
         verify_vpn_runtime(root)
     target = tmp_path / "manifest.json"
     target.write_text("{}", encoding="utf-8")
-    (root / "runtime-manifest.json").symlink_to(target)
+    try:
+        (root / "runtime-manifest.json").symlink_to(target)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is unavailable")
     with pytest.raises(VpnRuntimeIntegrityError, match="manifest"):
         verify_vpn_runtime(root)
 
