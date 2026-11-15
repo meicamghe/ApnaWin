@@ -34,7 +34,7 @@ Connect remains disabled until the real backend and full Windows integration pas
 
 ## Receive packet lease contract
 
-The owner can track one buffer returned by the native receive API. The lease exposes a read-only, contiguous view and requires release after packet processing. A successful native release removes the lease from the outstanding set; a failed release retains it so the caller can retry.
+The owner can track one buffer returned by the native receive API. The lease exposes a read-only, contiguous byte view (format `B`, one byte per element) and requires release after packet processing. Non-byte buffer exporters are normalized to byte views so `len(view)` and packet byte length agree. A successful native release removes the lease from the outstanding set; a failed release retains it so the caller can retry.
 
 Session stop refuses to call EndSession while any receive lease remains outstanding. This prevents teardown from invalidating a packet buffer still being consumed. Context-manager use guarantees a release attempt on normal exit and exception exit, but a release callback failure remains visible and retains ownership.
 

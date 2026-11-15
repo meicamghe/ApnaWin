@@ -64,7 +64,14 @@ The allowlist is not permission to implement all operations at once. Each operat
 - Before rollback, compare current state with the transaction's recorded after-state. If another program or user has changed it, do not overwrite that newer state; mark recovery required and preserve diagnostics.
 - Roll back in reverse order. Preserve the journal on any partial failure.
 - On service start, reconcile incomplete transactions before accepting new connection requests.
+- Serialize `recover`, `execute` and `rollback` with one service-owned named Windows mutex. Create/open it with an explicit DACL granting access only to SYSTEM and the service SID; do not rely on a default DACL or a client-created object.
+- Hold the mutex across the complete journal read/check, adapter mutation, verification and journal persistence sequence. A per-process Python lock is not a substitute.
+- Treat `WAIT_ABANDONED` as evidence that the previous owner terminated unexpectedly. Keep ownership of the mutex, run conservative journal recovery, and accept no new transaction until recovery succeeds.
+- Use a bounded wait. A timeout or mutex acquisition failure must fail closed without mutating routes or DNS.
+- Release ownership in a `finally` path and close the mutex handle. Never release a mutex from a thread other than the owning thread.
 - Journal only bounded network metadata and opaque resource IDs; never store credentials, private keys or complete Xray configuration.
+
+The mutex is a second serialization layer in addition to the journal's atomic persistence. It protects the check-then-act interval across multiple service processes; it does not replace compare-before-restore checks or journal recovery.
 
 ## Minimum security and failure tests
 

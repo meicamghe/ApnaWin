@@ -84,7 +84,9 @@ class WintunReceiveLeaseTracker:
             raise TypeError("packet must support the buffer protocol") from exc
         if view.ndim != 1 or not view.contiguous or view.nbytes == 0:
             raise ValueError("packet must be a non-empty contiguous one-dimensional buffer")
-        readonly = view.toreadonly()
+        # Wintun packets are byte sequences; normalize non-byte exporters so
+        # indexing and length semantics match the native packet length.
+        readonly = view.cast("B").toreadonly()
         with self._lock:
             token = self._next_token
             self._next_token += 1

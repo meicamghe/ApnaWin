@@ -260,3 +260,35 @@ def test_receive_lease_rejects_empty_packet(packet):
     with pytest.raises(ValueError, match="non-empty"):
         session.lease_received_packet(packet, lambda: None)
     session.stop()
+
+
+def test_receive_lease_normalizes_non_byte_buffer_to_bytes():
+    from array import array
+
+    backend = FakeWintunBackend()
+    session = owner(backend)
+    session.start()
+    packet = array("I", [0x01020304, 0x05060708])
+    lease = session.lease_received_packet(packet, lambda: None)
+    assert lease.data.format == "B"
+    assert lease.data.itemsize == 1
+    assert len(lease.data) == memoryview(packet).nbytes
+    assert bytes(lease.data) == memoryview(packet).tobytes()
+    lease.release()
+    session.stop()
+
+
+@pytest.mark.parametrize(
+    "packet",
+    [
+        memoryview(bytearray(b"1234")).cast("B", shape=(2, 2)),
+        memoryview(bytearray(b"1234"))[::2],
+    ],
+)
+def test_receive_lease_rejects_non_one_dimensional_or_noncontiguous_views(packet):
+    backend = FakeWintunBackend()
+    session = owner(backend)
+    session.start()
+    with pytest.raises(ValueError, match="one-dimensional"):
+        session.lease_received_packet(packet, lambda: None)
+    session.stop()
