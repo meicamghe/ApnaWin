@@ -112,4 +112,46 @@ def test_windows_tun_requires_wintun_dll_beside_xray_executable(monkeypatch, tmp
     with pytest.raises(FileNotFoundError, match="wintun.dll"):
         runner._validate_inputs(profile)
     (tmp_path / "wintun.dll").write_bytes(b"test dll placeholder")
+    monkeypatch.setattr(xray_process, "is_windows_elevated", lambda: True)
     runner._validate_inputs(profile)
+
+
+def test_windows_tun_rejects_non_elevated_process(monkeypatch, tmp_path):
+    executable = tmp_path / "xray.exe"
+    executable.touch()
+    (tmp_path / "wintun.dll").write_bytes(b"test dll placeholder")
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(valid_tun_config()), encoding="utf-8")
+    profile = ConnectionProfile("test", Transport.XRAY, "127.0.0.1", 443)
+    runner = XrayProcessRunner(executable, config_path)
+    monkeypatch.setattr(xray_process.os, "name", "nt")
+    monkeypatch.setattr(xray_process, "is_windows_elevated", lambda: False)
+    with pytest.raises(PermissionError, match="elevated administrator token"):
+        runner._validate_inputs(profile)
+
+
+def test_is_windows_elevated_returns_false_outside_windows():
+    assert xray_process.is_windows_elevated() is False
+
+
+def test_is_windows_elevated_uses_windows_admin_token_api(monkeypatch):
+    class FakeFunction:
+        def __init__(self, result):
+            self.result = result
+            self.argtypes = None
+            self.restype = None
+
+        def __call__(self):
+            return self.result
+
+    class FakeShell32:
+        IsUserAnAdmin = FakeFunction(1)
+
+    monkeypatch.setattr(xray_process.os, "name", "nt")
+    monkeypatch.setattr(
+        xray_process.ctypes,
+        "WinDLL",
+        lambda name, use_last_error: FakeShell32(),
+        raising=False,
+    )
+    assert xray_process.is_windows_elevated() is True

@@ -6,6 +6,7 @@ can check whether an explicitly configured localhost SOCKS inbound is listening.
 """
 from __future__ import annotations
 
+import ctypes
 import ipaddress
 import json
 import math
@@ -244,6 +245,17 @@ def inspect_xray_inbound(config: dict) -> LocalSocksInbound | XrayTunInbound:
     raise ValueError("Xray inbound must use SOCKS or TUN protocol")
 
 
+def is_windows_elevated() -> bool:
+    """Return whether this process has an elevated Windows administrator token."""
+    if os.name != "nt":
+        return False
+    shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+    is_user_admin = shell32.IsUserAnAdmin
+    is_user_admin.argtypes = []
+    is_user_admin.restype = ctypes.c_int
+    return bool(is_user_admin())
+
+
 class XrayProcessRunner:
     """Run Xray with an explicit config without shell interpolation.
 
@@ -307,6 +319,11 @@ class XrayProcessRunner:
             if not wintun_dll.is_file():
                 raise FileNotFoundError(
                     "Windows TUN mode requires the matching wintun.dll beside xray.exe"
+                )
+            if not is_windows_elevated():
+                raise PermissionError(
+                    "Windows TUN requires an elevated administrator token; "
+                    "the desktop-to-helper elevation workflow is not integrated yet"
                 )
 
     def local_socks_inbound(self) -> LocalSocksInbound:

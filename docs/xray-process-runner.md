@@ -82,3 +82,6 @@ The `allexceptlan` policy is intentionally strict: it can disrupt captive portal
 ## Pinned runtime binaries
 
 The Windows CI build downloads Xray-core v26.11.9 and Wintun 0.14.1 through `scripts/Install-VpnRuntime.ps1`. It verifies archive SHA-256, PE x64 architecture, Wintun Authenticode signature and publisher, and the Xray version before copying the runtime into `dist/ApnaWin/engine`. The folder includes both upstream license notices and a generated `runtime-manifest.json` with archive and installed-file hashes. This protects the build pipeline from unverified downloads; the runtime manifest is not yet enforced by the application at launch, and a protected Program Files installation/elevation strategy is still required.
+
+
+For Windows TUN mode, `_validate_inputs` also checks that the process token is elevated using `IsUserAnAdmin`. It fails closed with a clear `PermissionError` when the desktop is not elevated. This is a guard, not an elevation workflow: the application does not yet relaunch itself or use a privileged helper/service.

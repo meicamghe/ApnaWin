@@ -46,7 +46,7 @@ Forced process termination is different: it bypasses Go cleanup code. The upstre
 
 ## Privilege boundary
 
-Creating a Wintun adapter and modifying Windows routes, DNS and WFP requires an elevated execution context. The current runner inherits the desktop process token; it does not elevate itself. The product still needs a deliberate UAC/service strategy and tests proving that Xray runs with the minimum required rights. Do not enable Connect until this is implemented.
+Creating a Wintun adapter and modifying Windows routes, DNS and WFP requires an elevated execution context. The current runner now checks `IsUserAnAdmin` and refuses to start TUN when the process is not elevated. It still inherits the desktop process token and does not elevate itself. The product needs a deliberate UAC/helper strategy and tests proving that Xray runs with the minimum required rights. Do not enable Connect until this is implemented.
 
 ## Binary provenance
 
