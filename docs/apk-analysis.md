@@ -254,6 +254,17 @@ addends are outside this metadata-only inspection. Passing these checks does
 not establish that relocations can be applied or that the library is loadable.
 
 
+## ELF RELR relocation-section metadata
+
+SHT_RELR sections are accepted only in ET_EXEC and ET_DYN objects. Their
+entries are class-sized relocation words: 4 bytes for ELF32 and 8 bytes for
+ELF64. The parser checks the exact entry size, divisibility of the section
+size, and file bounds. It does not decode RELR bitmaps or apply relocations.
+The ELF specification does not assign SHT_RELR-specific sh_link or sh_info
+semantics in the section-header interpretation table, so those fields are not
+given invented constraints here. These checks establish structural metadata
+only, not relocation correctness or loader compatibility.
+
 ## ELF section-group metadata
 
 SHT_GROUP sections are accepted only in ET_REL objects and are checked

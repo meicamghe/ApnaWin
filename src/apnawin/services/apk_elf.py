@@ -147,6 +147,19 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                 or relocation_size > len(data) - relocation_offset
             ):
                 raise ValueError("ELF relocation section data is out of bounds")
+        # SHT_RELR stores class-sized relative-relocation words and is
+        # reserved for dynamic-linking objects (ET_EXEC / ET_DYN).
+        relr_entry_size = 8 if elf_class == 2 else 4
+        for section in sections:
+            if section[1] != 19:  # SHT_RELR
+                continue
+            relr_offset, relr_size, entry_size = section[4], section[5], section[9]
+            if elf_type not in (2, 3):  # ET_EXEC / ET_DYN
+                raise ValueError("ELF SHT_RELR is only valid in ET_EXEC or ET_DYN files")
+            if entry_size != relr_entry_size or relr_size % relr_entry_size:
+                raise ValueError("ELF SHT_RELR entry metadata is invalid")
+            if relr_offset > len(data) or relr_size > len(data) - relr_offset:
+                raise ValueError("ELF SHT_RELR data is out of bounds")
         # Validate section references and bounds for both static and dynamic
         # symbol tables before interpreting any dynamic symbols.
         for section in sections:

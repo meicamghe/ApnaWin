@@ -34,6 +34,82 @@ def _elf64_with_jni_exports():
     return header + dynstr + dynsym + shstr + bytes(section_offset - shstr_offset - len(shstr)) + b"".join(sections)
 
 
+def _elf_with_relr_section(payload, elf_class, *, file_type=3, entry_size=None, relr_size=None, relr_offset=None):
+    data = bytearray(payload)
+    section_offset_field = 40 if elf_class == 64 else 32
+    section_count_field = 60 if elf_class == 64 else 48
+    section_size = 64 if elf_class == 64 else 40
+    section_fmt = "<IIQQQQIIQQ" if elf_class == 64 else "<IIIIIIIIII"
+    word_size = 8 if elf_class == 64 else 4
+    section_offset = struct.unpack_from(
+        "<Q" if elf_class == 64 else "<I", data, section_offset_field
+    )[0]
+    struct.pack_into("<H", data, 16, file_type)
+    actual_entry_size = word_size if entry_size is None else entry_size
+    actual_relr_size = word_size if relr_size is None else relr_size
+    actual_relr_offset = len(data) + section_size if relr_offset is None else relr_offset
+    relr_header = struct.pack(
+        section_fmt, 0, 19, 0, 0, actual_relr_offset, actual_relr_size,
+        0, 0, word_size, actual_entry_size,
+    )
+    struct.pack_into("<H", data, section_count_field, 5)
+    data.extend(relr_header)
+    if relr_offset is None:
+        data.extend(bytes(actual_relr_size))
+    return bytes(data)
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_accepts_valid_relr_section(payload, elf_class):
+    result = inspect_elf_bytes(_elf_with_relr_section(payload, elf_class))
+    assert result["inspection_status"] == "complete"
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_rejects_relr_in_relocatable_file(payload, elf_class):
+    with pytest.raises(ValueError, match="only valid in ET_EXEC or ET_DYN"):
+        inspect_elf_bytes(_elf_with_relr_section(payload, elf_class, file_type=1))
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class", "entry_size", "relr_size"),
+    [
+        (_elf64_with_jni_exports(), 64, 4, 8),
+        (_elf32_with_jni_exports(), 32, 8, 4),
+        (_elf64_with_jni_exports(), 64, 8, 7),
+        (_elf32_with_jni_exports(), 32, 4, 3),
+    ],
+)
+def test_inspect_elf_rejects_invalid_relr_entry_metadata(
+    payload, elf_class, entry_size, relr_size
+):
+    with pytest.raises(ValueError, match="SHT_RELR entry metadata is invalid"):
+        inspect_elf_bytes(
+            _elf_with_relr_section(
+                payload, elf_class, entry_size=entry_size, relr_size=relr_size
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_rejects_out_of_bounds_relr_data(payload, elf_class):
+    with pytest.raises(ValueError, match="SHT_RELR data is out of bounds"):
+        inspect_elf_bytes(
+            _elf_with_relr_section(
+                payload, elf_class, relr_offset=0x7FFFFFFF
+            )
+        )
+
+
 def test_inspect_elf_bytes_counts_only_exported_jni_symbol_names():
     result = inspect_elf_bytes(_elf64_with_jni_exports())
     assert result == {
