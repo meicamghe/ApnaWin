@@ -28,6 +28,7 @@ from apnawin.engines.xray_process import (
 )
 from apnawin.services.windows_tunnel_diagnostics import WindowsTunnelDiagnostics
 from apnawin.storage.xray_config_store import XrayConfigStore
+from apnawin.services.vpn_runtime import verify_vpn_runtime
 
 
 _SEE_MASK_NOCLOSEPROCESS = 0x00000040
@@ -452,6 +453,7 @@ def elevated_helper_main(argv: list[str] | None = None) -> int:
     temp_config = None
     try:
         install_root = _open_helper_install_root()
+        verify_vpn_runtime(install_root / "engine")
         if not is_windows_elevated():
             return 3
         if not _READY_EVENT_RE.fullmatch(args.ready_event) or not _STOP_EVENT_RE.fullmatch(args.stop_event):
