@@ -857,12 +857,16 @@ def test_inspect_elf_bytes_rejects_invalid_dynamic_symbol_local_boundary():
         inspect_elf_bytes(bytes(data))
 
 
-def test_inspect_elf_bytes_validates_names_even_for_null_local_symbols():
+def test_inspect_elf_bytes_validates_names_even_for_non_exported_local_symbols():
     data = bytearray(_elf64_with_jni_exports())
     section_offset = struct.unpack_from("<Q", data, 40)[0]
     dynsym_header = section_offset + 2 * 64
     dynsym_offset = struct.unpack_from("<Q", data, dynsym_header + 24)[0]
-    struct.pack_into("<I", data, dynsym_offset, 0xFFFFFFFF)
+    # Corrupt a non-null local symbol: its name must still be validated
+    # before export filtering can skip it.
+    local_symbol_offset = dynsym_offset + 24
+    struct.pack_into("<I", data, local_symbol_offset, 0xFFFFFFFF)
+    data[local_symbol_offset + 4] = 0
     with pytest.raises(ValueError, match="symbol name offset is invalid"):
         inspect_elf_bytes(bytes(data))
 
