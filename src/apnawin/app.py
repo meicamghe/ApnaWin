@@ -1,6 +1,7 @@
 """Native desktop shell with local connection-profile management.
 
-Tunnel connection remains disabled until a real Windows tunnel engine is integrated.
+Tunnel connection remains disabled until the privileged lifecycle, route/DNS
+rollback, leak protection and end-to-end Windows acceptance tests pass.
 """
 
 import sys
@@ -153,7 +154,7 @@ class MainWindow(QMainWindow):
         self.connect_button = QPushButton("Connect")
         self.connect_button.setEnabled(False)
         self.connect_button.setToolTip(
-            "Connection remains disabled until the elevation workflow and live VPN acceptance tests are complete."
+            "Connection remains disabled until the UAC supervisor is wired into the UI and route/DNS, leak-protection and end-to-end VPN tests pass."
         )
 
         layout = QVBoxLayout()
@@ -395,7 +396,7 @@ class MainWindow(QMainWindow):
             return
         self.status_label.setText(
             f"Xray TUN config imported and encrypted for {profile.name}. "
-            "Connect remains disabled until the elevation and live-tunnel workflow is complete."
+            "Connect remains disabled until route/DNS rollback, leak-protection and end-to-end VPN acceptance tests pass."
         )
         self._show_selected_profile(row)
 
