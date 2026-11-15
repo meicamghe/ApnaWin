@@ -1,0 +1,127 @@
+import pytest
+
+from apnawin.services.windows_named_mutex import (
+    WAIT_ABANDONED,
+    WAIT_OBJECT_0,
+    WAIT_TIMEOUT,
+    WindowsMutexError,
+    WindowsNamedMutex,
+)
+
+
+class FakeBackend:
+    def __init__(self, result=WAIT_OBJECT_0):
+        self.result = result
+        self.events = []
+        self.fail_release = False
+
+    def create(self, name, security_sddl):
+        self.events.append(("create", name, security_sddl))
+        return "handle", True
+
+    def wait(self, handle, timeout_ms):
+        self.events.append(("wait", timeout_ms))
+        return self.result
+
+    def release(self, handle):
+        self.events.append(("release", handle))
+        if self.fail_release:
+            raise OSError("release failed")
+
+    def close(self, handle):
+        self.events.append(("close", handle))
+
+
+SDDL = "D:P(A;;GA;;;SY)(A;;GA;;;BA)"
+
+
+def test_mutex_acquires_and_releases_owned_handle():
+    backend = FakeBackend()
+    mutex = WindowsNamedMutex(r"Global\\ApnaWin-Test", SDDL, backend)
+    with mutex.acquire(1500):
+        assert backend.events[-1] == ("wait", 1500)
+    assert [event[0] for event in backend.events] == [
+        "create", "wait", "release", "close"
+    ]
+
+
+def test_mutex_timeout_does_not_release_unowned_mutex():
+    backend = FakeBackend(WAIT_TIMEOUT)
+    mutex = WindowsNamedMutex("Local\\ApnaWin-Test", SDDL, backend)
+    with pytest.raises(TimeoutError, match="timed out"):
+        with mutex.acquire(25):
+            pytest.fail("timeout must not enter critical section")
+    assert [event[0] for event in backend.events] == ["create", "wait", "close"]
+
+
+def test_abandoned_mutex_runs_recovery_before_entering_critical_section():
+    backend = FakeBackend(WAIT_ABANDONED)
+    mutex = WindowsNamedMutex("Global\\ApnaWin-Test", SDDL, backend)
+    recovered = []
+    with mutex.acquire(100, recover_abandoned=lambda: recovered.append(True)):
+        assert recovered == [True]
+        assert backend.events[-1][0] == "wait"
+    assert [event[0] for event in backend.events] == [
+        "create", "wait", "release", "close"
+    ]
+
+
+def test_abandoned_mutex_without_recovery_fails_closed_and_releases():
+    backend = FakeBackend(WAIT_ABANDONED)
+    mutex = WindowsNamedMutex("Global\\ApnaWin-Test", SDDL, backend)
+    with pytest.raises(WindowsMutexError, match="recovery callback"):
+        with mutex.acquire(100):
+            pytest.fail("must not enter without recovery")
+    assert [event[0] for event in backend.events] == [
+        "create", "wait", "release", "close"
+    ]
+
+
+def test_failed_abandoned_recovery_fails_closed_and_releases():
+    backend = FakeBackend(WAIT_ABANDONED)
+    mutex = WindowsNamedMutex("Global\\ApnaWin-Test", SDDL, backend)
+
+    def fail_recovery():
+        raise OSError("journal corrupt")
+
+    with pytest.raises(WindowsMutexError, match="recovery failed"):
+        with mutex.acquire(100, recover_abandoned=fail_recovery):
+            pytest.fail("must not enter after failed recovery")
+    assert backend.events[-2:] == [("release", "handle"), ("close", "handle")]
+
+
+def test_wait_failure_closes_handle_without_releasing_unowned_mutex():
+    class FailedWaitBackend(FakeBackend):
+        def wait(self, handle, timeout_ms):
+            self.events.append(("wait", timeout_ms))
+            raise OSError("wait failed")
+
+    backend = FailedWaitBackend()
+    mutex = WindowsNamedMutex("Global\\ApnaWin-Test", SDDL, backend)
+    with pytest.raises(OSError, match="wait failed"):
+        with mutex.acquire(100):
+            pytest.fail("wait failure must not enter")
+    assert [event[0] for event in backend.events] == ["create", "wait", "close"]
+
+
+@pytest.mark.parametrize("timeout", [-1, 0xFFFFFFFF, True, 1.5, "10"])
+def test_rejects_invalid_timeout(timeout):
+    mutex = WindowsNamedMutex("Global\\ApnaWin-Test", SDDL, FakeBackend())
+    with pytest.raises(ValueError):
+        with mutex.acquire(timeout):
+            pytest.fail("invalid timeout must not enter")
+
+
+def test_requires_explicit_security_descriptor():
+    with pytest.raises(ValueError, match="security descriptor"):
+        WindowsNamedMutex("Global\\ApnaWin-Test", " ", FakeBackend())
+
+
+def test_release_failure_is_reported_after_handle_close():
+    backend = FakeBackend()
+    backend.fail_release = True
+    mutex = WindowsNamedMutex("Global\\ApnaWin-Test", SDDL, backend)
+    with pytest.raises(WindowsMutexError, match="release or close"):
+        with mutex.acquire(100):
+            pass
+    assert backend.events[-1] == ("close", "handle")
