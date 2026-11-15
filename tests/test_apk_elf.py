@@ -1344,3 +1344,60 @@ def test_inspect_elf_accepts_os_and_processor_group_flag_masks(payload, elf_clas
         _elf_with_group_section(payload, elf_class, (0x1FF00001, 6))
     )
     assert result["inspection_status"] == "complete"
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class", "symbol_info_offset", "section_info_offset"),
+    [
+        (_elf64_with_jni_exports(), 64, 4, 44),
+        (_elf32_with_jni_exports(), 32, 12, 28),
+    ],
+)
+def test_inspect_elf_accepts_valid_local_symbol_boundary(
+    payload, elf_class, symbol_info_offset, section_info_offset
+):
+    data = bytearray(payload)
+    section_offset = struct.unpack_from(
+        "<Q" if elf_class == 64 else "<I",
+        data,
+        40 if elf_class == 64 else 32,
+    )[0]
+    dynsym_header = section_offset + 2 * (64 if elf_class == 64 else 40)
+    symbol_offset = struct.unpack_from(
+        "<Q" if elf_class == 64 else "<I",
+        data,
+        dynsym_header + (24 if elf_class == 64 else 16),
+    )[0]
+    data[symbol_offset + (24 if elf_class == 64 else 16) + symbol_info_offset] = 0x02
+    struct.pack_into("<I", data, dynsym_header + section_info_offset, 2)
+    assert inspect_elf_bytes(bytes(data))["inspection_status"] == "complete"
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class", "symbol_info_offset", "section_info_offset", "boundary", "binding"),
+    [
+        (_elf64_with_jni_exports(), 64, 4, 44, 1, 0x02),
+        (_elf32_with_jni_exports(), 32, 12, 28, 1, 0x02),
+        (_elf64_with_jni_exports(), 64, 4, 44, 2, 0x12),
+        (_elf32_with_jni_exports(), 32, 12, 28, 2, 0x12),
+    ],
+)
+def test_inspect_elf_rejects_invalid_local_symbol_ordering(
+    payload, elf_class, symbol_info_offset, section_info_offset, boundary, binding
+):
+    data = bytearray(payload)
+    section_offset = struct.unpack_from(
+        "<Q" if elf_class == 64 else "<I",
+        data,
+        40 if elf_class == 64 else 32,
+    )[0]
+    dynsym_header = section_offset + 2 * (64 if elf_class == 64 else 40)
+    symbol_offset = struct.unpack_from(
+        "<Q" if elf_class == 64 else "<I",
+        data,
+        dynsym_header + (24 if elf_class == 64 else 16),
+    )[0]
+    data[symbol_offset + (24 if elf_class == 64 else 16) + symbol_info_offset] = binding
+    struct.pack_into("<I", data, dynsym_header + section_info_offset, boundary)
+    with pytest.raises(ValueError, match="local-symbol ordering is invalid"):
+        inspect_elf_bytes(bytes(data))

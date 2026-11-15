@@ -224,6 +224,15 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                 data[symbol_offset:symbol_offset + expected_symbol]
             ):
                 raise ValueError("ELF symbol table null entry is not zero")
+            # sh_info is the index of the first non-local symbol.
+            # Validate the binding order for both static and dynamic tables.
+            symbol_info_offset = 4 if elf_class == 2 else 12
+            for symbol_index in range(symbol_count):
+                record_offset = symbol_offset + symbol_index * symbol_entry_size
+                symbol_info = data[record_offset + symbol_info_offset]
+                is_local = (symbol_info >> 4) == 0  # STB_LOCAL
+                if (symbol_index < symbol_table[7]) != is_local:
+                    raise ValueError("ELF symbol table local-symbol ordering is invalid")
             companion = companion_sections[0] if companion_sections else None
             if companion is not None:
                 companion_offset, companion_size = companion[4], companion[5]

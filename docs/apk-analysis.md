@@ -343,3 +343,14 @@ table's entry count, and rejects bucket or chain indexes outside that table.
 It does not calculate symbol hashes or perform dynamic symbol resolution.
 These checks establish structural metadata only, not loader compatibility or
 runtime behavior.
+
+
+## ELF local-symbol ordering
+
+For each SHT_SYMTAB and SHT_DYNSYM section, the parser validates the ELF
+local-symbol boundary recorded in sh_info. Every symbol before that index must
+have STB_LOCAL binding, and every symbol at or after it must have a non-local
+binding. The binding is read from the class-specific st_info byte; symbol
+names, values, and addresses are not needed. ELF32 and ELF64 regression tests
+cover valid ordering and both directions of boundary inconsistency. This is a
+structural consistency check and does not establish symbol resolution.
