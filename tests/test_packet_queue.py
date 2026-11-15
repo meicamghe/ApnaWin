@@ -245,7 +245,7 @@ def test_handoff_preserves_both_enqueue_and_release_failures():
 
 
 def test_handoff_surfaces_release_failure_after_successful_copy():
-    from apnawin.engines.packet_queue import handoff_received_packet
+    from apnawin.engines.packet_queue import PacketHandoffError, handoff_received_packet
 
     class Lease:
         data = memoryview(b"copied")

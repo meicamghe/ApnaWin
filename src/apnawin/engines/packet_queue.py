@@ -25,6 +25,10 @@ class PacketQueueFull(PacketQueueError):
     """A non-blocking enqueue would exceed the configured queue bounds."""
 
 
+class PacketQueueEmpty(PacketQueueError):
+    """A non-blocking dequeue found no queued packets."""
+
+
 class PacketQueueTimeout(PacketQueueError):
     """A blocking queue operation exceeded its timeout."""
 
@@ -171,7 +175,7 @@ class BoundedPacketQueue:
                 if self._closed:
                     raise PacketQueueClosed("queue is closed and drained")
                 if timeout == 0:
-                    raise PacketQueueFull("packet queue is empty")
+                    raise PacketQueueEmpty("packet queue is empty")
                 remaining = None if deadline is None else deadline - monotonic()
                 if remaining is not None and remaining <= 0:
                     raise PacketQueueTimeout("timed out waiting for a packet")

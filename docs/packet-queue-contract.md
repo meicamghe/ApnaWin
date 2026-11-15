@@ -4,7 +4,7 @@ apnawin.engines.packet_queue.BoundedPacketQueue is a platform-neutral FIFO for p
 
 ## Backpressure and shutdown
 
-- Non-blocking put rejects capacity exhaustion with PacketQueueFull.
+- Non-blocking put rejects capacity exhaustion with PacketQueueFull; non-blocking get on an empty queue raises PacketQueueEmpty.
 - Blocking put and get accept finite timeouts or None for indefinite waits.
 - Timeout expiration raises PacketQueueTimeout; it never silently drops a packet.
 - close(discard=False) prevents new producers, wakes blocked threads, and allows consumers to drain already queued packets.
