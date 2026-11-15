@@ -27,7 +27,7 @@ The adapter must own and validate every native handle. It must reject unexpected
 
 ## Not implemented
 
-The actual Win32/Wintun FFI, packet buffer leases, receive/send loops, bounded queues, cancellation/wakeup events, MTU handling, IP address assignment, route/DNS integration, helper service, and end-to-end leak tests are not implemented. Do not interpret `SESSION_STARTED` as a working VPN connection.
+The actual Win32/Wintun FFI, receive/send loops, cancellation/wakeup events, MTU handling, IP address assignment, route/DNS integration, helper service, and end-to-end leak tests are not implemented. Receive packet lease ownership is modeled in Python, and bounded inter-thread packet queues are implemented as platform-neutral components; neither is connected to a native driver. Do not interpret `SESSION_STARTED` as a working VPN connection.
 
 Connect remains disabled until the real backend and full Windows integration pass clean-machine and network acceptance tests.
 
