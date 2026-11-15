@@ -95,3 +95,16 @@ The mutex is a second serialization layer in addition to the journal's atomic pe
 - Microsoft `DeleteIpForwardEntry2`: https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-deleteipforwardentry2
 - Microsoft `GetInterfaceDnsSettings`: https://learn.microsoft.com/windows/win32/api/netioapi/nf-netioapi-getinterfacednssettings
 - Microsoft `SetInterfaceDnsSettings`: https://learn.microsoft.com/windows/win32/api/netioapi/nf-netioapi-setinterfacednssettings
+
+
+## Transaction executor mutex integration
+
+The platform-neutral `WindowsNetworkTransaction` now accepts an optional
+`WindowsNamedMutex` instance and finite wait timeout. When configured, the
+executor holds it across `execute`, `recover` and `rollback`. An abandoned
+mutex invokes conservative journal recovery while ownership is retained and
+before the requested operation proceeds. Production service construction must
+always inject the service-owned mutex; leaving the optional parameter unset is
+for isolated unit tests and non-privileged development only. This integration
+does not create the service, provision its service SID, or verify the final
+Windows object DACL.

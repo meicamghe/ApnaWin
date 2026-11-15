@@ -432,3 +432,41 @@ def test_execute_rollback_and_recover_acquire_optional_mutex(tmp_path):
     assert mutex.calls == [250, 250]
     tx.recover()
     assert mutex.calls == [250, 250, 250]
+
+
+def test_mutex_timeout_prevents_all_network_mutations(tmp_path):
+    from contextlib import contextmanager
+
+    class TimeoutMutex:
+        @contextmanager
+        def acquire(self, timeout_ms, *, recover_abandoned=None):
+            raise TimeoutError("mutex acquisition timed out")
+            yield
+
+    adapter = MemoryAdapter()
+    store = WindowsNetworkJournalStore(tmp_path / "journal.json")
+    tx = WindowsNetworkTransaction(store, adapter, mutex=TimeoutMutex())
+    with pytest.raises(TimeoutError, match="timed out"):
+        tx.execute(make_journal(count=1))
+    assert adapter.calls == []
+    assert not store.path.exists()
+
+
+def test_abandoned_recovery_failure_prevents_new_transaction(tmp_path):
+    from contextlib import contextmanager
+
+    class FailedRecoveryMutex:
+        @contextmanager
+        def acquire(self, timeout_ms, *, recover_abandoned=None):
+            assert callable(recover_abandoned)
+            recover_abandoned()
+            yield
+
+    adapter = MemoryAdapter()
+    store = WindowsNetworkJournalStore(tmp_path / "journal.json")
+    store.path.write_text("{corrupt", encoding="utf-8")
+    tx = WindowsNetworkTransaction(store, adapter, mutex=FailedRecoveryMutex())
+    with pytest.raises(Exception):
+        tx.execute(make_journal(count=1))
+    assert adapter.calls == []
+    assert store.path.read_text(encoding="utf-8") == "{corrupt"

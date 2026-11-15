@@ -178,6 +178,13 @@ def test_native_abandoned_mutex_requires_and_runs_recovery():
     sddl = "D:P(A;;GA;;;OW)"
     acquired = ctx.Event()
     release = ctx.Event()
+
+    # Keep an open handle in this process. Otherwise the named kernel object
+    # can be destroyed after the owner exits, and a later CreateMutex creates
+    # a fresh object instead of observing WAIT_ABANDONED.
+    mutex = WindowsNamedMutex(name, sddl)
+    assert mutex.backend is not None
+    anchor_handle, _created = mutex.backend.create(name, sddl)
     child = ctx.Process(target=_hold_mutex_in_child, args=(name, sddl, acquired, release))
     child.start()
     try:
@@ -186,13 +193,13 @@ def test_native_abandoned_mutex_requires_and_runs_recovery():
         child.terminate()
         child.join(10)
         assert child.exitcode is not None
+
+        recovered = []
+        with mutex.acquire(1000, recover_abandoned=lambda: recovered.append(True)):
+            assert recovered == [True]
+        assert recovered == [True]
     finally:
         if child.is_alive():
             child.terminate()
             child.join(5)
-
-    recovered = []
-    mutex = WindowsNamedMutex(name, sddl)
-    with mutex.acquire(1000, recover_abandoned=lambda: recovered.append(True)):
-        assert recovered == [True]
-    assert recovered == [True]
+        mutex.backend.close(anchor_handle)
