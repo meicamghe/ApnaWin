@@ -1,11 +1,12 @@
 """Fail-closed orchestration for journaled Windows network mutations.
 
-The adapter is deliberately injected: this module never calls Windows APIs.
+The adapter is injected: this module never calls Windows APIs or elevates privileges.
 """
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from threading import Lock
 from typing import Any, Protocol
 
 from apnawin.services.windows_network_journal import (
@@ -61,17 +62,22 @@ def _snapshot(mutation: JournalMutation, *, after: bool) -> dict[str, Any]:
 
 @dataclass(slots=True)
 class WindowsNetworkTransaction:
-    """Apply and compensate journaled resources with compare-before-restore.
+    """Apply, recover and compensate journaled resources.
 
-    A mutation is durably marked as possibly applied before calling the adapter.
-    This closes the crash window between an OS change and the next journal write:
-    recovery always reconciles live state against exact before/after snapshots.
+    The instance lock serializes calls made through this executor instance. The
+    production helper must additionally enforce a process-wide single transaction
+    owner because multiple processes can instantiate separate executors.
     """
 
     store: WindowsNetworkJournalStore
     adapter: NetworkResourceAdapter
+    _lock: Lock = field(default_factory=Lock, init=False, repr=False)
 
     def execute(self, journal: WindowsNetworkJournal) -> WindowsNetworkJournal:
+        with self._lock:
+            return self._execute(journal)
+
+    def _execute(self, journal: WindowsNetworkJournal) -> WindowsNetworkJournal:
         if not isinstance(journal, WindowsNetworkJournal):
             raise TypeError("journal must be a WindowsNetworkJournal")
         if journal.phase is not JournalPhase.PREPARED:
@@ -84,6 +90,15 @@ class WindowsNetworkTransaction:
         self.store.save(current)
         try:
             for index, mutation in enumerate(current.mutations):
+                # Optimistic precondition: never overwrite a route/DNS resource that
+                # changed after the transaction's before-snapshot was collected.
+                observed_before = self.adapter.read(mutation.kind, mutation.resource_key)
+                if _canonical_state(observed_before) != mutation.before_json:
+                    raise NetworkTransactionError(
+                        f"resource no longer matches its before-snapshot: "
+                        f"{mutation.resource_key}"
+                    )
+
                 marked = list(current.mutations)
                 marked[index] = JournalMutation(
                     mutation.kind,
@@ -93,8 +108,7 @@ class WindowsNetworkTransaction:
                     applied=True,
                 )
                 current = self._next(current, JournalPhase.APPLYING, tuple(marked))
-                # Persist intent before the external side effect. On recovery, compare
-                # live state: it may still be before, may be after, or be a conflict.
+                # Persist possibly-applied intent before the external side effect.
                 self.store.save(current)
                 self.adapter.apply(
                     mutation.kind, mutation.resource_key, _snapshot(mutation, after=True)
@@ -115,18 +129,58 @@ class WindowsNetworkTransaction:
                 rollback_errors=rollback_errors,
             ) from exc
 
+    def recover(self) -> WindowsNetworkJournal:
+        """Conservatively reconcile the persisted journal after process restart.
+
+        PREPARED means no mutation was authorized to run. APPLYING,
+        ROLLING_BACK, ROLLBACK_FAILED and COMMITTED are reconciled against fresh
+        adapter reads and compensated in reverse order. A corrupt/missing journal
+        raises from the store and is never silently replaced.
+        """
+        with self._lock:
+            journal = self.store.load()
+            if journal.phase is JournalPhase.ROLLED_BACK:
+                return journal
+            if journal.phase not in {
+                JournalPhase.PREPARED,
+                JournalPhase.APPLYING,
+                JournalPhase.COMMITTED,
+                JournalPhase.ROLLING_BACK,
+                JournalPhase.ROLLBACK_FAILED,
+            }:
+                raise NetworkTransactionError(
+                    f"journal phase cannot be recovered: {journal.phase.value}"
+                )
+            errors = self._rollback(journal)
+            if errors:
+                raise NetworkTransactionError(
+                    "startup recovery was incomplete; journal must be retained",
+                    rollback_errors=errors,
+                )
+            return self.store.load()
+
     def rollback(self, journal: WindowsNetworkJournal) -> WindowsNetworkJournal:
         """Restore only resources still matching this transaction's after-state."""
-        if journal.phase is JournalPhase.ROLLED_BACK:
-            return journal
-        errors = self._rollback(journal)
-        if errors:
-            raise NetworkTransactionError(
-                "network rollback was incomplete; journal must be retained",
-                rollback_errors=errors,
-            )
-        # _rollback persists ROLLED_BACK before returning.
-        return self.store.load()
+        with self._lock:
+            if journal.phase is JournalPhase.ROLLED_BACK:
+                return journal
+            if journal.phase not in {
+                JournalPhase.APPLYING,
+                JournalPhase.COMMITTED,
+                JournalPhase.ROLLING_BACK,
+                JournalPhase.ROLLBACK_FAILED,
+                JournalPhase.PREPARED,
+            }:
+                raise NetworkTransactionError(
+                    f"journal phase cannot be rolled back: {journal.phase.value}"
+                )
+            errors = self._rollback(journal)
+            if errors:
+                raise NetworkTransactionError(
+                    "network rollback was incomplete; journal must be retained",
+                    rollback_errors=errors,
+                )
+            return self.store.load()
 
     def _rollback(self, journal: WindowsNetworkJournal) -> tuple[Exception, ...]:
         errors: list[Exception] = []
@@ -134,8 +188,8 @@ class WindowsNetworkTransaction:
             current = self._next(journal, JournalPhase.ROLLING_BACK, journal.mutations)
             self.store.save(current)
         except Exception as exc:
-            # Existing APPLYING/COMMITTED record still contains the possibly-applied
-            # set. Continue conservative compensation; never discard that record.
+            # Existing record still contains the possibly-applied set. Continue
+            # conservative compensation, but never report successful recovery.
             current = journal
             errors.append(exc)
 

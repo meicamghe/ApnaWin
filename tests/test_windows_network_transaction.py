@@ -46,9 +46,7 @@ def make_journal(*, count=2):
         )
         for index in range(count)
     )
-    return WindowsNetworkJournal(
-        str(uuid4()), 1, JournalPhase.PREPARED, mutations
-    )
+    return WindowsNetworkJournal(str(uuid4()), 1, JournalPhase.PREPARED, mutations)
 
 
 def test_execute_persists_and_verifies_all_mutations(tmp_path):
@@ -73,6 +71,18 @@ def test_execute_does_not_mutate_when_prepared_save_fails(tmp_path, monkeypatch)
     with pytest.raises(OSError, match="disk unavailable"):
         WindowsNetworkTransaction(store, adapter).execute(make_journal())
     assert adapter.calls == []
+
+
+def test_execute_refuses_stale_before_snapshot_without_overwriting_it(tmp_path):
+    adapter = MemoryAdapter()
+    adapter.resources[(ResourceKind.ROUTE, "route-0")] = {"external": "newer"}
+    store = WindowsNetworkJournalStore(tmp_path / "journal.json")
+    with pytest.raises(NetworkTransactionError) as caught:
+        WindowsNetworkTransaction(store, adapter).execute(make_journal(count=1))
+    assert "before-snapshot" in str(caught.value.cause)
+    assert adapter.resources[(ResourceKind.ROUTE, "route-0")] == {"external": "newer"}
+    assert adapter.calls == []
+    assert store.load().phase is JournalPhase.ROLLED_BACK
 
 
 def test_apply_failure_compensates_previously_applied_resource(tmp_path):
@@ -133,6 +143,86 @@ def test_rollback_is_idempotent_for_terminal_rolled_back_record(tmp_path):
     call_count = len(adapter.calls)
     assert tx.rollback(rolled_back) == rolled_back
     assert len(adapter.calls) == call_count
+
+
+def test_recovery_after_crash_between_apply_and_commit(tmp_path):
+    adapter = MemoryAdapter()
+    store = WindowsNetworkJournalStore(tmp_path / "journal.json")
+    prepared = make_journal(count=1)
+    possibly_applied = WindowsNetworkJournal(
+        prepared.transaction_id,
+        2,
+        JournalPhase.APPLYING,
+        (JournalMutation(
+            ResourceKind.ROUTE,
+            "route-0",
+            prepared.mutations[0].before_json,
+            prepared.mutations[0].after_json,
+            applied=True,
+        ),),
+    )
+    store.save(possibly_applied)
+    # Simulate the OS mutation having happened just before process death.
+    adapter.resources[(ResourceKind.ROUTE, "route-0")] = {"present": True, "metric": 1}
+
+    recovered = WindowsNetworkTransaction(store, adapter).recover()
+    assert recovered.phase is JournalPhase.ROLLED_BACK
+    assert adapter.resources[(ResourceKind.ROUTE, "route-0")] == {}
+
+
+def test_recovery_when_intent_was_saved_but_os_mutation_did_not_happen(tmp_path):
+    adapter = MemoryAdapter()
+    store = WindowsNetworkJournalStore(tmp_path / "journal.json")
+    prepared = make_journal(count=1)
+    applying = WindowsNetworkJournal(
+        prepared.transaction_id,
+        2,
+        JournalPhase.APPLYING,
+        (JournalMutation(
+            ResourceKind.ROUTE,
+            "route-0",
+            prepared.mutations[0].before_json,
+            prepared.mutations[0].after_json,
+            applied=True,
+        ),),
+    )
+    store.save(applying)
+    recovered = WindowsNetworkTransaction(store, adapter).recover()
+    assert recovered.phase is JournalPhase.ROLLED_BACK
+    assert adapter.calls == []
+
+
+def test_recovery_refuses_external_state_and_keeps_failed_journal(tmp_path):
+    adapter = MemoryAdapter()
+    store = WindowsNetworkJournalStore(tmp_path / "journal.json")
+    prepared = make_journal(count=1)
+    applying = WindowsNetworkJournal(
+        prepared.transaction_id,
+        2,
+        JournalPhase.APPLYING,
+        (JournalMutation(
+            ResourceKind.ROUTE,
+            "route-0",
+            prepared.mutations[0].before_json,
+            prepared.mutations[0].after_json,
+            applied=True,
+        ),),
+    )
+    store.save(applying)
+    adapter.resources[(ResourceKind.ROUTE, "route-0")] = {"external": True}
+    with pytest.raises(NetworkTransactionError, match="startup recovery"):
+        WindowsNetworkTransaction(store, adapter).recover()
+    assert adapter.resources[(ResourceKind.ROUTE, "route-0")] == {"external": True}
+    assert store.load().phase is JournalPhase.ROLLBACK_FAILED
+
+
+def test_recovery_of_prepared_journal_performs_no_os_mutations(tmp_path):
+    adapter = MemoryAdapter()
+    store = WindowsNetworkJournalStore(tmp_path / "journal.json")
+    store.save(make_journal(count=1))
+    recovered = WindowsNetworkTransaction(store, adapter).recover()
+    assert recovered.phase is JournalPhase.ROLLED_BACK
+    assert adapter.calls == []
 
 
 def test_rejects_non_prepared_or_pre_marked_journal(tmp_path):
