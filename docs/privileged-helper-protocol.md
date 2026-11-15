@@ -10,3 +10,13 @@ The platform-neutral `apnawin.services.privileged_protocol` module validates the
 - Unknown operations and unknown envelope fields fail closed.
 
 This is only envelope parsing. It does not create an IPC endpoint, authenticate a peer, authorize a session, deduplicate requests, validate operation-specific argument schemas, acquire the service mutex or perform Windows operations. The service must validate each operation's exact argument schema before any OS call; a structurally valid envelope is not authorization.
+
+
+## Numeric and Unicode scalar bounds
+
+In addition to the byte, depth, node and collection limits, the decoder rejects
+integer values larger than 256 bits and rejects lone UTF-16 surrogate code points
+in both string values and object keys. This prevents oversized integer objects
+and malformed Unicode keys from passing the structural envelope validation.
+These are transport-level bounds only; operation-specific numeric ranges and
+argument schemas must still be validated independently before any Windows API call.

@@ -18,6 +18,7 @@ MAX_JSON_NODES = 4096
 MAX_OBJECT_MEMBERS = 128
 MAX_ARRAY_ITEMS = 1024
 MAX_STRING_LENGTH = 8192
+MAX_INTEGER_BITS = 256
 PROTOCOL_VERSION = 1
 
 ALLOWED_OPERATIONS = frozenset(
@@ -85,11 +86,18 @@ def _validate_tree(value: Any) -> None:
         elif isinstance(item, float):
             if not math.isfinite(item):
                 raise PrivilegedRequestError("request contains a non-finite number")
+        elif isinstance(item, int) and not isinstance(item, bool):
+            if item.bit_length() > MAX_INTEGER_BITS:
+                raise PrivilegedRequestError("request integer exceeds its numeric size limit")
         elif isinstance(item, dict):
             if len(item) > MAX_OBJECT_MEMBERS:
                 raise PrivilegedRequestError("request object has too many members")
             for key, child in item.items():
-                if not isinstance(key, str) or len(key) > 128:
+                if (
+                    not isinstance(key, str)
+                    or len(key) > 128
+                    or any(0xD800 <= ord(char) <= 0xDFFF for char in key)
+                ):
                     raise PrivilegedRequestError("request object key is invalid or too long")
                 visit(child, depth + 1)
         elif isinstance(item, list):

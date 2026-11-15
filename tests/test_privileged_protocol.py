@@ -107,3 +107,26 @@ def test_rejects_excessive_string_size():
 def test_rejects_non_bytes_payload():
     with pytest.raises(TypeError, match="bytes"):
         decode_privileged_request("not bytes")
+
+
+
+def test_rejects_lone_surrogate_in_object_key():
+    body = (
+        b'{"version":1,"request_id":"' + REQUEST_ID.encode()
+        + b'","transaction_id":"' + TRANSACTION_ID.encode()
+        + b'","operation":"snapshot_network","arguments":{"\\ud800":1}}'
+    )
+    with pytest.raises(PrivilegedRequestError, match="key"):
+        decode_privileged_request(body)
+
+
+def test_rejects_integer_exceeding_bounded_numeric_size():
+    body = payload(arguments={"value": 1 << 256})
+    with pytest.raises(PrivilegedRequestError, match="integer"):
+        decode_privileged_request(body)
+
+
+def test_accepts_integer_at_numeric_size_limit():
+    body = payload(arguments={"value": (1 << 256) - 1})
+    request = decode_privileged_request(body)
+    assert request.arguments["value"] == (1 << 256) - 1
