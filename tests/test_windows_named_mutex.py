@@ -130,7 +130,6 @@ def test_release_failure_is_reported_after_handle_close():
 # Native cross-process checks run only on Windows CI. The Owner Rights ACE keeps
 # the test object accessible to processes running under the same test identity.
 def _hold_mutex_in_child(name, sddl, acquired, release):
-    import os
     from apnawin.services.windows_named_mutex import WindowsNamedMutex
 
     mutex = WindowsNamedMutex(name, sddl)
@@ -156,7 +155,7 @@ def test_native_mutex_serializes_two_processes():
     from uuid import uuid4
 
     ctx = multiprocessing.get_context("spawn")
-    name = "Local\\\\ApnaWin-" + uuid4().hex
+    name = "Local\\ApnaWin-" + uuid4().hex
     sddl = "D:P(A;;GA;;;OW)"
     acquired = ctx.Event()
     release = ctx.Event()
@@ -183,7 +182,7 @@ def test_native_abandoned_mutex_requires_and_runs_recovery():
     from uuid import uuid4
 
     ctx = multiprocessing.get_context("spawn")
-    name = "Local\\\\ApnaWin-" + uuid4().hex
+    name = "Local\\ApnaWin-" + uuid4().hex
     sddl = "D:P(A;;GA;;;OW)"
     acquired = ctx.Event()
     child = ctx.Process(target=_abandon_mutex_in_child, args=(name, sddl, acquired))
