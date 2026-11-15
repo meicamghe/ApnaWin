@@ -104,3 +104,9 @@ Added XrayTunnelSupervisor as the desktop-side lifecycle abstraction: XRAY-only,
 ## Latest verified Windows build (2026-11-15)
 
 CI run 43724914682 completed successfully: 848 tests passed, one skipped, and the Windows build, elevated helper build, pinned Xray/Wintun runtime installation, packaged-app smoke test and artifact upload all succeeded. Artifact ApnaWin-Windows-x64: ID 14165469958, 75,925,661 bytes, not expired. Commit 6410a2cf5b0b651dd48519bcdca299f246e64143 includes the desktop-side XrayTunnelSupervisor wrapper. The latest commit adds read-only adapter/route/DNS diagnostics. Connect remains disabled; no APNA endpoint/auth format has been established, and live route/DNS/WFP/e2e acceptance is still pending.
+
+## Integrated Windows VPN readiness work — awaiting CI
+
+A consolidated pull request (#4) now combines the active connection workstreams: strict TUN config import and proxy-only outbound policy; fixed-path UAC helper and Xray supervisor; runtime-manifest SHA-256 verification for Xray/Wintun; adapter ownership preflight; effective IPv4/IPv6 default-route metric checks; exact DNS readiness; independent external TLS egress probe; periodic adapter/route/DNS health monitoring; graceful shutdown on startup timeout or repeated health loss. The current PR head is `d886627c1df072cee33ca6d03f026b82fc0aa29c` before the final documentation synchronization commit. Windows CI for the integrated branch is pending/queued; do not report it as passed until the run completes.
+
+The separate Python Wintun packet engine and route/DNS transaction path are not used: Xray native TUN owns those operations. The desktop Connect UI remains disabled until clean Windows 10/11 tests prove provider-specific traffic, DNS and IPv4/IPv6 leak behavior, WFP behavior, normal disconnect, helper/desktop crash and reboot cleanup. APNA's actual remote catalog/authentication schema and an authorized APNA Xray config remain unverified; do not fabricate them.
