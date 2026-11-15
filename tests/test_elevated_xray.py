@@ -407,7 +407,7 @@ def test_helper_supervises_xray_until_parent_exits(tmp_path, monkeypatch):
                         "autoSystemWfpBlockLeak": ["allexceptlan", "dns"],
                     },
                 }],
-                "outbounds": [{"protocol": "freedom"}],
+                "outbounds": [{"protocol": "vless"}],
             }
 
         def start(self, _profile):
