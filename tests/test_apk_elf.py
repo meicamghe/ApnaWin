@@ -93,7 +93,7 @@ def _elf_with_symtab_shndx(
         payload_bytes = payload_bytes[:actual_size]
     header = struct.pack(
         section_fmt, 0, 18, 0, 0, actual_offset, actual_size,
-        link, info, 4, entry_size,
+        link, info, actual_alignment, actual_entry_size,
     )
     struct.pack_into("<H", data, section_count_field, 5)
     data.extend(header)
@@ -150,7 +150,7 @@ def _elf_with_hash_section(
 
 
 def _elf_with_gnu_hash_section(
-    payload, elf_class, *, link=2, info=0, entry_size=4,
+    payload, elf_class, *, link=2, info=0, alignment=None, entry_size=None,
     bucket_count=1, symbol_offset=1, bloom_count=1, bloom_shift=5,
     buckets=None, chains=None, data_offset=None,
 ):
@@ -159,6 +159,8 @@ def _elf_with_gnu_hash_section(
     section_size = 64 if elf_class == 64 else 40
     section_fmt = "<IIQQQQIIQQ" if elf_class == 64 else "<IIIIIIIIII"
     bloom_word_size = 8 if elf_class == 64 else 4
+    actual_alignment = bloom_word_size if alignment is None else alignment
+    actual_entry_size = (0 if elf_class == 64 else 4) if entry_size is None else entry_size
     actual_buckets = [1] if buckets is None else list(buckets)
     actual_chains = [2, 4, 5] if chains is None else list(chains)
     hash_payload = struct.pack(
@@ -424,7 +426,10 @@ def test_inspect_elf_accepts_valid_gnu_hash_section(payload, elf_class):
         (_elf32_with_jni_exports(), 32, {"link": 1}, "dynamic-symbol-table reference"),
         (_elf64_with_jni_exports(), 64, {"info": 1}, "sh_info must be zero"),
         (_elf32_with_jni_exports(), 32, {"info": 1}, "sh_info must be zero"),
-        (_elf64_with_jni_exports(), 64, {"entry_size": 8}, "entry metadata is invalid"),
+        (_elf64_with_jni_exports(), 64, {"entry_size": 4}, "entry metadata is invalid"),
+        (_elf32_with_jni_exports(), 32, {"entry_size": 0}, "entry metadata is invalid"),
+        (_elf64_with_jni_exports(), 64, {"alignment": 4}, "entry metadata is invalid"),
+        (_elf32_with_jni_exports(), 32, {"alignment": 8}, "entry metadata is invalid"),
         (_elf32_with_jni_exports(), 32, {"bucket_count": 0}, "table dimensions are invalid"),
         (_elf64_with_jni_exports(), 64, {"bloom_count": 0}, "table dimensions are invalid"),
         (_elf32_with_jni_exports(), 32, {"bloom_count": 3}, "table dimensions are invalid"),

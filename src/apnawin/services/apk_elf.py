@@ -288,7 +288,7 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             if section[1] != 5:  # SHT_HASH
                 continue
             hash_offset, hash_size = section[4], section[5]
-            symbol_index, info, entry_size = section[6], section[7], section[9]
+            symbol_index, info, alignment, entry_size = section[6], section[7], section[8], section[9]
             if (
                 symbol_index >= len(sections)
                 or sections[symbol_index][1] not in (2, 11)
@@ -334,7 +334,12 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                 raise ValueError("ELF GNU hash section has an invalid dynamic-symbol-table reference")
             if info != 0:
                 raise ValueError("ELF GNU hash section sh_info must be zero")
-            if entry_size != 4 or hash_size < 16:
+            expected_entry_size = 4 if elf_class == 1 else 0
+            if (
+                entry_size != expected_entry_size
+                or alignment != gnu_bloom_word_size
+                or hash_size < 16
+            ):
                 raise ValueError("ELF GNU hash section entry metadata is invalid")
             if hash_offset > len(data) or hash_size > len(data) - hash_offset:
                 raise ValueError("ELF GNU hash section data is out of bounds")
