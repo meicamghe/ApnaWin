@@ -359,3 +359,14 @@ class-specific st_info byte; symbol names, values, and addresses are not
 needed for this check. ELF32 and ELF64 regression tests cover valid ordering
 and both directions of boundary inconsistency. This is a structural
 consistency check and does not establish symbol resolution.
+
+
+## ELF symbol-table work limits
+
+Both static (SHT_SYMTAB) and dynamic (SHT_DYNSYM) symbol tables are capped
+at 262,144 entries during the initial section-metadata validation, before
+extended-index processing or any per-symbol iteration. Dynamic tables retain
+their separate 16 MiB byte-size ceiling. These limits bound parser CPU work
+for untrusted APK-native ELF metadata; exceeding a limit classifies the
+library as invalid for this analysis and does not imply anything about
+Android loader acceptance.

@@ -13,6 +13,7 @@ _MAX_PROGRAM_HEADERS = 4096
 _MAX_GROUP_WORDS = 65536
 _MAX_DYNAMIC_SYMBOL_TABLE_BYTES = 16 * 1024 * 1024
 _MAX_DYNAMIC_SYMBOLS = 262144
+_MAX_SYMBOLS = 262144
 _MACHINE_NAMES = {3: "x86", 40: "arm", 62: "x86_64", 183: "aarch64", 243: "riscv"}
 
 # Expected ELF class and e_machine for Android ABI directory labels.
@@ -184,6 +185,10 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
                     if section[1] == 11 else "ELF symbol table is out of bounds"
                 )
             symbol_count = symbol_size // entry_size
+            if symbol_count > _MAX_SYMBOLS:
+                if section[1] == 11:
+                    raise ValueError("ELF dynamic symbol count exceeds the analysis limit")
+                raise ValueError("ELF static symbol count exceeds the analysis limit")
             if local_boundary > symbol_count:
                 raise ValueError("ELF symbol table local-symbol boundary is invalid")
             string_section = sections[string_index]
