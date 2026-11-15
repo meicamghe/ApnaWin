@@ -31,3 +31,13 @@ required before this primitive is considered production-ready.
 The unit tests use an injected backend to validate ownership, timeout,
 abandoned-owner recovery ordering, failure cleanup and input validation. They
 do not substitute for native Windows multi-process tests.
+
+
+## Native Windows CI coverage
+
+Windows CI additionally runs two-process tests using a unique local mutex:
+one process holds ownership while the second must time out, and a child process
+terminates while owning the mutex so the next process observes abandoned
+ownership and runs recovery before entering its critical section. These tests
+exercise actual Win32 mutex semantics; they still do not validate the production
+service SID/DACL provisioning or service lifecycle.

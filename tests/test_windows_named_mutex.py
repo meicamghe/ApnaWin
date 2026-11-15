@@ -125,3 +125,75 @@ def test_release_failure_is_reported_after_handle_close():
         with mutex.acquire(100):
             pass
     assert backend.events[-1] == ("close", "handle")
+
+
+# Native cross-process checks run only on Windows CI. The Owner Rights ACE keeps
+# the test object accessible to processes running under the same test identity.
+def _hold_mutex_in_child(name, sddl, acquired, release):
+    import os
+    from apnawin.services.windows_named_mutex import WindowsNamedMutex
+
+    mutex = WindowsNamedMutex(name, sddl)
+    with mutex.acquire(5000):
+        acquired.set()
+        if not release.wait(10):
+            raise RuntimeError("parent did not release child test mutex")
+
+
+def _abandon_mutex_in_child(name, sddl, acquired):
+    import os
+    from apnawin.services.windows_named_mutex import WindowsNamedMutex
+
+    mutex = WindowsNamedMutex(name, sddl)
+    with mutex.acquire(5000):
+        acquired.set()
+        os._exit(0)
+
+
+@pytest.mark.skipif(__import__("os").name != "nt", reason="native named mutex requires Windows")
+def test_native_mutex_serializes_two_processes():
+    import multiprocessing
+    from uuid import uuid4
+
+    ctx = multiprocessing.get_context("spawn")
+    name = "Local\\\\ApnaWin-" + uuid4().hex
+    sddl = "D:P(A;;GA;;;OW)"
+    acquired = ctx.Event()
+    release = ctx.Event()
+    child = ctx.Process(target=_hold_mutex_in_child, args=(name, sddl, acquired, release))
+    child.start()
+    try:
+        assert acquired.wait(5)
+        mutex = WindowsNamedMutex(name, sddl)
+        with pytest.raises(TimeoutError):
+            with mutex.acquire(100):
+                pytest.fail("second process entered while first owns mutex")
+    finally:
+        release.set()
+        child.join(10)
+        if child.is_alive():
+            child.terminate()
+            child.join(5)
+    assert child.exitcode == 0
+
+
+@pytest.mark.skipif(__import__("os").name != "nt", reason="native named mutex requires Windows")
+def test_native_abandoned_mutex_requires_and_runs_recovery():
+    import multiprocessing
+    from uuid import uuid4
+
+    ctx = multiprocessing.get_context("spawn")
+    name = "Local\\\\ApnaWin-" + uuid4().hex
+    sddl = "D:P(A;;GA;;;OW)"
+    acquired = ctx.Event()
+    child = ctx.Process(target=_abandon_mutex_in_child, args=(name, sddl, acquired))
+    child.start()
+    assert acquired.wait(5)
+    child.join(10)
+    assert child.exitcode == 0
+
+    recovered = []
+    mutex = WindowsNamedMutex(name, sddl)
+    with mutex.acquire(1000, recover_abandoned=lambda: recovered.append(True)):
+        assert recovered == [True]
+    assert recovered == [True]
