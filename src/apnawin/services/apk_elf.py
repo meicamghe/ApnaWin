@@ -553,7 +553,7 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             if name_offset == previous_offset:
                 continue
             if name_offset > terminator:
-                terminator = strings.find(b"\\x00", name_offset)
+                terminator = strings.find(b"\x00", name_offset)
                 if terminator < 0:
                     raise ValueError("ELF symbol name is not terminated")
             name_ends[name_offset] = terminator
