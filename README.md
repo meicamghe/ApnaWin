@@ -13,8 +13,9 @@ A native Windows 10/11 desktop client project inspired by the workflow of APNA T
 - A test-only mock engine that does not touch the network.
 - Windows Job Object process-tree containment for the Xray runner.
 - Windows GitHub Actions tests and a PyInstaller build job that publishes a portable Windows x64 application-folder artifact (14-day retention).
+- A pinned runtime packaging step for Xray-core v26.11.9 and Wintun 0.14.1, with archive hash, PE architecture, Authenticode and version checks.
 
-The Connect button is intentionally disabled. The Xray process runner now validates both a local SOCKS config and a strict full-tunnel TUN config. Xray-core itself has a native Windows TUN implementation through Wintun, including route/DNS and WFP controls; this is the preferred path over a separate Python tunnel stack. The app is not yet a complete, verified VPN client. The CI build artifact is an early portable application build, not a signed installer and not a VPN client with working tunnel connectivity. No APNA TUNNEL server compatibility is claimed.
+The Connect button is intentionally disabled. The Xray process runner now validates both a local SOCKS config and a strict full-tunnel TUN config. Xray-core itself has a native Windows TUN implementation through Wintun, including route/DNS and WFP controls; this is the preferred path over a separate Python tunnel stack. The app is not yet a complete, verified VPN client; the runtime package is prepared, but elevation, APNA credentials/configuration and end-to-end connection are still missing. The CI build artifact is an early portable application build, not a signed installer and not a VPN client with working tunnel connectivity. No APNA TUNNEL server compatibility is claimed.
 
 The Android app may refresh its server catalog and connection parameters remotely. This is a first-class requirement for the Windows product, but the actual API, schema, authentication and refresh policy have not yet been verified. See [remote configuration discovery](docs/remote-configuration.md); no guessed backend endpoint or static replacement server list will be shipped.
 

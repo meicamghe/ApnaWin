@@ -56,7 +56,7 @@ Available evidence has not established a verified APNA endpoint, authentication 
 - CI run 43721142816 passed: 756 tests, Windows x64 PyInstaller build, packaged-app smoke test and portable artifact upload. CI run 43721386311 also passed the experimental native Wintun FFI branch; that duplicate FFI was subsequently removed after the Xray-native TUN path was verified.
 - A standalone Python Wintun ctypes adapter was prototyped, then identified as redundant and removed from the product path: Xray-core already owns Wintun, packet I/O, interface setup, routes, DNS and WFP for its native Windows TUN inbound. Do not maintain a second Wintun adapter.
 - The critical path is now: pin and package compatible Xray/Wintun binaries; implement the Windows elevation strategy; obtain a real authorized APNA/Xray outbound configuration; run Xray's native TUN inbound with strict dual-stack routes, DNS and WFP filters; verify actual traffic, disconnect and crash recovery. Do not build a second Wintun packet engine or duplicate route/DNS stack.
-- No test or build in CI currently establishes a live VPN tunnel. Keep Connect disabled.
+- CI run 43721855278 passed: 782 tests, Windows x64 application build, packaged-app smoke test and portable artifact upload. No test or build in CI establishes a live VPN tunnel. Keep Connect disabled.
 
 
 ## Architecture correction — native Xray TUN
@@ -65,10 +65,15 @@ The upstream Xray-core TUN inbound has native Windows support. Its Windows imple
 
 The runner now accepts a strict TUN inbound and requires both IPv4/IPv6 default routes, one gateway prefix per family, DNS servers, `autoOutboundsInterface: "auto"`, and `autoSystemWfpBlockLeak: ["allexceptlan", "dns"]`. The additional `dns` filter is intentional: Xray's WFP implementation leaves LAN destinations open under `allexceptlan`; the explicit DNS filter also blocks DNS queries to local-LAN resolvers.
 
-On Windows, Xray requires `wintun.dll` beside `xray.exe`. The current process runner only checks that the DLL exists; binary pinning, protected installation, elevation and startup recovery remain incomplete. Xray's dynamic WFP session is removed when the process dies, but route/address/DNS cleanup after forced termination must be verified rather than assumed.
+On Windows, Xray requires `wintun.dll` beside `xray.exe`. The build pipeline now pins Xray v26.11.9 and Wintun 0.14.1 archives and verifies their hashes/signature/version; the runtime manifest is not yet enforced at launch. Protected installation, elevation and startup recovery remain incomplete. Xray's dynamic WFP session is removed when the process dies, but route/address/DNS cleanup after forced termination must be verified rather than assumed.
 
 Primary upstream references:
 - https://xtls.github.io/en/config/inbounds/tun.html
 - https://github.com/XTLS/Xray-core/blob/main/proxy/tun/tun_windows.go
 - https://github.com/XTLS/Xray-core/blob/main/proxy/tun/tun_windows_wfp.go
 - https://github.com/XTLS/Xray-core/blob/main/proxy/tun/handler.go
+
+
+## Engine runtime package — pending CI verification
+
+A Windows PowerShell build step now downloads the pinned Xray-core v26.11.9 Windows x64 archive and Wintun 0.14.1 archive, checks SHA-256, checks PE x64, verifies the Wintun Authenticode signer, validates the Xray version, and packages the runtime plus licenses and a generated manifest. This step is part of the next CI run and must pass before calling the runtime package verified.

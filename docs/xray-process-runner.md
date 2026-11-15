@@ -14,7 +14,7 @@ It is a process runner and local-listener diagnostic, **not yet a production tun
 ## Inputs
 
 The caller supplies:
-- A separately installed Windows Xray executable path.
+- A Windows Xray executable from the pinned `engine/` runtime folder (Xray v26.11.9 in the current build).
 - A complete UTF-8 JSON Xray configuration file.
 - A profile whose transport is `xray`.
 
@@ -72,8 +72,13 @@ orchestration; it does not enable the UI Connect action.
 
 The runner now recognizes a second, system-wide mode: one Xray `tun` inbound. It validates the full dual-stack policy before invoking Xray: IPv4 and IPv6 default routes, one gateway prefix per family, explicit DNS servers, `autoOutboundsInterface: "auto"` to keep Xray's own outbound sockets on the physical interface, and `autoSystemWfpBlockLeak: ["allexceptlan", "dns"]` for a Windows Filtering Platform kill switch that keeps LAN access while blocking non-LAN traffic outside the tunnel. The Xray config-test command remains the final engine-schema check.
 
-On Windows, the runner also requires `wintun.dll` beside `xray.exe`; Xray's own Windows TUN implementation loads Wintun and owns the adapter, packet I/O, IP addresses, MTU, routes, DNS and WFP filters. The separate Python Wintun FFI and duplicate route/DNS engine are not part of the production design.
+On Windows, the runner also requires the matching `wintun.dll` beside `xray.exe` (Wintun 0.14.1 in the current build); Xray's own Windows TUN implementation loads Wintun and owns the adapter, packet I/O, IP addresses, MTU, routes, DNS and WFP filters. The separate Python Wintun FFI and duplicate route/DNS engine are not part of the production design.
 
 Xray's Windows TUN handler explicitly flushes interface routes, IP addresses and DNS, closes WFP filters, ends the Wintun session and closes the adapter during graceful shutdown. Forced process termination does not run application cleanup code; crash/reboot recovery, route persistence and WFP behavior must be tested on clean Windows 10/11 systems before enabling Connect.
 
 The `allexceptlan` policy is intentionally strict: it can disrupt captive portals, other VPNs and local-network arrangements that do not use private/link-local ranges. It is not silently downgraded if WFP filters cannot be installed. The Connect action remains disabled pending a real authorized server profile, elevation strategy, end-to-end traffic verification and crash-recovery acceptance.
+
+
+## Pinned runtime binaries
+
+The Windows CI build downloads Xray-core v26.11.9 and Wintun 0.14.1 through `scripts/Install-VpnRuntime.ps1`. It verifies archive SHA-256, PE x64 architecture, Wintun Authenticode signature and publisher, and the Xray version before copying the runtime into `dist/ApnaWin/engine`. The folder includes both upstream license notices and a generated `runtime-manifest.json` with archive and installed-file hashes. This protects the build pipeline from unverified downloads; the runtime manifest is not yet enforced by the application at launch, and a protected Program Files installation/elevation strategy is still required.

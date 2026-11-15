@@ -12,7 +12,7 @@ This removes duplicate networking code and keeps packet routing, tunnel stack, a
 - `wintun.dll`: matching Windows x64 Wintun library located beside `xray.exe`, as required by Xray's Windows TUN implementation.
 - Xray JSON config: one `tun` inbound plus the authorized server outbound(s).
 
-The project does not download or invent either binary and does not claim an unpinned build is safe to redistribute. Record release tag, SHA-256, source commit and license notices before packaging.
+The Windows build now downloads pinned Xray-core v26.11.9 and Wintun 0.14.1 archives through `scripts/Install-VpnRuntime.ps1`, verifies both archive SHA-256 values, checks both PE files are AMD64, validates the Wintun Authenticode signature/publisher, checks the Xray version, and includes the upstream license notices plus a generated runtime manifest. Xray's archive SHA-256 is pinned to `1262522266337b824f07beb8e1375786b437683b3890105469088f8e17e0a69d`; Wintun's official archive SHA-256 is `07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51`. The executable and DLL are still not signed by ApnaWin; the runtime manifest records the verified file hashes.
 
 ## Strict config policy implemented in the runner
 
@@ -47,6 +47,12 @@ Forced process termination is different: it bypasses Go cleanup code. The upstre
 ## Privilege boundary
 
 Creating a Wintun adapter and modifying Windows routes, DNS and WFP requires an elevated execution context. The current runner inherits the desktop process token; it does not elevate itself. The product still needs a deliberate UAC/service strategy and tests proving that Xray runs with the minimum required rights. Do not enable Connect until this is implemented.
+
+## Binary provenance
+
+- Xray v26.11.9 Windows x64 release: https://github.com/XTLS/Xray-core/releases/tag/v26.11.9
+- Xray v26.11.9 package hash reference: https://github.com/ScoopInstaller/Main/blob/master/bucket/xray.json
+- Wintun 0.14.1 official release and archive SHA-256: https://www.wintun.net/
 
 ## References
 
