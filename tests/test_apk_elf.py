@@ -419,6 +419,10 @@ def test_inspect_elf_accepts_valid_gnu_hash_section(payload, elf_class):
     )["inspection_status"] == "complete"
 
 
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
 def test_inspect_elf_accepts_gnu_hash_before_later_section(payload, elf_class):
     data = bytearray(_elf_with_gnu_hash_section(payload, elf_class))
     section_offset = struct.unpack_from(
