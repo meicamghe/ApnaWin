@@ -69,7 +69,10 @@ class DnsSpec:
             raise ValueError(f"servers must contain 1 to {_MAX_DNS_SERVERS} addresses")
         normalized: list[str] = []
         for server in self.servers:
-            address = str(_address(server, "DNS server"))
+            parsed = _address(server, "DNS server")
+            if parsed.is_unspecified or parsed.is_multicast:
+                raise ValueError("DNS server must be a unicast address")
+            address = str(parsed)
             if address in normalized:
                 raise ValueError("DNS server addresses must be unique")
             normalized.append(address)
@@ -119,6 +122,8 @@ class WindowsNetworkPlan:
             families.add(network.version)
         if self.dns.interface_luid != self.tunnel_interface_luid:
             raise ValueError("DNS servers must be assigned to the tunnel interface")
+        if any(ipaddress.ip_address(server).version not in families for server in self.dns.servers):
+            raise ValueError("each DNS server address family requires a tunnel default route")
 
     @property
     def ordered_routes(self) -> tuple[RouteSpec, ...]:

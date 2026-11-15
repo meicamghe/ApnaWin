@@ -103,3 +103,20 @@ def test_plan_rejects_more_than_two_default_routes():
                             RouteSpec("::/0", "::", 200, 10),
                             RouteSpec("0.0.0.0/0", "0.0.0.0", 200, 20)),
                            DnsSpec(200, ("10.8.0.1",)))
+
+
+
+@pytest.mark.parametrize("server", ["0.0.0.0", "224.0.0.1", "::", "ff02::1"])
+def test_dns_rejects_unspecified_or_multicast_servers(server):
+    with pytest.raises(ValueError, match="unicast"):
+        DnsSpec(1, (server,))
+
+
+def test_plan_rejects_dns_family_without_matching_tunnel_route():
+    with pytest.raises(ValueError, match="address family"):
+        WindowsNetworkPlan(
+            200, 100,
+            RouteSpec("198.51.100.25/32", "192.0.2.1", 100, 5),
+            (RouteSpec("0.0.0.0/0", "0.0.0.0", 200, 10),),
+            DnsSpec(200, ("2001:db8::53",)),
+        )
