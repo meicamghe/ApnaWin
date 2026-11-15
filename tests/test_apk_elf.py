@@ -453,7 +453,7 @@ def test_inspect_elf_accepts_valid_sysv_hash_section(payload, elf_class):
         (_elf32_with_jni_exports(), 32, {"entry_size": 8}, "entry metadata is invalid"),
         (_elf64_with_jni_exports(), 64, {"bucket_count": 0}, "table dimensions are invalid"),
         (_elf32_with_jni_exports(), 32, {"chain_count": 3}, "table dimensions are invalid"),
-        (_elf64_with_jni_exports(), 64, {"trailing_bytes": 1}, "table dimensions are invalid"),
+        (_elf64_with_jni_exports(), 64, {"trailing_bytes": 1}, "entry metadata is invalid"),
         (_elf32_with_jni_exports(), 32, {"trailing_bytes": 4}, "table dimensions are invalid"),
         (_elf64_with_jni_exports(), 64, {"words": [4, 0, 2, 3, 0]}, "invalid symbol index"),
         (_elf32_with_jni_exports(), 32, {"words": [1, 0, 2, 4, 0]}, "invalid symbol index"),
