@@ -6,6 +6,7 @@ import pytest
 from apnawin.engines.packet_queue import (
     BoundedPacketQueue,
     PacketQueueClosed,
+    PacketQueueEmpty,
     PacketQueueFull,
     PacketQueueTimeout,
 )
@@ -152,7 +153,7 @@ def _capture_get(queue, errors):
 
 def test_nonblocking_empty_and_timed_operations_are_explicit():
     queue = BoundedPacketQueue(max_packets=1, max_bytes=8, max_packet_size=8)
-    with pytest.raises(PacketQueueFull):
+    with pytest.raises(PacketQueueEmpty):
         queue.get()
     with pytest.raises(PacketQueueTimeout):
         queue.get(timeout=0.01)
