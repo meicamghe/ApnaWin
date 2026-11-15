@@ -10,8 +10,8 @@ from apnawin.services.privileged_protocol import (
 )
 
 
-REQUEST_ID = "00000000-0000-0000-0000-000000000001"
-TRANSACTION_ID = "00000000-0000-0000-0000-000000000002"
+REQUEST_ID = "abcdefab-cdef-abcd-efab-cdefabcdef01"
+TRANSACTION_ID = "12345678-1234-5678-9abc-def012345678"
 
 
 def payload(**overrides):
@@ -42,12 +42,19 @@ def test_decodes_exact_valid_envelope():
         b"{}",
         b'{"version":1,"version":1}',
         b'{"version":NaN}',
+        b'{"version":1e999}',
         b"\xff",
         b"[]",
     ],
 )
 def test_rejects_invalid_or_ambiguous_json(body):
     with pytest.raises(PrivilegedRequestError):
+        decode_privileged_request(body)
+
+
+def test_rejects_escaped_lone_surrogate():
+    body = payload(arguments={"value": "\ud800"})
+    with pytest.raises(PrivilegedRequestError, match="Unicode"):
         decode_privileged_request(body)
 
 

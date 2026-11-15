@@ -6,6 +6,7 @@ operation; operation-specific argument schemas remain the helper's responsibilit
 from __future__ import annotations
 
 import json
+import math
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -79,6 +80,11 @@ def _validate_tree(value: Any) -> None:
         if isinstance(item, str):
             if len(item) > MAX_STRING_LENGTH:
                 raise PrivilegedRequestError("request string exceeds its size limit")
+            if any(0xD800 <= ord(char) <= 0xDFFF for char in item):
+                raise PrivilegedRequestError("request string contains invalid Unicode")
+        elif isinstance(item, float):
+            if not math.isfinite(item):
+                raise PrivilegedRequestError("request contains a non-finite number")
         elif isinstance(item, dict):
             if len(item) > MAX_OBJECT_MEMBERS:
                 raise PrivilegedRequestError("request object has too many members")
@@ -91,7 +97,7 @@ def _validate_tree(value: Any) -> None:
                 raise PrivilegedRequestError("request array has too many items")
             for child in item:
                 visit(child, depth + 1)
-        elif item is None or isinstance(item, (bool, int, float)):
+        elif item is None or isinstance(item, (bool, int)):
             return
         else:
             raise PrivilegedRequestError("request contains an unsupported JSON value")
