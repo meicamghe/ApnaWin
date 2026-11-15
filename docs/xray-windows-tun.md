@@ -46,7 +46,7 @@ Forced process termination is different: it bypasses Go cleanup code. The upstre
 
 ## Privilege boundary
 
-Creating a Wintun adapter and modifying Windows routes, DNS and WFP requires an elevated execution context. The current runner now checks `IsUserAnAdmin` and refuses to start TUN when the process is not elevated. It still inherits the desktop process token and does not elevate itself. The product needs a deliberate UAC/helper strategy and tests proving that Xray runs with the minimum required rights. Do not enable Connect until this is implemented.
+Creating a Wintun adapter and modifying Windows routes, DNS and WFP requires an elevated execution context. The Xray runner checks `IsUserAnAdmin` and refuses to start TUN without an elevated token. The desktop remains medium-integrity and launches a fixed-path helper from Program Files through the UAC `runas` flow. The helper validates the installed runtime hashes, decrypts only the selected current-user DPAPI config, and supervises Xray in a kill-on-close Job Object. The parent can request graceful shutdown; forced termination is only a timeout fallback. The UI is not yet wired to this supervisor. Do not enable Connect until external traffic, WFP leak protection, and crash/reboot cleanup are accepted on clean Windows 10/11 systems.
 
 ## Binary provenance
 

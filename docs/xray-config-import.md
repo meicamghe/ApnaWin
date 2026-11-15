@@ -16,7 +16,7 @@ The raw JSON file selected by the user remains wherever the user originally stor
 
 The importer rejects duplicate JSON keys, non-finite constants, invalid UTF-8, malformed TUN settings, incomplete IPv4/IPv6 default routes, missing DNS servers, unsafe outbound-interface binding, and missing WFP leak-protection filters. It does not yet run the Xray `-test` command during import and does not verify that the outbound server is reachable or that the credentials are valid. Those checks belong to the connection-start workflow.
 
-The Connect button remains disabled. The current desktop process does not elevate itself; Xray TUN startup requires an elevated administrator token, and the elevation supervisor, process-to-UI lifecycle, actual traffic tests and crash recovery remain pending.
+The Connect button remains disabled. A fixed-path, Program Files-installed UAC helper and desktop-side process supervisor are now implemented. Before signaling ready, the helper verifies the protected Xray/Wintun runtime manifest, validates the TUN config with Xray, refuses to reuse an existing adapter, and waits for the adapter, effective IPv4/IPv6 default routes and configured DNS to remain healthy. It continues monitoring those local conditions and gracefully stops Xray after repeated failures. The desktop UI is not yet wired to this supervisor, and authorized external egress, WFP leak acceptance, and crash/reboot cleanup tests are still pending.
 
 ## User workflow
 
