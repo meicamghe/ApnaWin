@@ -84,10 +84,17 @@ class FakeShell32:
         self.ShellExecuteExW = FakeFunction(self._shell_execute)
 
     def _shell_execute(self, pointer):
-        self.info = ctypes.cast(
+        info = ctypes.cast(
             pointer, ctypes.POINTER(elevated_xray._ShellExecuteInfo)
         ).contents
-        self.info.hProcess = self.handle
+        self.info = SimpleNamespace(
+            lpVerb=info.lpVerb,
+            lpFile=info.lpFile,
+            lpParameters=info.lpParameters,
+            lpDirectory=info.lpDirectory,
+            nShow=info.nShow,
+        )
+        info.hProcess = self.handle
         return self.success
 
 
@@ -198,9 +205,10 @@ def test_helper_supervises_xray_until_parent_exits(tmp_path, monkeypatch):
     class FakeRunner:
         instance = None
 
-        def __init__(self, executable, config):
+        def __init__(self, executable, config, *, new_console=False):
             self.executable = executable
             self.config = config
+            self.new_console = new_console
             self.running = False
             self._process = SimpleNamespace(returncode=0)
             FakeRunner.instance = self
@@ -233,5 +241,6 @@ def test_helper_supervises_xray_until_parent_exits(tmp_path, monkeypatch):
     assert result == 0
     assert FakeRunner.instance is not None
     assert FakeRunner.instance.running is False
+    assert FakeRunner.instance.new_console is True
     assert api.kernel32.set_events == [32]
     assert not list((tmp_path / "LocalAppData" / "ApnaWin" / "runtime").glob("xray-*.json"))

@@ -271,13 +271,17 @@ class XrayProcessRunner:
         *,
         validation_timeout: float = 10.0,
         stop_timeout: float = 5.0,
+        new_console: bool = False,
     ) -> None:
         self._validate_timeout(validation_timeout, "validation_timeout")
         self._validate_timeout(stop_timeout, "stop_timeout")
+        if not isinstance(new_console, bool):
+            raise ValueError("new_console must be a boolean")
         self.executable = Path(executable).expanduser()
         self.config_path = Path(config_path).expanduser()
         self.validation_timeout = float(validation_timeout)
         self.stop_timeout = float(stop_timeout)
+        self.new_console = new_console
         self._process: subprocess.Popen[bytes] | WindowsJobProcess | None = None
 
     @property
@@ -577,7 +581,9 @@ class XrayProcessRunner:
                 # Creation-time JOB_LIST assignment prevents descendants from
                 # escaping between process creation and later job assignment.
                 process = WindowsJobProcess.launch(
-                    str(self.executable), ["run", "-c", str(self.config_path)]
+                    str(self.executable),
+                    ["run", "-c", str(self.config_path)],
+                    new_console=self.new_console,
                 )
             else:
                 process = subprocess.Popen(
@@ -613,8 +619,13 @@ class XrayProcessRunner:
             return
         if isinstance(process, WindowsJobProcess):
             try:
-                # Terminate the root first, then require the whole job to drain.
-                process.terminate()
+                # Prefer Xray's console-control shutdown path when the helper
+                # created a dedicated hidden console. Fall back to terminating
+                # the root, then the complete Job Object if graceful stop stalls.
+                send_ctrl_break = getattr(process, "send_ctrl_break", None)
+                graceful_requested = bool(send_ctrl_break and send_ctrl_break())
+                if not graceful_requested:
+                    process.terminate()
                 try:
                     process.wait(timeout=self.stop_timeout)
                 except subprocess.TimeoutExpired:

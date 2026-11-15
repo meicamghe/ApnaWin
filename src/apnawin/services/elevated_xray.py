@@ -294,7 +294,7 @@ class ElevatedXrayProcess:
         self._returncode = self._get_exit_code(self._api, self._handle)
         return self._returncode
 
-    def terminate(self, *, timeout: float = 10.0) -> None:
+    def terminate(self, *, timeout: float = 15.0) -> None:
         if self.poll() is not None:
             return
         if not self._stop_handle or not self._api.kernel32.SetEvent(self._stop_handle):
@@ -306,7 +306,7 @@ class ElevatedXrayProcess:
                 "Elevated helper did not stop after the disconnect request"
             ) from exc
 
-    def kill(self, *, timeout: float = 5.0) -> None:
+    def kill(self, *, timeout: float = 15.0) -> None:
         self.terminate(timeout=timeout)
 
     def close(self) -> None:
@@ -406,7 +406,7 @@ def elevated_helper_main(argv: list[str] | None = None) -> int:
             os.fsync(stream.fileno())
 
         xray_executable = install_root / "engine" / "xray.exe"
-        runner = XrayProcessRunner(xray_executable, temp_config)
+        runner = XrayProcessRunner(xray_executable, temp_config, new_console=True)
         profile = ConnectionProfile(
             args.profile_name, Transport.XRAY, "127.0.0.1", 443
         )

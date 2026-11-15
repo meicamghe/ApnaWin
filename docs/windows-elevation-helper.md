@@ -23,7 +23,7 @@ The UAC helper is not Authenticode-signed by ApnaWin. Windows may display an unk
 
 ## Important limitations — Connect remains disabled
 
-The helper currently calls the existing XrayProcessRunner.stop(), which force-terminates the Xray process through the Job Object. That does not prove Xray's graceful TUN close path runs, nor that Windows routes, DNS settings and adapter state are fully restored. Before enabling Connect, implement and verify a graceful stop path (for example, a dedicated console process group and CTRL_BREAK handling, with forced Job Object termination only as fallback), then test route/DNS rollback, WFP leak protection, parent crash, helper crash, Xray crash and reconnect on clean Windows 10/11 systems.
+The helper now launches Xray in a dedicated hidden console process group. XrayProcessRunner.stop() first sends CTRL_BREAK_EVENT to request Xray's graceful shutdown; if the signal cannot be delivered or the process tree does not drain before the timeout, it falls back to Job Object termination. A native Windows integration test verifies a child process handles CTRL_BREAK and exits cleanly. This is a stronger shutdown path, but it does not yet prove that Xray's TUN close path restores Windows routes, DNS settings and adapter state in every failure mode. Before enabling Connect, run route/DNS rollback, WFP leak protection, parent crash, helper crash, Xray crash and reconnect tests on clean Windows 10/11 systems.
 
 The parent-side ElevatedXrayProcess and helper entry point are implemented, but the main window's Connect/Disconnect state machine is not yet wired to this supervisor. No end-to-end VPN connection is claimed.
 

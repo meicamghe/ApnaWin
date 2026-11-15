@@ -209,3 +209,100 @@ def test_close_preserves_thread_handle_when_thread_close_fails_and_can_retry(mon
     assert process._thread_handle is None
     assert process._job_handle is None
     assert fake.closed == [10, 30, 30, 20]
+
+
+class FakeConsoleKernel32:
+    def __init__(self, *, attach_ok=True, send_ok=True):
+        self.attach_ok = attach_ok
+        self.send_ok = send_ok
+        self.attached = []
+        self.ctrl_events = []
+        self.free_calls = 0
+
+    def AttachConsole(self, pid):
+        self.attached.append(pid)
+        return self.attach_ok
+
+    def GenerateConsoleCtrlEvent(self, event, group_id):
+        self.ctrl_events.append((event, group_id))
+        return self.send_ok
+
+    def FreeConsole(self):
+        self.free_calls += 1
+        return True
+
+
+def test_send_ctrl_break_targets_only_the_supervised_console_group():
+    fake = FakeConsoleKernel32()
+    process = windows_job.WindowsJobProcess(
+        windows_job._Win32(fake), 10, 20, 123, console_group_id=123
+    )
+    assert process.send_ctrl_break() is True
+    assert fake.attached == [123]
+    assert fake.ctrl_events == [(windows_job._CTRL_BREAK_EVENT, 123)]
+    assert fake.free_calls == 2
+
+
+def test_send_ctrl_break_returns_false_without_a_dedicated_console():
+    fake = FakeConsoleKernel32()
+    process = windows_job.WindowsJobProcess(windows_job._Win32(fake), 10, 20, 123)
+    assert process.send_ctrl_break() is False
+    assert fake.attached == []
+    assert fake.ctrl_events == []
+    assert fake.free_calls == 1
+
+
+def test_send_ctrl_break_frees_console_when_event_delivery_fails():
+    fake = FakeConsoleKernel32(send_ok=False)
+    process = windows_job.WindowsJobProcess(
+        windows_job._Win32(fake), 10, 20, 123, console_group_id=123
+    )
+    assert process.send_ctrl_break() is False
+    assert fake.free_calls == 2
+
+
+class SuccessfulLaunchKernel32(FakeKernel32):
+    def __init__(self):
+        super().__init__()
+        self.creation_flags = None
+        self.startup = None
+
+    def CreateProcessW(self, *_args):
+        import ctypes
+
+        self.creation_flags = _args[5]
+        self.startup = ctypes.cast(
+            _args[8],
+            ctypes.POINTER(windows_job._STARTUPINFOEX),
+        ).contents
+        process_info = ctypes.cast(
+            _args[9],
+            ctypes.POINTER(windows_job._PROCESS_INFORMATION),
+        ).contents
+        process_info.hProcess = 10
+        process_info.hThread = 11
+        process_info.dwProcessId = 123
+        process_info.dwThreadId = 124
+        return True
+
+
+def test_launch_new_console_uses_hidden_console_and_new_process_group(monkeypatch):
+    fake = SuccessfulLaunchKernel32()
+    monkeypatch.setattr(
+        windows_job._Win32, "load",
+        classmethod(lambda _cls: windows_job._Win32(fake)),
+    )
+    process = windows_job.WindowsJobProcess.launch(
+        "xray.exe", ["run", "-c", "config.json"], new_console=True
+    )
+    assert fake.creation_flags & windows_job._CREATE_NEW_CONSOLE
+    assert fake.creation_flags & windows_job._CREATE_NEW_PROCESS_GROUP
+    assert fake.startup.StartupInfo.dwFlags & windows_job._STARTF_USESHOWWINDOW
+    assert fake.startup.StartupInfo.wShowWindow == windows_job._SW_HIDE
+    assert process._console_group_id == 123
+    process.close()
+
+
+def test_launch_rejects_non_boolean_console_option():
+    with pytest.raises(ValueError, match="new_console must be a boolean"):
+        windows_job.WindowsJobProcess.launch("xray.exe", ["run"], new_console=1)

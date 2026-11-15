@@ -60,6 +60,12 @@ class _Win32:
         kernel32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
         kernel32.TerminateJobObject.restype = wintypes.BOOL
         kernel32.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
+        kernel32.AttachConsole.restype = wintypes.BOOL
+        kernel32.AttachConsole.argtypes = [wintypes.DWORD]
+        kernel32.GenerateConsoleCtrlEvent.restype = wintypes.BOOL
+        kernel32.GenerateConsoleCtrlEvent.argtypes = [wintypes.DWORD, wintypes.DWORD]
+        kernel32.FreeConsole.restype = wintypes.BOOL
+        kernel32.FreeConsole.argtypes = []
         kernel32.QueryInformationJobObject.restype = wintypes.BOOL
         kernel32.QueryInformationJobObject.argtypes = [
             wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD,
@@ -75,6 +81,10 @@ _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
 _PROC_THREAD_ATTRIBUTE_JOB_LIST = 0x0002000D
 _EXTENDED_STARTUPINFO_PRESENT = 0x00080000
 _CREATE_NEW_PROCESS_GROUP = 0x00000200
+_CREATE_NEW_CONSOLE = 0x00000010
+_STARTF_USESHOWWINDOW = 0x00000001
+_SW_HIDE = 0
+_CTRL_BREAK_EVENT = 1
 _WAIT_OBJECT_0 = 0
 _WAIT_TIMEOUT = 258
 _STILL_ACTIVE = 259
@@ -161,17 +171,23 @@ class WindowsJobProcess:
     """Popen-like controller owning a root process and its complete job tree."""
 
     def __init__(
-        self, api: _Win32, process_handle, job_handle, pid: int, thread_handle=None
+        self, api: _Win32, process_handle, job_handle, pid: int, thread_handle=None,
+        console_group_id: int | None = None,
     ) -> None:
         self._api = api
         self._process_handle = process_handle
         self._thread_handle = thread_handle
         self._job_handle = job_handle
         self.pid = pid
+        self._console_group_id = console_group_id
         self.returncode: int | None = None
 
     @classmethod
-    def launch(cls, executable: str, args: list[str]) -> "WindowsJobProcess":
+    def launch(
+        cls, executable: str, args: list[str], *, new_console: bool = False
+    ) -> "WindowsJobProcess":
+        if not isinstance(new_console, bool):
+            raise ValueError("new_console must be a boolean")
         api = _Win32.load()
         k = api.kernel32
         job = k.CreateJobObjectW(None, None)
@@ -211,12 +227,17 @@ class WindowsJobProcess:
             startup = _STARTUPINFOEX()
             startup.StartupInfo.cb = ctypes.sizeof(startup)
             startup.lpAttributeList = attribute_list
+            creation_flags = _EXTENDED_STARTUPINFO_PRESENT | _CREATE_NEW_PROCESS_GROUP
+            if new_console:
+                creation_flags |= _CREATE_NEW_CONSOLE
+                startup.StartupInfo.dwFlags |= _STARTF_USESHOWWINDOW
+                startup.StartupInfo.wShowWindow = _SW_HIDE
             command_line = ctypes.create_unicode_buffer(
                 subprocess.list2cmdline([executable, *args])
             )
             if not k.CreateProcessW(
                 executable, command_line, None, None, False,
-                _EXTENDED_STARTUPINFO_PRESENT | _CREATE_NEW_PROCESS_GROUP,
+                creation_flags,
                 None, os.path.dirname(executable) or None,
                 ctypes.byref(startup), ctypes.byref(process_info)
             ):
@@ -241,7 +262,27 @@ class WindowsJobProcess:
         return cls(
             api, process_info.hProcess, job, int(process_info.dwProcessId),
             thread_handle,
+            int(process_info.dwProcessId) if new_console else None,
         )
+
+    def send_ctrl_break(self) -> bool:
+        """Ask a console-enabled child process group to shut down gracefully."""
+        if self._console_group_id is None:
+            return False
+        kernel32 = self._api.kernel32
+        # The helper is a GUI process, but detach defensively in case it was
+        # launched from a console host before attaching to Xray's private one.
+        kernel32.FreeConsole()
+        if not kernel32.AttachConsole(self.pid):
+            return False
+        try:
+            return bool(
+                kernel32.GenerateConsoleCtrlEvent(
+                    _CTRL_BREAK_EVENT, self._console_group_id
+                )
+            )
+        finally:
+            kernel32.FreeConsole()
 
     def _root_exit_code(self) -> int | None:
         if self._process_handle is None:

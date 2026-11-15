@@ -73,8 +73,9 @@ def test_job_object_contains_child_and_grandchild_after_root_exits(tmp_path):
     finally:
         if process._job_handle:
             try:
-                process.kill()
-                process.wait(timeout=5)
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=5)
             finally:
                 process.close()
 
@@ -127,3 +128,46 @@ def test_closing_final_job_handle_terminates_descendant_tree(tmp_path):
         if process._job_handle:
             process.kill()
             process.close()
+
+
+def test_hidden_console_process_group_receives_ctrl_break_and_exits_gracefully(tmp_path):
+    ready_file = tmp_path / "xray-ready.txt"
+    stopped_file = tmp_path / "xray-stopped.txt"
+    script = """
+import pathlib
+import signal
+import sys
+import time
+
+ready = pathlib.Path(sys.argv[1])
+stopped = pathlib.Path(sys.argv[2])
+
+def on_break(_signal, _frame):
+    stopped.write_text("graceful", encoding="ascii")
+    raise SystemExit(0)
+
+signal.signal(signal.SIGBREAK, on_break)
+ready.write_text("ready", encoding="ascii")
+while True:
+    time.sleep(0.05)
+"""
+    process = WindowsJobProcess.launch(
+        sys.executable,
+        ["-c", script, str(ready_file), str(stopped_file)],
+        new_console=True,
+    )
+    try:
+        deadline = time.monotonic() + 5
+        while not ready_file.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert ready_file.exists(), "Xray test process did not initialize its signal handler"
+        assert process.send_ctrl_break() is True
+        assert process.wait(timeout=5) == 0
+        assert stopped_file.read_text(encoding="ascii") == "graceful"
+    finally:
+        if process._job_handle:
+            try:
+                process.kill()
+                process.wait(timeout=5)
+            finally:
+                process.close()

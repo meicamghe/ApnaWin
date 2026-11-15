@@ -115,7 +115,7 @@ def test_start_and_stop_process(monkeypatch, files):
         lambda command, **kwargs: subprocess.CompletedProcess(command, 0, b"", b""),
     )
     monkeypatch.setattr(subprocess, "Popen", lambda command, **kwargs: process)
-    monkeypatch.setattr(xray_module.WindowsJobProcess, "launch", lambda *args: process)
+    monkeypatch.setattr(xray_module.WindowsJobProcess, "launch", lambda *args, **kwargs: process)
     runner = XrayProcessRunner(executable, config)
 
     runner.start(profile)
@@ -879,3 +879,33 @@ def test_wait_for_socks_protocol_ready_stops_at_deadline(monkeypatch, files):
     assert sleeps == pytest.approx([0.1, 0.1, 0.05])
     assert probe_timeouts[0] == pytest.approx(0.2)
     assert probe_timeouts[-1] == pytest.approx(0.05)
+
+
+def test_runner_passes_hidden_console_option_to_windows_job_launcher(
+    monkeypatch, files
+):
+    executable, config, profile = files
+    observed = {}
+    process = FakeProcess()
+
+    monkeypatch.setattr(xray_module.os, "name", "nt")
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(command, 0, b"", b""),
+    )
+
+    def fake_launch(executable_arg, args, *, new_console=False):
+        observed["executable"] = executable_arg
+        observed["args"] = args
+        observed["new_console"] = new_console
+        return process
+
+    monkeypatch.setattr(xray_module.WindowsJobProcess, "launch", fake_launch)
+    runner = XrayProcessRunner(executable, config, new_console=True)
+
+    runner.start(profile)
+
+    assert observed["executable"] == str(executable)
+    assert observed["args"] == ["run", "-c", str(config)]
+    assert observed["new_console"] is True
