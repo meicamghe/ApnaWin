@@ -300,6 +300,24 @@ def test_wait_for_tun_network_ready_aborts_when_desktop_exits():
         )
 
 
+def test_elevated_launcher_requests_graceful_stop_after_readiness_timeout(
+    tmp_path, monkeypatch
+):
+    helper, store = setup_install_paths(tmp_path, monkeypatch)
+    monkeypatch.setattr(elevated_xray.os, "name", "nt")
+    api = FakeApi(ready=False)
+
+    with pytest.raises(TimeoutError, match="did not become ready"):
+        elevated_xray.ElevatedXrayProcess.launch(
+            helper, store, "Office", readiness_timeout=0.001, api=api
+        )
+
+    assert api.kernel32.set_events == [102]
+    assert api.kernel32.terminated == []
+    assert 200 in api.kernel32.closed
+    assert 102 in api.kernel32.closed
+
+
 def test_elevated_launcher_reports_cancelled_uac_consent(tmp_path, monkeypatch):
     helper, store = setup_install_paths(tmp_path, monkeypatch)
     monkeypatch.setattr(elevated_xray.os, "name", "nt")
