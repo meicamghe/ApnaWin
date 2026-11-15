@@ -317,7 +317,7 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             if (
                 bucket_count == 0
                 or chain_count != symbol_count
-                or required_size > hash_size
+                or required_size != hash_size
             ):
                 raise ValueError("ELF hash section table dimensions are invalid")
             word_count = (required_size - 8) // 4

@@ -183,6 +183,7 @@ def _elf_with_dynamic_section(
 def _elf_with_hash_section(
     payload, elf_class, *, link=2, info=0, entry_size=4,
     bucket_count=1, chain_count=4, words=None, data_offset=None,
+    trailing_bytes=0,
 ):
     data = bytearray(payload)
     section_count_field = 60 if elf_class == 64 else 48
@@ -191,6 +192,7 @@ def _elf_with_hash_section(
     actual_words = [1, 0, 2, 3, 0] if words is None else list(words)
     hash_payload = struct.pack("<II", bucket_count, chain_count)
     hash_payload += b"".join(struct.pack("<I", value) for value in actual_words)
+    hash_payload += bytes(trailing_bytes)
     actual_offset = len(data) + section_size if data_offset is None else data_offset
     header = struct.pack(
         section_fmt, 0, 5, 0, 0, actual_offset, len(hash_payload),
@@ -451,6 +453,8 @@ def test_inspect_elf_accepts_valid_sysv_hash_section(payload, elf_class):
         (_elf32_with_jni_exports(), 32, {"entry_size": 8}, "entry metadata is invalid"),
         (_elf64_with_jni_exports(), 64, {"bucket_count": 0}, "table dimensions are invalid"),
         (_elf32_with_jni_exports(), 32, {"chain_count": 3}, "table dimensions are invalid"),
+        (_elf64_with_jni_exports(), 64, {"trailing_bytes": 1}, "table dimensions are invalid"),
+        (_elf32_with_jni_exports(), 32, {"trailing_bytes": 4}, "table dimensions are invalid"),
         (_elf64_with_jni_exports(), 64, {"words": [4, 0, 2, 3, 0]}, "invalid symbol index"),
         (_elf32_with_jni_exports(), 32, {"words": [1, 0, 2, 4, 0]}, "invalid symbol index"),
         (_elf64_with_jni_exports(), 64, {"data_offset": 0x7FFFFFFF}, "data is out of bounds"),

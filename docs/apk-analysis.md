@@ -338,8 +338,10 @@ metadata only, not loader compatibility.
 SHT_HASH sections must link to an in-range SHT_SYMTAB or SHT_DYNSYM section,
 have sh_info equal to zero, and use four-byte Elf32_Word entries. The parser
 checks the bounded SysV hash layout (nbucket, nchain, bucket array, chain
-array), requires a nonzero bucket count and nchain equal to the linked symbol
-table's entry count, and rejects bucket or chain indexes outside that table.
+array), requires a nonzero bucket count, nchain equal to the linked symbol
+table's entry count, and an exact section size matching both arrays. It rejects
+bucket or chain indexes outside that table and trailing bytes beyond the
+declared hash structure.
 It does not calculate symbol hashes or perform dynamic symbol resolution.
 These checks establish structural metadata only, not loader compatibility or
 runtime behavior.
