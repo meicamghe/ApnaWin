@@ -51,6 +51,27 @@ class LocalSocksInbound:
     port: int
 
 
+def parse_xray_config_bytes(raw_config: bytes) -> dict:
+    """Parse bounded UTF-8 Xray JSON, rejecting duplicate keys and non-finite constants."""
+    if not isinstance(raw_config, bytes):
+        raise TypeError("Xray config must be supplied as bytes")
+    if len(raw_config) > MAX_XRAY_CONFIG_BYTES:
+        raise ValueError("Xray config exceeds the maximum supported size")
+    try:
+        config = json.loads(
+            raw_config.decode("utf-8"),
+            object_pairs_hook=_unique_json_object,
+            parse_constant=_reject_json_constant,
+        )
+    except (UnicodeError, ValueError) as exc:
+        raise ValueError(
+            "Xray config must be valid UTF-8 JSON without duplicate keys or non-finite values"
+        ) from exc
+    if not isinstance(config, dict):
+        raise ValueError("Xray config root must be a JSON object")
+    return config
+
+
 def inspect_local_socks_inbound(config: dict) -> LocalSocksInbound:
     """Find exactly one explicit loopback SOCKS inbound; reject exposed binds."""
     inbounds = config.get("inbounds")
@@ -292,18 +313,9 @@ class XrayProcessRunner:
         try:
             with self.config_path.open("rb") as stream:
                 raw_config = stream.read(MAX_XRAY_CONFIG_BYTES + 1)
-            if len(raw_config) > MAX_XRAY_CONFIG_BYTES:
-                raise ValueError("Xray config exceeds the maximum supported size")
-            config = json.loads(
-                raw_config.decode("utf-8"),
-                object_pairs_hook=_unique_json_object,
-                parse_constant=_reject_json_constant,
-            )
-        except (OSError, UnicodeError, ValueError) as exc:
+            return parse_xray_config_bytes(raw_config)
+        except (OSError, TypeError, UnicodeError, ValueError) as exc:
             raise ValueError("Xray config must be readable UTF-8 JSON within the size limit") from exc
-        if not isinstance(config, dict):
-            raise ValueError("Xray config root must be a JSON object")
-        return config
 
     def _validate_inputs(self, profile: ConnectionProfile) -> None:
         if not isinstance(profile, ConnectionProfile):

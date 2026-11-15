@@ -125,6 +125,46 @@ def test_import_xray_config_rejects_invalid_tun_policy_without_overwrite(
     window.close()
 
 
+@pytest.mark.parametrize(
+    "raw_config",
+    [
+        b'{"inbounds":[{"protocol":"socks","listen":"127.0.0.1","port":1080}],"outbounds":[{"protocol":"freedom"}]}',
+        b'{"inbounds":[],"inbounds":[],"outbounds":[]}',
+        b'{"inbounds":[{"protocol":"tun","settings":{"name":"ApnaWin"}}],"outbounds":[]}',
+        b'{"inbounds":[{"protocol":"tun","settings":{"name":"ApnaWin","gateway":["10.0.0.1/30","fd00::1/126"],"dns":["1.1.1.1"],"autoSystemRoutingTable":["0.0.0.0/0","::/0"],"autoOutboundsInterface":"auto","autoSystemWfpBlockLeak":["dns","allexceptlan"]}}],"outbounds":[],"bad":NaN}',
+    ],
+)
+def test_import_rejects_non_tun_duplicate_or_unsafe_config_without_overwrite(
+    tmp_path, qapp, monkeypatch, raw_config
+):
+    profile = ConnectionProfile("Office", Transport.XRAY, "vpn.example.test", 443)
+    profiles_path = tmp_path / "profiles.json"
+    save_profiles(profiles_path, [profile])
+    source = tmp_path / "config.json"
+    source.write_bytes(raw_config)
+    store = make_store(tmp_path / "xray-configs.json")
+    original = valid_config_bytes()
+    store.save("Office", original)
+    warnings = []
+    monkeypatch.setattr(
+        app_module.QFileDialog,
+        "getOpenFileName",
+        lambda *_args, **_kwargs: (str(source), "JSON"),
+    )
+    monkeypatch.setattr(
+        app_module.QMessageBox,
+        "warning",
+        lambda *_args, **_kwargs: warnings.append(True),
+    )
+    window = MainWindow(profiles_path=profiles_path, xray_config_store=store)
+
+    window._import_xray_config()
+
+    assert store.load("Office") == original
+    assert warnings
+    window.close()
+
+
 def test_renaming_profile_moves_its_encrypted_xray_config(
     tmp_path, qapp, monkeypatch
 ):
