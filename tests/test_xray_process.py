@@ -138,7 +138,7 @@ def test_start_rejects_process_that_exits_immediately(monkeypatch, files):
         lambda command, **kwargs: subprocess.CompletedProcess(command, 0, b"", b""),
     )
     monkeypatch.setattr(subprocess, "Popen", lambda command, **kwargs: process)
-    monkeypatch.setattr(xray_module.WindowsJobProcess, "launch", lambda *args: process)
+    monkeypatch.setattr(xray_module.WindowsJobProcess, "launch", lambda *args, **kwargs: process)
 
     with pytest.raises(XrayProcessError, match="exited during startup"):
         XrayProcessRunner(executable, config).start(profile)

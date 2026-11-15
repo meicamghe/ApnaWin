@@ -249,7 +249,7 @@ def test_send_ctrl_break_returns_false_without_a_dedicated_console():
     assert process.send_ctrl_break() is False
     assert fake.attached == []
     assert fake.ctrl_events == []
-    assert fake.free_calls == 1
+    assert fake.free_calls == 0
 
 
 def test_send_ctrl_break_frees_console_when_event_delivery_fails():

@@ -167,7 +167,8 @@ while True:
     finally:
         if process._job_handle:
             try:
-                process.kill()
-                process.wait(timeout=5)
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=5)
             finally:
                 process.close()
