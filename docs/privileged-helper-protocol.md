@@ -20,3 +20,17 @@ in both string values and object keys. This prevents oversized integer objects
 and malformed Unicode keys from passing the structural envelope validation.
 These are transport-level bounds only; operation-specific numeric ranges and
 argument schemas must still be validated independently before any Windows API call.
+
+
+## Complete-frame codec
+
+`apnawin.services.privileged_frame` defines one transport-neutral framing
+format for a future byte-stream IPC channel: a four-byte unsigned little-endian
+payload length followed by exactly that many UTF-8 JSON bytes. The codec rejects
+zero/oversized lengths, truncated frames, trailing bytes and invalid envelopes.
+
+A future named-pipe server must read the four-byte header first, reject lengths
+above 64 KiB before allocating or reading the body, then read exactly the
+declared number of bytes with a finite deadline. This complete-frame codec is
+not a stream reader, does not create a pipe, and does not authenticate peers or
+authorize operation arguments.
