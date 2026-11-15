@@ -13,8 +13,9 @@ if (-not (Test-Path -LiteralPath (Join-Path $source "ApnaWinElevator.exe") -Path
     throw "The elevated Xray helper is missing from this build."
 }
 if (-not (Test-Path -LiteralPath (Join-Path $source "engine\xray.exe") -PathType Leaf) -or
-    -not (Test-Path -LiteralPath (Join-Path $source "engine\wintun.dll") -PathType Leaf)) {
-    throw "The verified Xray/Wintun runtime folder is missing."
+    -not (Test-Path -LiteralPath (Join-Path $source "engine\wintun.dll") -PathType Leaf) -or
+    -not (Test-Path -LiteralPath (Join-Path $source "engine\runtime-manifest.json") -PathType Leaf)) {
+    throw "The verified Xray/Wintun runtime folder or its integrity manifest is missing."
 }
 
 $sourcePrefix = $source.TrimEnd('\') + '\'
