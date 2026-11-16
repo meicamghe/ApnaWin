@@ -125,3 +125,16 @@ Green unit tests, a successful build, or an artifact upload are necessary engine
 ## 6. Current release decision
 
 **Do not advertise APNA server connectivity yet.** The embedded catalog decode and discovery-only source are useful verified milestones, but profile generation and live Windows connectivity remain blocked on Android runtime reconstruction and real endpoint validation.
+
+
+## 7. Windows CI evidence update — 2026-11-16
+
+The following results are from the Windows/native workflow executions on this branch. They are build and local-runtime evidence only; they do not establish compatibility with an APNA provider endpoint.
+
+- Native BadVPN workflow run [43888482478](https://github.com/meicamghe/ApnaWin/actions/runs/43888482478) completed successfully. It compiled `badvpn-tun2socks.exe` and `badvpn-udpgw.exe`, verified x64 PE headers and CLI startup, and uploaded artifact `apnawin-badvpn-windows-x64`.
+- Artifact SHA-256: `d07e778fc6f2bcdb5801e55b4315e06997d95375c0b517d96c3fdb6c92651168`. The archive contains both executables, the BadVPN license, and a manifest pinning upstream repository `ambrop72/badvpn` at commit `07268f02706e78e282e19641b5d1d41e8e89bf31`. This build uses MinGW-w64 x86_64. The binaries are not yet integrated into the product tunnel path; upstream TUN uses TAP-Windows, not the product's Wintun adapter.
+- Windows workflow run [43888482419](https://github.com/meicamghe/ApnaWin/actions/runs/43888482419): VPN readiness/egress checks, Ruff and installer/runtime security tests passed. The unit/integration job reported **1 failed, 1121 passed, 1 skipped**. The single failure was an inconsistent assertion in `test_cf_and_brand_catalog_tokens_are_expanded_before_rotation`: its input contains `[host]`, while its expected bytes incorrectly included an additional `:443` value. The implementation and other payload tests define `[host]` as hostname-only and `[host_port]`/`[ssh]` as host-plus-port.
+- The current branch version of `tests/test_apna_payload.py` has the corrected hostname-only expectation. A fresh CI run against that current branch revision is still required; the failed run above used an earlier revision and must not be described as green.
+- Windows packaging reached a successful application/helper/runtime build and smoke test, but the artifact upload step was cancelled. No Windows application artifact from run `43888482419` is available for release.
+
+**Next gates:** rerun the full Windows test/package workflow against the current branch revision; confirm a downloadable portable application artifact; integrate a verified provider-compatible transport into the Xray/Wintun path; then perform authorized APNA server authentication and real routed TCP/UDP/DNS tests on Windows 10/11. Until those gates pass, APNA connectivity remains unverified.
