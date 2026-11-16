@@ -120,10 +120,40 @@ def test_escaped_newline_tokens_are_converted_to_control_bytes() -> None:
     assert chunks[0].data == b"A\nB\rC"
 
 
-def test_apna_formatter_leaves_unobserved_method_token_untouched() -> None:
+def test_apna_formatter_expands_method_and_default_user_agent() -> None:
     chunks = render_apna_payload(
-        "[method] [host]",
+        "[method] [host] [port] [host_port] [protocol] [ssh][crlf][ua]",
         host="ssh.example.test",
         port=22,
     )
-    assert chunks[0].data == b"[method] ssh.example.test"
+    assert chunks[0].data == (
+        b"CONNECT ssh.example.test 22 ssh.example.test:22 HTTP/1.0 "
+        b"ssh.example.test:22\\r\\n"
+        b"Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 "
+        b"(KHTML, like Gecko) Chrome/44.0.2403.130 Safari/537.36"
+    )
+
+
+def test_rotate_resets_when_formatted_payload_changes_and_replaces_duplicate_tokens_together() -> None:
+    rotation = PayloadRotation()
+    template = "[host] [rotate=a;b] [rotate=a;b]"
+    assert render_apna_payload(template, host="one.test", port=22, rotation=rotation)[0].data == (
+        b"one.test a a"
+    )
+    assert render_apna_payload(template, host="one.test", port=22, rotation=rotation)[0].data == (
+        b"one.test b b"
+    )
+    assert render_apna_payload(template, host="two.test", port=22, rotation=rotation)[0].data == (
+        b"two.test a a"
+    )
+
+
+def test_java_split_discards_trailing_empty_segment_without_extra_delay() -> None:
+    chunks = render_apna_payload(
+        "A[instant_split]", host="h.test", port=22
+    )
+    assert chunks == (PayloadChunk(b"A", 0),)
+    delayed = render_apna_payload(
+        "A[delay_split]", host="h.test", port=22
+    )
+    assert delayed == (PayloadChunk(b"A", 0),)
