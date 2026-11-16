@@ -6,7 +6,7 @@
 
 ### APNA catalog research
 
-- Repository: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDMDM
+- Repository: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM
 - APNA Lite decoder at inspected commit b66fd18dce1a51d932a32776696ca4a190a3eaac: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM/tree/b66fd18dce1a51d932a32776696ca4a190a3eaac/decoders/Python/apps/APNA_Tunnel_Lite
 - Decoder README: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM/blob/b66fd18dce1a51d932a32776696ca4a190a3eaac/decoders/Python/apps/APNA_Tunnel_Lite/README.md
 - Decoder implementation: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM/blob/b66fd18dce1a51d932a32776696ca4a190a3eaac/decoders/Python/apps/APNA_Tunnel_Lite/APNA_Tunnel_Lite.py
@@ -91,6 +91,8 @@ The external script adds a ranged-download fallback after ordinary GET attempts 
 The external notes describe Dalvik/2.1.0 and Accept-Encoding: identity as the effective request headers, while also explaining that the app does not set custom authentication/signature headers and that the Dalvik agent is the platform default. Treat these as reported effective headers, not proof that the Android app explicitly adds both headers in source code. The local APK's protected updater implementation was not fully recovered.
 
 A live request attempted from this environment on 2026-11-16 failed before HTTP because DNS resolution for paperonboard.com failed. HTTP status was 000; no response body was received. This is an environment DNS failure, not evidence that the provider endpoint is offline. The current live catalog version/counts remain unverified.
+
+The ApnaWin discovery-only HTTP source has since been hardened to require HTTP 200, reject non-identity content encoding, enforce the declared Content-Length against the configured size limit, and reject truncated bodies. The tests for these checks use mocked responses; they do not imply a successful live fetch.
 
 ## 6. Consequences for ApnaWin implementation
 
