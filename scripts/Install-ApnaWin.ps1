@@ -12,14 +12,15 @@ if (-not (Test-Path -LiteralPath (Join-Path $source "ApnaWin.exe") -PathType Lea
 if (-not (Test-Path -LiteralPath (Join-Path $source "ApnaWinElevator.exe") -PathType Leaf)) {
     throw "The elevated Xray helper is missing from this build."
 }
-if (-not (Test-Path -LiteralPath (Join-Path $source "engine\\xray.exe") -PathType Leaf) -or
-    -not (Test-Path -LiteralPath (Join-Path $source "engine\\wintun.dll") -PathType Leaf) -or
-    -not (Test-Path -LiteralPath (Join-Path $source "engine\\runtime-manifest.json") -PathType Leaf)) {
+$engine = Join-Path $source "engine"
+if (-not (Test-Path -LiteralPath (Join-Path $engine "xray.exe") -PathType Leaf) -or
+    -not (Test-Path -LiteralPath (Join-Path $engine "wintun.dll") -PathType Leaf) -or
+    -not (Test-Path -LiteralPath (Join-Path $engine "runtime-manifest.json") -PathType Leaf)) {
     throw "The verified Xray/Wintun runtime folder or its integrity manifest is missing."
 }
 
-$sourcePrefix = $source.TrimEnd('\\') + '\\'
-if ($source.StartsWith($target.TrimEnd('\\') + '\\', [System.StringComparison]::OrdinalIgnoreCase) -or
+$sourcePrefix = $source.TrimEnd('\') + '\'
+if ($source.StartsWith($target.TrimEnd('\') + '\', [System.StringComparison]::OrdinalIgnoreCase) -or
     $target.StartsWith($sourcePrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
     throw "Source and destination folders must not contain one another."
 }
