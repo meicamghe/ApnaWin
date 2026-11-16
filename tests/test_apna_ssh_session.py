@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import socket
+
+import paramiko
 import pytest
 
 from apnawin.engines.apna_payload_socket import PayloadSocketConfig, PayloadSocketMode
-from apnawin.engines.apna_ssh_session import ApnaSshConfig, ApnaSshError, ApnaSshSession
+from apnawin.engines.apna_ssh_session import (
+    ApnaSshConfig,
+    ApnaSshError,
+    ApnaSshSession,
+    _PinnedHostKeyPolicy,
+)
 
 
 def _payload_config() -> PayloadSocketConfig:
@@ -219,3 +228,23 @@ def test_open_direct_channel_requires_authenticated_ssh_and_validates_destinatio
         session.open_direct_channel("bad host", 7300)
     with pytest.raises(ValueError, match="valid port range"):
         session.open_direct_channel("gateway.example.test", 0)
+
+
+def test_host_key_pin_accepts_only_the_expected_sha256_fingerprint():
+    key = paramiko.RSAKey.generate(1024)
+    digest = base64.b64encode(hashlib.sha256(key.asbytes()).digest()).decode("ascii").rstrip("=")
+    fingerprint = "SHA256:" + digest
+    policy = _PinnedHostKeyPolicy(fingerprint)
+    policy.missing_host_key(None, "ssh.example.test", key)
+
+    wrong = "SHA256:" + base64.b64encode(b"x" * 32).decode("ascii").rstrip("=")
+    with pytest.raises(paramiko.SSHException, match="fingerprint mismatch"):
+        _PinnedHostKeyPolicy(wrong).missing_host_key(None, "ssh.example.test", key)
+
+
+def test_ssh_config_validates_openssh_sha256_fingerprint():
+    with pytest.raises(ValueError, match="OpenSSH SHA256"):
+        ApnaSshConfig(
+            "ssh.example.test", 22, "user", password="secret",
+            host_key_sha256="not-a-fingerprint",
+        )
