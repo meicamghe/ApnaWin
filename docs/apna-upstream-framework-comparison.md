@@ -22,6 +22,17 @@
 - [V2Tunnel.java](https://github.com/justinaxie911/SpeedLiteVpn/blob/4833190b14f9b8b21b366c4cc5314787a13d440c/app/src/main/java/com/jvinjector/jenrri/tunnel/V2Tunnel.java)
 - [DNSTunnelThread.java](https://github.com/justinaxie911/SpeedLiteVpn/blob/4833190b14f9b8b21b366c4cc5314787a13d440c/app/src/main/java/com/jvinjector/jenrri/tunnel/DNSTunnelThread.java)
 
+### BadVPN UDP gateway implementation
+
+- Repository: https://github.com/shirokhorshid/shirokhorshid-android
+- Inspected commit: 2c719306c2340938cbafcb3dc59c8e03173bcf8c
+- [UDP gateway wire header](https://github.com/shirokhorshid/shirokhorshid-android/blob/2c719306c2340938cbafcb3dc59c8e03173bcf8c/app/src/main/jni/badvpn/protocol/udpgw_proto.h)
+- [UDP gateway client](https://github.com/shirokhorshid/shirokhorshid-android/blob/2c719306c2340938cbafcb3dc59c8e03173bcf8c/app/src/main/jni/badvpn/udpgw_client/UdpGwClient.c)
+- [SOCKS-to-UDPGW bridge](https://github.com/shirokhorshid/shirokhorshid-android/blob/2c719306c2340938cbafcb3dc59c8e03173bcf8c/app/src/main/jni/badvpn/tun2socks/SocksUdpGwClient.c)
+- [UDPGW server](https://github.com/shirokhorshid/shirokhorshid-android/blob/2c719306c2340938cbafcb3dc59c8e03173bcf8c/app/src/main/jni/badvpn/udpgw/udpgw.c)
+- [tun2socks command-line implementation](https://github.com/shirokhorshid/shirokhorshid-android/blob/2c719306c2340938cbafcb3dc59c8e03173bcf8c/app/src/main/jni/badvpn/tun2socks/tun2socks.c)
+- [BadVPN changelog](https://github.com/shirokhorshid/shirokhorshid-android/blob/2c719306c2340938cbafcb3dc59c8e03173bcf8c/app/src/main/jni/badvpn/ChangeLog)
+
 This repository also uses a different Java package and app identity. Its same-named SocksDNSService is a comparative lead only; it is not evidence that its bytecode is the implementation referenced by APNA.
 
 ### Related SSH/TUN framework source
@@ -85,6 +96,32 @@ The same source recognizes:
 The public HttpProxyCustom connects to a configured proxy host/port, expands the payload using the SSH target host/port, writes it as ISO-8859-1 bytes, and flushes. In its non-Dropbear path it reads the proxy's HTTP response before allowing the SSH transport to continue. The Dropbear path returns the socket after writing the payload. These details are valuable hypotheses for test design, not yet APNA-confirmed behavior.
 
 The APNA DEX independently confirms the formatter/injector method names, the five core token strings [ssh], [crlf], [cr], [lf], [lfcr], and ISO-8859-1 output writes. The expanded token set and one-second delay behavior need to be confirmed against APNA's actual method bytecode or controlled runtime traces before implementing them as APNA compatibility requirements.
+
+## 3A. UDP gateway path — strong framework match, APNA endpoint still unknown
+
+The APNA primary DEX string table contains all of the following exact identifiers:
+
+- mUdpResolver and mUdpDnsRelay in the VPN settings contract.
+- mUdpgwServerAddress and mUdpgwTransparentDNS in the TUN-to-SOCKS layer.
+- The native command option --udpgw-transparent-dns.
+- The native library name libtun2socks.so.
+
+The related sockshttp source contains the same mUdpgwServerAddress/mUdpgwTransparentDNS fields in Tun2Socks. Its TunnelVpnSettings carries mUdpResolver and mUdpDnsRelay, TunnelVpnManager passes those values into Tunnel.startTunneling, and Tunnel.routeThroughTunnel passes them to Tun2Socks. The command builder then adds:
+
+- --socks-server-addr for the local SOCKS endpoint.
+- --udpgw-remote-server-addr when a UDP gateway endpoint is configured.
+- --udpgw-transparent-dns when the boolean is enabled.
+- --dnsgw when a separate local DNS relay is configured.
+
+This is a much stronger match than a generic TUN/SOCKS resemblance. It supports the following interpretation of the APNA fields: mUdpResolver is the UDP gateway endpoint and mUdpDnsRelay controls transparent DNS forwarding through that gateway. The separate mDnsForward/mDnsResolver path can start a local Pdnsd resolver and pass its address as --dnsgw. Exact APNA constructor argument order and runtime values still need verification against the protected implementation.
+
+The BadVPN implementation shows that UDPGW is **not** SOCKS5 UDP ASSOCIATE. SocksUdpGwClient establishes a SOCKS stream to the configured remote UDPGW endpoint and attaches UdpGwClient to that stream. UdpGwClient uses PacketProto framing and a custom UDPGW record: a 3-byte header (flags plus 16-bit connection ID), followed by an IPv4 or IPv6 remote-address/port structure and the UDP payload. Flags identify keepalive, rebind, DNS and IPv6 records. The server maintains per-client UDP connections and sends received datagrams back over the framed stream.
+
+This means the APNA path likely has two independent transports after the TUN interface: TCP through the local SOCKS endpoint and UDP through a BadVPN-style UDP gateway reached through that SOCKS stream. This is the best current explanation for the separate UDP settings and transparent-DNS flag; the actual APNA native library/version and endpoint are not yet verified.
+
+**Windows implication:** the inspected BadVPN changelog (version 1.999.128) explicitly notes that transparent DNS forwarding was added but that there was no Windows support on the UDPGW side. Do not assume that building the Android tun2socks source for Windows will provide this feature. A Windows client may need a separately implemented compatible UDPGW client or a different provider-confirmed UDP engine. This is a compatibility risk to resolve before claiming UDP support, not proof that Windows support is impossible.
+
+The BadVPN C files carry a BSD-style license notice; the Android Java wrappers and Psiphon-derived components have separate notices. Audit every native and Java dependency before reuse. The current work uses this source only to understand the protocol shape and does not copy its implementation.
 
 ## 4. Security and licensing findings — do not copy blindly
 
