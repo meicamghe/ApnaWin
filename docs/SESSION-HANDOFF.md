@@ -1,10 +1,52 @@
-# Current active state — 2026-11-16 (supersedes older handoff snapshots below)
+# Current active state — 2026-11-16
 
-**Active repository:** `meicamghe/ApnaWin`  
-**Active branch:** `vpn/dual-stack-egress-readiness`  
-**Active PR:** [#6](https://github.com/meicamghe/ApnaWin/pull/6), open Draft, not merged.  
-**Last observed HEAD before this handoff update:** `09e6eae65415dc681de11b54380da94bdf19e7a0`  
-**Validation:** workflow [43888020499](https://github.com/meicamghe/ApnaWin/actions/runs/43888020499) was running at the time of inspection; do not assume it validates later commits.
+**Repository:** `meicamghe/ApnaWin`  
+**Branch:** `vpn/dual-stack-egress-readiness`  
+**PR:** [#6](https://github.com/meicamghe/ApnaWin/pull/6), open Draft, not merged.  
+**Last observed code HEAD:** `bdd01444a69f99f1811345fcee580e1e237a27a3`.
+
+## Acceptance target
+
+A real Windows 10/11 connection to APNA TUNNEL LITE (`com.apnatunnel.lite`): verified SSH host key, successful authentication, SSH-carried UDPGW, and routed TCP/UDP/DNS traffic through Xray/Wintun. Unit tests, mocked sockets, packaging, and catalog decoding do not prove APNA connectivity.
+
+## Current implementation
+
+- **Catalog:** bounded Base64/modified-XXTEA decoder, APK asset import, live HTTPS source with Dalvik User-Agent and identity encoding, bounded retries, and Content-Length-validated HTTP Range resumption for truncated downloads. Windows UI now has both `Import APNA APK` and asynchronous `Fetch live APNA catalog` actions. The live fetch decodes in memory and persists only selected profile settings encrypted with current-user DPAPI.
+- **Live catalog evidence:** supplied APK `assets/janur.json` is Version 580 (44 free servers, 623 payloads). An independent public reverse-engineering repository reported Version 850 (50 free servers, 644 payloads), validated 2026-11-13; this is a third-party observation, not provider documentation: [manifest](https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM/blob/b66fd18dce1a51d932a32776696ca4a190a3eaac/decoders/Python/apps/APNA_Tunnel_Lite/manifest.json). A non-blocking Windows CI probe now checks live endpoint reachability and prints counts only.
+- **Payload:** primary DEX confirms ordered placeholder substitution, ISO-8859-1, Java split semantics, `[instant_split]`, `[delay_split]` and exactly 1000 ms delayed splitting. The mapper accepts HTTP 200 and HTTP 101 for Upgrade payloads; ordinary HTTP payloads require 200.
+- **SSH:** direct/TLS/HTTP payload socket connector, Paramiko SSH password/private-key authentication, strict known-hosts rejection or explicit SHA-256 pin, and loopback-only dynamic SOCKS5 TCP forwarding.
+- **UDP:** BadVPN-compatible PacketProto/UDPGW framing, flow-ID/LRU tracking, SSH direct-tcpip stream, and local SOCKS5 UDP ASSOCIATE gateway. The configured UDPGW endpoint is preflighted through the authenticated SSH SOCKS endpoint.
+- **TUN:** `ApnaTunnelEngine` routes the local SOCKS5 gateway through a strict dual-stack Xray native TUN inbound using Wintun. DNS UDP egress is probed before reporting connected. Session health now monitors both the Paramiko authenticated transport and local SOCKS5 listener; a dead SSH transport changes engine state to ERROR.
+- **Desktop:** APNA APK/live-catalog selection is wired to `ApnaTunnelEngine`; credentials and payload settings are stored with DPAPI, and profile exports omit them.
+
+## APK and reverse-engineering boundary
+
+- Supplied base APK SHA-256: `b1f650b168665b0728b1be0e25a0c722cd77ec873e1a1c7e2711a78aa1012a6d`.
+- Base APK has no embedded ELF/.so entry; the exact native tun2socks library may be in an ABI split.
+- `assets/.bxdtcxfzx.dex` is a LIAPP stub: declared DEX size 428 bytes, one `com.liapp` loader class, plus 98,907 appended protected bytes. `assets/LIAPP.ini` identifies LIAPP 5.1.1.190. The protected `SalamanderService` implementation is not present as ordinary readable classes in the visible secondary DEX.
+- Four SSH-compatible categories in the embedded catalog snapshot: `ocsws` (8 servers/469 payloads), `ocscf` (2/118), `ocsnormal` (2/1), `ocshttp` (4/1). Snapshot server fields show ports 1194/443/53 for SSH/SSL/UDPGW; these values are not guaranteed for live catalog updates.
+- Exact protected service-mode selection and all field semantics remain partly inferred. Do not treat every catalog method/category as provider-certified.
+
+## Validation and live-connection status
+
+- Earlier run [43888817991](https://github.com/meicamghe/ApnaWin/actions/runs/43888817991) passed Ruff, the full test suite, VPN readiness/egress, security tests, Windows x64 packaging, and published a portable artifact. That artifact predates the latest live-catalog and session-health changes.
+- Run [43890182547](https://github.com/meicamghe/ApnaWin/actions/runs/43890182547) passed Ruff, VPN readiness/egress, security tests and Windows packaging. Its full suite reported 1129 passed, 1 skipped, 1 failed due only to an outdated empty-response assertion; the assertion was corrected in the current HEAD. Re-run is still required.
+- No real APNA SSH authentication, UDPGW datagram round-trip, or Windows application traffic has yet been demonstrated. The current container cannot resolve the embedded APNA hostnames, so it cannot perform live endpoint checks. The new non-blocking CI probe may provide a different network vantage point; it is not a substitute for authenticated Windows traffic.
+
+## Next gates
+
+1. Confirm the corrected full test suite and Windows package on the current HEAD.
+2. Inspect the non-blocking live catalog probe output; if it succeeds, use the newest catalog version and safe counts.
+3. Run a real SSH host-key probe against a selected live server, compare the fingerprint with an independent trusted source, then authenticate and capture redacted results.
+4. Verify UDPGW stream framing and DNS request/response over that server.
+5. Run the packaged app on a clean Windows 10/11 machine; verify IPv4/IPv6 TCP, UDP, DNS, disconnect and crash cleanup.
+6. Obtain the installed APNA split APKs if native tun2socks ABI/version verification remains necessary.
+
+Keep PR #6 Draft and unmerged. Never claim APNA connectivity from mocked tests or a successful package build.
+
+---
+
+## Historical handoff archive (older snapshots; superseded by the current state above)
 
 ## User acceptance target
 
