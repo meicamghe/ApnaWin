@@ -448,3 +448,28 @@ def test_import_profiles_dialog_cancellation_is_noop(tmp_path, qapp, monkeypatch
     assert window.profiles == [existing]
     assert destination.read_bytes() == original
     window.close()
+
+def test_connect_button_requires_live_controller_and_imported_xray_config(tmp_path, qapp):
+    from apnawin.domain.state import ConnectionState
+    from apnawin.domain.profile import ConnectionProfile, Transport
+    from apnawin.storage.profile_store import save_profiles
+
+    class ConfigStore:
+        path = tmp_path / "xray-configs.json"
+        def has_config(self, _name):
+            return True
+
+    class Controller:
+        state = ConnectionState.DISCONNECTED
+
+    profile = ConnectionProfile("Office", Transport.XRAY, "vpn.example.test", 443)
+    profiles_path = tmp_path / "profiles.json"
+    save_profiles(profiles_path, [profile])
+    window = MainWindow(
+        profiles_path=profiles_path,
+        xray_config_store=ConfigStore(),
+        connection_controller=Controller(),
+    )
+    assert window.connect_button.isEnabled() is True
+    assert window.disconnect_button.isEnabled() is False
+    window.close()

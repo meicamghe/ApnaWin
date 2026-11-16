@@ -1,8 +1,4 @@
-"""Native desktop shell with local connection-profile management.
-
-Tunnel connection remains disabled until the privileged lifecycle, route/DNS
-rollback, leak protection and end-to-end Windows acceptance tests pass.
-"""
+"""Native desktop shell with supervised Windows Xray TUN connection support."""
 
 import os
 import sys
@@ -245,7 +241,7 @@ class MainWindow(QMainWindow):
         self.connect_button.setEnabled(
             not busy and controller is not None and profile is not None
             and profile.transport is Transport.XRAY and has_config
-            and state in {ConnectionState.DISCONNECTED, ConnectionState.ERROR}
+            and state is ConnectionState.DISCONNECTED
         )
         self.disconnect_button.setEnabled(
             not busy and controller is not None
@@ -293,7 +289,8 @@ class MainWindow(QMainWindow):
         self._update_connection_controls()
         if self._close_after_disconnect:
             self._close_after_disconnect = False
-            self.close()
+            if self.connection_controller is None or self.connection_controller.state is ConnectionState.DISCONNECTED:
+                self.close()
 
     def _poll_connection(self):
         if self.connection_controller is None:
