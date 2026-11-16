@@ -43,6 +43,20 @@ The following call relationships and Android API references are present in DEX c
 
 This is a conventional Android userspace VPN architecture: Android creates the TUN interface, and a userspace forwarding engine moves packets between that interface and one or more proxy transports. The Windows port must reproduce the forwarding/proxy semantics, not the Android `VpnService` API itself.
 
+## 3B. Independent dynamic analysis of an older APNA Lite release (v27)
+
+A separate 2025 dynamic analysis of the same Android package provides important historical evidence about the product's multi-engine design:
+
+- Report: [PiRogueToolSuite — Analysis of APNA Tunnel Lite v27](https://github.com/PiRogueToolSuite/piroguetoolsuite.github.io/blob/b85b042ece8a387d2ed5eb182a2b58bafcd355a5/content/blog/Analysis%20report%20ApnaTunnel%20-%202025-04/index.md)
+- Target was package `com.apnatunnel.lite`, versionCode 27, analyzed in April 2025. It is **not** the user-provided v51 APK and its endpoints/configuration must not be reused as current APNA configuration.
+- That older sample embedded `libovpn3.so`, `libpdnsd.so`, `libprinsipe.so`, `libtun2socks.so`, and `libxray.so`. The report also captured a generated OpenVPN config (TUN device, `auth-user-pass`, `redirect-gateway`) and a local injector listener on TCP port 1724.
+- The decompiled `InjectorService` listener accepted local sockets and relayed bytes bidirectionally to an already-connected TLS socket or another connected socket. The report associated this path with HTTP injection and observed WebSocket/HTTP-style external connections in its test environment.
+- The report found some server entries worked and others did not; observed remote domains included random subdomains of `frogflyer.xyz` and `econet.zigssh.com`. Those are historical observations, not verified current APNA endpoints.
+
+This independent runtime evidence changes the working assumption: APNA Lite has historically been a **multi-engine** client (OpenVPN, XRay, tun2socks/DNS, and an HTTP/SSL injector path), rather than a single generic SSH tunnel. The current v51 DEX still exposes multiple service descriptors and separate SSH/TUN/UDPGW infrastructure, but the active engine for each catalog category remains unknown because the protected service implementations are not present as normal class definitions in the supplied base DEX.
+
+**Next implication:** prioritize obtaining the complete installed v51 split set and identifying which native libraries / protected service classes it supplies. Do not hard-code the v27 port 1724, old domains, old certificates, or old OpenVPN config as if they were v51 protocol facts.
+
 ## 3A. Direct method-table inspection: where the SSH implementation is missing
 
 The APK primary DEX was re-parsed at the method/code-item level (not just with `strings`). This resolves an important ambiguity in the earlier call-graph summary:
