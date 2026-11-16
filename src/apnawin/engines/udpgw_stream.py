@@ -7,6 +7,7 @@ and receives BadVPN-compatible PacketProto frames over the resulting channel.
 from __future__ import annotations
 
 import ipaddress
+import math
 import socket
 import struct
 from collections import deque
@@ -52,6 +53,7 @@ class Socks5ConnectConfig:
         if (
             isinstance(self.timeout, bool)
             or not isinstance(self.timeout, (int, float))
+            or not math.isfinite(self.timeout)
             or self.timeout <= 0
         ):
             raise ValueError("timeout must be positive")
@@ -162,11 +164,25 @@ class UdpGwStreamClient:
 
     @property
     def connected(self) -> bool:
-        return self._socket is not None
+        return self._socket is not None and self._socket.fileno() >= 0
+
+    @property
+    def pending_packets(self) -> int:
+        return len(self._pending)
+
+    def fileno(self) -> int:
+        return self._require_socket().fileno()
+
+    @property
+    def socket(self) -> socket.socket:
+        return self._require_socket()
 
     def connect(self) -> UdpGwStreamClient:
-        if self._socket is not None:
+        if self.connected:
             return self
+        self._socket = None
+        self._decoder = PacketProtoDecoder()
+        self._pending.clear()
         try:
             self._socket = open_socks5_connect(
                 self._config,
@@ -211,8 +227,13 @@ class UdpGwStreamClient:
     def receive_packet(self, *, timeout: float | None = None) -> UdpGwPacket:
         sock = self._require_socket()
         if timeout is not None:
-            if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout <= 0:
-                raise ValueError("timeout must be positive")
+            if (
+                isinstance(timeout, bool)
+                or not isinstance(timeout, (int, float))
+                or not math.isfinite(timeout)
+                or timeout <= 0
+            ):
+                raise ValueError("timeout must be positive and finite")
             sock.settimeout(timeout)
         while not self._pending:
             try:
@@ -232,6 +253,7 @@ class UdpGwStreamClient:
     def close(self) -> None:
         sock, self._socket = self._socket, None
         self._pending.clear()
+        self._decoder = PacketProtoDecoder()
         if sock is not None:
             try:
                 sock.shutdown(socket.SHUT_RDWR)
@@ -240,7 +262,7 @@ class UdpGwStreamClient:
             sock.close()
 
     def _require_socket(self) -> socket.socket:
-        if self._socket is None:
+        if self._socket is None or self._socket.fileno() < 0:
             raise UdpGwTransportError("UDPGW stream is not connected")
         return self._socket
 
