@@ -75,7 +75,7 @@ The sample includes payload methods `http`, `ssl`, `udp`, `direct`. Category nam
 - [x] Record server and payload fields, methods, categories and ambiguous values.
 - [ ] Trace server/payload category matching and selection/fallback rules.
 - [ ] Recover the Android SSH + payload-injection contract and local forwarding topology.
-- [ ] Recover the Xray helper and UDP gateway contracts separately; DEX evidence now points to a BadVPN-style UDPGW stream, distinct from the TCP SOCKS path. The inspected BadVPN source compiles this UDPGW path out under `BADVPN_USE_WINAPI`, so Windows needs an explicit port or confirmed alternative.
+- [ ] Recover the Xray helper and UDP gateway contracts separately; DEX evidence now points to a BadVPN-style UDPGW stream, distinct from the TCP SOCKS path. The inspected BadVPN tree includes `udpgw_client` in the `tun2socks` target and has Windows socket backends, despite an older changelog note; verify an actual Windows build and UDPGW session before deciding whether a port is needed.
 - [ ] Obtain every installed APNA split APK (especially the ABI-specific split) to recover and fingerprint the referenced libtun2socks.so; the supplied base.apk has no ELF/native-library entry.
 - [ ] Determine how semicolon-delimited server hosts are selected.
 - [ ] Determine the meaning and substitutions for `Pulled`, `sslws`, `sausage`, `query`, `dothost`, and `custom_cert`.
