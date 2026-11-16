@@ -1,3 +1,33 @@
+# Current active state — 2026-11-16 (supersedes older handoff snapshots below)
+
+**Active repository:** `meicamghe/ApnaWin`  
+**Active branch:** `vpn/dual-stack-egress-readiness`  
+**Active PR:** [#6](https://github.com/meicamghe/ApnaWin/pull/6), open Draft, not merged.  
+**Current HEAD:** `02939514b6b1a37fd6017bdd44db6c6b6e0da874`  
+**Current validation:** GitHub Actions [43873455186](https://github.com/meicamghe/ApnaWin/actions/runs/43873455186) is running; Ruff has passed. Do not reuse results from older heads as validation for this HEAD.
+
+## User acceptance target
+
+The only meaningful product milestone is a real Windows 10/11 connection to the user's target APNA TUNNEL LITE service (package `com.apnatunnel.lite`), with authenticated handshake and verified routed traffic. A successful build, UI, Xray smoke test, catalog decode, mocked network test or green unit suite does **not** establish APNA compatibility. Keep APNA Connect disabled until real authorized endpoints and credentials/profile configuration are validated end-to-end.
+
+## New APNA evidence and implementation since the older notes
+
+- Supplied base APK SHA-256: `b1f650b168665b0728b1be0e25a0c722cd77ec873e1a1c7e2711a78aa1012a6d`. Its primary DEX exposes Android VpnService/TUN, local SOCKS, SSH manager, XRay and SOCKS/HTTP service launch descriptors, and a separate UDPGW/DNS control path. The APK has no embedded ELF/.so entry; an ABI split or protected extraction path is still needed to inspect the exact native binary.
+- Exact public JNI package match: `org.uproxy.tun2socks.Tun2SocksJni`; the related uProxy source describes TCP via SOCKS and UDP via a separate UDPGW endpoint.
+- BadVPN UDPGW framing has been documented: 16-bit little-endian PacketProto frame length; 3-byte flags/connection-ID header; destination address and port; UDP payload. The client opens a SOCKS CONNECT stream to UDPGW; it is not SOCKS5 UDP ASSOCIATE. The inspected current CMake tree includes UDPGW client and Windows socket backends, but a real Windows build and UDPGW round-trip are still unverified.
+- The exact method-name cluster `formatCustomPayload`, `injectSplitPayload`, `injectSimpleSplit`, `parseRotate` appears in public sibling implementations. A closer SecondVPN source explicitly recognizes `[instant_split]` and implements immediate write/flush boundaries, while `[delay_split]` sleeps 1,000 ms between chunks and `[rotate=...]` advances round-robin. The 1-second default is sibling evidence, not yet proven from APNA's protected method body.
+- Added `src/apnawin/engines/apna_payload.py`: isolated APNA-observed placeholder expansion, strict ISO-8859-1 encoding, split chunk generation, injectable delay and per-profile rotation. Added `tests/test_apna_payload.py`. This is a tested protocol building block only; it is not yet wired to a real SSH engine.
+- New detailed evidence: `docs/apna-upstream-framework-comparison.md`, `docs/apna-lite-android-runtime-analysis.md`, `docs/apna-lite-integration-plan.md`, and `docs/apna-tunnel-lite-upstream-evidence.md`.
+
+## Immediate next engineering gates
+
+1. Recover all installed APNA split APKs and fingerprint the actual `libtun2socks` binary.
+2. Trace the protected APNA selection path: server category → payload → SSH/XRay/SOCKS/direct mode, including semicolon host pools and the meaning of `Pulled`, `sslws`, `sausage`, `query`, `dothost`, and certificate fields.
+3. Confirm APNA payload replacement order, `[protocol]` value, rotate state scope and delay timing from the protected method body or controlled traces.
+4. Build the SSH transport adapter and integrate the payload compiler; implement HTTP proxy/SSL/WS modes only when their actual catalog mapping is known.
+5. Build and test the Windows UDPGW client path, then connect the appropriate TUN-to-SOCKS/UDPGW forwarding runtime.
+6. Test with an authorized real APNA profile on Windows 10/11; verify handshake, IPv4, IPv6, DNS, reconnect and cleanup. Do not report connection success before this passes.
+
 # Session handoff
 
 ## Current repository state — 2026-11-16
