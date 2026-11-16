@@ -6,6 +6,7 @@ SSH authentication or create a VPN interface; those remain separate stages.
 """
 from __future__ import annotations
 
+import math
 import socket
 import ssl
 from dataclasses import dataclass
@@ -70,8 +71,13 @@ class PayloadSocketConfig:
                 raise ValueError(f"{name} must be between 1 and 65535")
         for name in ("connect_timeout", "read_timeout"):
             value = getattr(self, name)
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
-                raise ValueError(f"{name} must be positive")
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value <= 0
+            ):
+                raise ValueError(f"{name} must be finite and positive")
         if not 64 <= self.max_response_header_bytes <= 64 * 1024:
             raise ValueError("max_response_header_bytes is outside the safe range")
         if self.cf_host is not None and (
