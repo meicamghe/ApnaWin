@@ -75,7 +75,9 @@ The sample includes payload methods `http`, `ssl`, `udp`, `direct`. Category nam
 - [x] Add an isolated APNA payload compiler for host/port/protocol/SSH/line-ending tokens, ISO-8859-1 encoding, instant/delayed segment boundaries and `[rotate=...]`; tests cover chunk ordering, flushes, delays and rotation. The 1-second delay is a configurable sibling-source default, not yet confirmed from protected APNA bytecode.
 - [x] Add a lower-level payload socket connector for direct TCP, HTTP payload injection, and TLS-before-payload; validate bounded HTTP 200 responses, preserve Dropbear no-response mode, and close sockets on all failures. This is a stream transport only, not SSH authentication.
 - [ ] Verify APNA's protected service/mode selection and catalog-to-endpoint mapping before enabling any transport mode.
-- [ ] Add a real SSH client/authentication layer with explicit host-key verification and dynamic local SOCKS forwarding; then connect it to the payload socket connector.
+- [x] Add a Paramiko SSH session adapter with password/private-key authentication, strict known-hosts rejection, and a loopback-only SOCKS5 TCP CONNECT listener; tests use fake SSH transports and local sockets, so no real APNA authentication is claimed.
+- [x] Expose authenticated SSH `direct-tcpip` channels for the separate UDPGW stream; actual APNA UDPGW endpoint/port is still unknown.
+- [x] Add bounded UDPGW flow-ID allocation, first-packet REBIND, LRU reuse and response-to-flow validation; tests use synthetic packets only.
 - [x] Implement and test the BadVPN-compatible UDPGW/PacketProto wire codec (IPv4/IPv6, DNS/REBIND/keepalive flags, little-endian framing and incremental stream parsing).
 - [ ] Implement a local SOCKS5 gateway: TCP CONNECT via the SSH SOCKS endpoint; UDP ASSOCIATE via a persistent UDPGW stream tunneled through SSH; bounded flow-ID/LRU lifecycle and keepalives.
 - [ ] Connect the local SOCKS5 gateway to the existing Xray/Wintun TUN outbound and verify real TCP, UDP and DNS traffic. Do not use BadVPN's Windows TAP-Windows device path unless a separate TAP driver is deliberately selected.
