@@ -260,7 +260,9 @@ class ApnaCatalogImportDialog(QDialog):
 
     def selected_profile(self):
         return self._build_profile()
-\n\nclass _ConnectionWorker(QThread):
+
+
+class _ConnectionWorker(QThread):
     operation_finished = Signal(bool, str)
 
     def __init__(self, controller, action, profile=None):
