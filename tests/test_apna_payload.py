@@ -5,6 +5,7 @@ import pytest
 from apnawin.engines.apna_payload import (
     PayloadFormatError,
     PayloadRotation,
+    PayloadRandom,
     PayloadChunk,
     render_apna_payload,
     send_payload,
@@ -19,7 +20,7 @@ def test_expands_apna_observed_endpoint_and_line_ending_tokens() -> None:
     )
     assert chunks == (
         PayloadChunk(
-            b"[method] ssh.example.test ssh.example.test:443 443 HTTP/1.0 "
+            b"CONNECT ssh.example.test ssh.example.test:443 443 HTTP/1.0 "
             b"ssh.example.test:443\r\n\r\n\n\r"
         ),
     )
@@ -71,9 +72,9 @@ def test_rotate_advances_round_robin_and_resets_when_template_changes() -> None:
 
 def test_unknown_tokens_are_preserved_for_compatibility_visibility() -> None:
     chunks = render_apna_payload(
-        "[unknown] [ua] [auth]", host="ssh.example.test", port=22
+        "[unknown] [auth]", host="ssh.example.test", port=22
     )
-    assert chunks[0].data == b"[unknown] [ua] [auth]"
+    assert chunks[0].data == b"[unknown] [auth]"
 
 
 @pytest.mark.parametrize(
@@ -109,3 +110,37 @@ def test_send_payload_flushes_each_segment_and_sleeps_only_when_requested() -> N
     assert writer.writes == [b"A", b"B", b"C"]
     assert writer.flushes == 3
     assert sleeps == [1.0]
+
+
+def test_framework_family_tokens_include_ip_vpn_and_user_agent() -> None:
+    chunks = render_apna_payload(
+        "[ip] [vpn] [ua]",
+        host="ssh.example.test",
+        port=443,
+        user_agent="ApnaWin Test Agent",
+    )
+    assert chunks[0].data == b"ssh.example.test ssh.example.test:443 ApnaWin Test Agent"
+
+
+def test_random_macro_uses_injected_selector() -> None:
+    chunks = render_apna_payload(
+        "[random=first;second;third]",
+        host="ssh.example.test",
+        port=22,
+        randomizer=PayloadRandom(chooser=lambda count: count - 1),
+    )
+    assert chunks[0].data == b"third"
+
+
+def test_repeated_line_ending_macros_expand_with_bounds() -> None:
+    chunks = render_apna_payload(
+        "[cr*2][lf*1][crlf*2][lfcr*1]",
+        host="ssh.example.test",
+        port=22,
+    )
+    assert chunks[0].data == b"\r\r\n\r\n\r\n\r"
+
+
+def test_rejects_excessive_repeated_line_ending_count() -> None:
+    with pytest.raises(PayloadFormatError, match="count exceeds"):
+        render_apna_payload("[cr*4097]", host="h.test", port=22)
