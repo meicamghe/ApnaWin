@@ -644,7 +644,8 @@ class MainWindow(QMainWindow):
         row = self.profile_list.currentRow()
         if not 0 <= row < len(self.profiles):
             return
-        dialog = ProfileDialog(self, self.profiles[row])
+        original = self.profiles[row]
+        dialog = ProfileDialog(self, original)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         profile = dialog.to_profile()
@@ -654,11 +655,32 @@ class MainWindow(QMainWindow):
         ):
             QMessageBox.warning(self, "Duplicate profile", "A profile with this name already exists.")
             return
-        original = self.profiles[row]
+        if (
+            original.transport is Transport.APNA_SSH
+            and profile.transport is Transport.APNA_SSH
+            and (
+                original.endpoint_host != profile.endpoint_host
+                or original.endpoint_port != profile.endpoint_port
+            )
+        ):
+            QMessageBox.warning(
+                self,
+                "APNA profile is bound to encrypted settings",
+                "Changing an APNA server endpoint invalidates its encrypted SSH/payload settings. "
+                "Import the APNA APK again to create a profile for a different endpoint.",
+            )
+            return
+
         updated = list(self.profiles)
         updated[row] = profile
         renamed_config = original.name.casefold() != profile.name.casefold()
-        if renamed_config:
+        renamed_xray = renamed_config and original.transport is Transport.XRAY
+        renamed_apna = (
+            renamed_config
+            and original.transport is Transport.APNA_SSH
+            and profile.transport is Transport.APNA_SSH
+        )
+        if renamed_xray:
             try:
                 self.xray_config_store.rename(original.name, profile.name)
             except (OSError, ValueError) as exc:
@@ -669,24 +691,53 @@ class MainWindow(QMainWindow):
                     f"could not be moved. ({type(exc).__name__})",
                 )
                 return
+        if renamed_apna:
+            try:
+                self.apna_profile_store.rename(original, profile)
+            except (OSError, TypeError, ValueError) as exc:
+                QMessageBox.warning(
+                    self,
+                    "Could not rename encrypted APNA settings",
+                    "The profile was not changed because its encrypted APNA settings "
+                    f"could not be moved. ({type(exc).__name__})",
+                )
+                return
+
         if self._save_profiles(updated):
-            if profile.transport != Transport.XRAY:
+            if original.transport is Transport.XRAY and profile.transport is not Transport.XRAY:
                 try:
-                    self.xray_config_store.remove(profile.name)
+                    self.xray_config_store.remove(profile.name if renamed_xray else original.name)
                 except (OSError, ValueError) as exc:
                     QMessageBox.warning(
                         self,
                         "Encrypted config cleanup",
                         f"The profile was saved, but its unused Xray config remains stored. ({type(exc).__name__})",
                     )
+            if original.transport is Transport.APNA_SSH and profile.transport is not Transport.APNA_SSH:
+                try:
+                    self.apna_profile_store.remove(original.name)
+                except (OSError, ValueError) as exc:
+                    QMessageBox.warning(
+                        self,
+                        "Encrypted config cleanup",
+                        f"The profile was saved, but its unused APNA settings remain stored. ({type(exc).__name__})",
+                    )
             self._refresh_profiles(row)
-        elif renamed_config:
+        elif renamed_xray:
             try:
                 self.xray_config_store.rename(profile.name, original.name)
             except (OSError, ValueError):
                 self.status_label.setText(
-                    "Profile save failed and encrypted config rename-back also failed; "
+                    "Profile save failed and encrypted Xray config rename-back also failed; "
                     "check the encrypted config store."
+                )
+        elif renamed_apna:
+            try:
+                self.apna_profile_store.rename(profile, original)
+            except (OSError, TypeError, ValueError):
+                self.status_label.setText(
+                    "Profile save failed and encrypted APNA settings rename-back also failed; "
+                    "check the encrypted APNA profile store."
                 )
 
     def _import_profiles(self) -> None:
