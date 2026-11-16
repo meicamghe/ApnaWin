@@ -6,7 +6,6 @@ carry UDP; UDPGW is a separate protocol path.
 from __future__ import annotations
 
 import ipaddress
-import select
 import socket
 import socketserver
 import threading
