@@ -7,6 +7,7 @@ engine: those semantics must be recovered from the Android runtime first.
 from __future__ import annotations
 
 from urllib.error import HTTPError
+import math
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from apnawin.services.apna_lite_catalog import (
@@ -36,9 +37,10 @@ class ApnaLiteCatalogSource:
         if (
             isinstance(timeout_seconds, bool)
             or not isinstance(timeout_seconds, (int, float))
+            or not math.isfinite(timeout_seconds)
             or timeout_seconds <= 0
         ):
-            raise ValueError("timeout_seconds must be a positive number")
+            raise ValueError("timeout_seconds must be a finite positive number")
         self.timeout_seconds = float(timeout_seconds)
         self._opener = opener or build_opener(_RejectRedirects())
 
