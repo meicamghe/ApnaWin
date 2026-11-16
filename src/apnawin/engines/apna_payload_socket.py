@@ -37,6 +37,7 @@ class PayloadSocketConfig:
     sni: str | None = None
     cf_host: str | None = None
     brand: str | None = None
+    user_agent: str | None = None
     protocol: str = "HTTP/1.0"
     dropbear_no_response: bool = False
     validate_http_response: bool = True
@@ -86,6 +87,12 @@ class PayloadSocketConfig:
             or any(ord(char) < 0x20 or ord(char) > 0x7E for char in self.brand)
         ):
             raise ValueError("brand is invalid")
+        if self.user_agent is not None and (
+            not isinstance(self.user_agent, str)
+            or len(self.user_agent) > 1024
+            or any(ord(char) < 0x20 or ord(char) > 0x7E for char in self.user_agent)
+        ):
+            raise ValueError("user_agent is invalid")
         if self.mode in {PayloadSocketMode.DIRECT, PayloadSocketMode.TLS_DIRECT} and self.payload:
             raise ValueError("direct transport modes must not contain an HTTP payload")
         if self.mode in {PayloadSocketMode.HTTP_PROXY, PayloadSocketMode.TLS_HTTP_PROXY} and not self.payload:
@@ -192,6 +199,7 @@ class ApnaPayloadSocketConnector:
                 protocol=config.protocol,
                 cf_host=config.cf_host or config.connect_host,
                 brand=config.brand,
+                user_agent=config.user_agent,
                 rotation=self._rotation,
             )
             send_payload(_SocketWriter(active_socket), chunks)
