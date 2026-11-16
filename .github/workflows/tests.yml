@@ -8,9 +8,12 @@ concurrency:
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - vpn/dual-stack-egress-readiness
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
