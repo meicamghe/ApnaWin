@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import json
 import struct
+from urllib.error import URLError
 
 import pytest
 
@@ -42,6 +43,19 @@ class _Opener:
         self.request = request
         self.timeout = timeout
         return _Response(self.body, status=self.status, headers=self.headers)
+
+
+class _SequenceOpener:
+    def __init__(self, responses) -> None:
+        self.responses = list(responses)
+        self.requests = []
+
+    def open(self, request, timeout: float):
+        self.requests.append((request, timeout))
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
 
 
 def _encrypted_catalog() -> bytes:
@@ -147,7 +161,7 @@ def test_rejects_truncated_content_length() -> None:
             headers={"Content-Length": str(len(body))},
         )
     )
-    with pytest.raises(ValueError, match="truncated"):
+    with pytest.raises(ValueError, match="range response status"):
         source.fetch_document()
 
 
@@ -155,3 +169,73 @@ def test_rejects_truncated_content_length() -> None:
 def test_rejects_invalid_timeout(timeout: float) -> None:
     with pytest.raises(ValueError, match="timeout"):
         ApnaLiteCatalogSource(timeout_seconds=timeout)
+
+
+def test_source_resumes_a_truncated_catalog_with_bounded_http_ranges() -> None:
+    body = _encrypted_catalog()
+    first_end = 17
+    second_end = 31
+    opener = _SequenceOpener(
+        [
+            _Response(body[:first_end], headers={"Content-Length": str(len(body))}),
+            _Response(
+                body[first_end:second_end],
+                status=206,
+                headers={
+                    "Content-Length": str(second_end - first_end),
+                    "Content-Range": f"bytes {first_end}-{second_end - 1}/{len(body)}",
+                },
+            ),
+            _Response(
+                body[second_end:],
+                status=206,
+                headers={
+                    "Content-Length": str(len(body) - second_end),
+                    "Content-Range": f"bytes {second_end}-{len(body) - 1}/{len(body)}",
+                },
+            ),
+        ]
+    )
+    source = ApnaLiteCatalogSource(opener=opener, sleep=lambda _seconds: None)
+
+    document = source.fetch_document()
+
+    assert document["Version"] == "synthetic"
+    assert len(opener.requests) == 3
+    assert opener.requests[1][0].get_header("Range") == f"bytes={first_end}-{len(body) - 1}"
+    assert opener.requests[2][0].get_header("Range") == f"bytes={second_end}-{len(body) - 1}"
+
+
+def test_source_retries_transient_network_errors_before_decoding() -> None:
+    body = _encrypted_catalog()
+    opener = _SequenceOpener(
+        [
+            URLError("temporary network failure"),
+            _Response(body),
+        ]
+    )
+    source = ApnaLiteCatalogSource(opener=opener, sleep=lambda _seconds: None)
+
+    assert source.fetch_document()["Version"] == "synthetic"
+    assert len(opener.requests) == 2
+
+
+def test_source_rejects_mismatched_content_range() -> None:
+    body = _encrypted_catalog()
+    opener = _SequenceOpener(
+        [
+            _Response(body[:10], headers={"Content-Length": str(len(body))}),
+            _Response(
+                body[10:],
+                status=206,
+                headers={
+                    "Content-Length": str(len(body) - 10),
+                    "Content-Range": f"bytes 0-{len(body) - 11}/{len(body)}",
+                },
+            ),
+        ]
+    )
+    source = ApnaLiteCatalogSource(opener=opener, sleep=lambda _seconds: None)
+
+    with pytest.raises(ValueError, match="Content-Range"):
+        source.fetch_document()
