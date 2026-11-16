@@ -173,7 +173,7 @@ def test_cf_and_brand_catalog_tokens_are_expanded_before_rotation():
     )
     assert chunks[0].data == (
         b"GET / front.example.test ApnaWin a ssh.example.test:443 "
-        b"ssh.example.test\\r\\n"
+        b"ssh.example.test\r\n"
     )
 
 
