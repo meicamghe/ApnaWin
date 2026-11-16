@@ -337,9 +337,21 @@ class XrayProcessRunner:
         try:
             with self.config_path.open("rb") as stream:
                 raw_config = stream.read(MAX_XRAY_CONFIG_BYTES + 1)
+        except (OSError, TypeError, UnicodeError) as exc:
+            raise ValueError(
+                "Xray config must be readable UTF-8 JSON within the size limit"
+            ) from exc
+
+        try:
             return parse_xray_config_bytes(raw_config)
-        except (OSError, TypeError, UnicodeError, ValueError) as exc:
-            raise ValueError("Xray config must be readable UTF-8 JSON within the size limit") from exc
+        except ValueError as exc:
+            # Keep the structural root-type error specific; normalize malformed
+            # JSON, duplicate keys, non-finite constants and size errors.
+            if "root must be a JSON object" in str(exc):
+                raise
+            raise ValueError(
+                "Xray config must be readable UTF-8 JSON within the size limit"
+            ) from exc
 
     def _validate_inputs(self, profile: ConnectionProfile) -> None:
         if not isinstance(profile, ConnectionProfile):

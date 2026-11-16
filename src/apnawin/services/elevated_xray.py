@@ -397,10 +397,7 @@ def _wait_for_tun_network_ready(
         ):
             raise ValueError(f"{name} must be a positive finite number")
 
-    diagnostics = diagnostics_factory(
-        adapter_name=inbound.name,
-        timeout=min(5.0, float(timeout)),
-    )
+    diagnostics = None
     deadline = monotonic() + float(timeout)
     ready_since = None
     last_error = None
@@ -415,6 +412,14 @@ def _wait_for_tun_network_ready(
                 "Xray exited before its TUN adapter, routes and DNS became ready"
             )
         try:
+            # Defer Windows diagnostics construction until after cancellation,
+            # parent-liveness and Xray-process checks. This avoids touching
+            # network state after the desktop has already exited.
+            if diagnostics is None:
+                diagnostics = diagnostics_factory(
+                    adapter_name=inbound.name,
+                    timeout=min(5.0, float(timeout)),
+                )
             snapshot = diagnostics.snapshot()
             if _tun_snapshot_matches(snapshot, inbound):
                 now = monotonic()
