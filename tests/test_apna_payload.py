@@ -20,7 +20,7 @@ def test_expands_apna_observed_endpoint_and_line_ending_tokens() -> None:
     assert chunks == (
         PayloadChunk(
             b"[method] ssh.example.test ssh.example.test:443 443 HTTP/1.0 "
-            b"ssh.example.test:443\r\n\r\n\n\n\r"
+            b"ssh.example.test:443\\r\\n\\r\\n\\n\\r"
         ),
     )
 
