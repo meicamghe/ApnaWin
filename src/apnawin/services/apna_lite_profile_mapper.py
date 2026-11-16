@@ -64,7 +64,7 @@ def _select(pool: list[str], selector: Callable[[list[str]], str], field: str) -
 
 
 def _port(value: object, fallback: object, field: str) -> int:
-    selected = fallback if value == "Pulled" else value
+    selected = fallback if value in ("Pulled", None, "") else value
     try:
         port = int(selected)
     except (TypeError, ValueError) as exc:
@@ -187,14 +187,13 @@ def build_apna_lite_ssh_profile(
             else (200,)
         )
 
-    profile_name = " - ".join(
-        value.strip()
-        for value in (
-            str(server_record.get("server_name", "APNA server")),
-            str(payload_record.get("friendly_name", "APNA payload")),
-        )
-        if value.strip()
-    )[:128]
+    server_name = server_record.get("server_name")
+    payload_name = payload_record.get("friendly_name")
+    if not isinstance(server_name, str) or not server_name.strip():
+        server_name = "APNA server"
+    if not isinstance(payload_name, str) or not payload_name.strip():
+        payload_name = "APNA payload"
+    profile_name = f"{server_name.strip()} - {payload_name.strip()}"[:128]
     profile = ConnectionProfile(
         profile_name or "APNA SSH",
         Transport.APNA_SSH,
@@ -235,6 +234,6 @@ def build_apna_lite_ssh_profile(
         session_config=session_config,
         category=category,
         method=method,
-        server_name=str(server_record.get("server_name", "")),
-        payload_name=str(payload_record.get("friendly_name", "")),
+        server_name=server_name,
+        payload_name=payload_name,
     )
