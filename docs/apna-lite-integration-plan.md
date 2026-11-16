@@ -10,12 +10,12 @@ The project uses two inputs:
 
 1. The user-provided APK already held in the ChatGPT Library. Its embedded `assets/janur.json` was decoded locally and matched the reported embedded-catalog fingerprint: version `580`, 44 free servers, 623 payloads.
 2. The third-party reverse-engineering repository and its APNA decoder/README/report. These are research evidence, not official provider documentation:
-   - Repository: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDMDM
+   - Repository: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM
    - APNA decoder: `decoders/Python/apps/APNA_Tunnel_Lite/APNA_Tunnel_Lite.py`
    - APNA README: `decoders/Python/apps/APNA_Tunnel_Lite/README.md`
    - Report: `analysis/platform/supplied-integrations/2026-11-14/ANALYSIS.md`
 
-See [upstream protocol evidence](apna-tunnel-lite-upstream-evidence.md) and [Android runtime static analysis](apna-lite-android-runtime-analysis.md) for the detailed observations and limitations.
+See [upstream framework comparison](apna-upstream-framework-comparison.md), [upstream protocol evidence](apna-tunnel-lite-upstream-evidence.md) and [Android runtime static analysis](apna-lite-android-runtime-analysis.md) for the detailed observations and limitations.
 
 ## 2. Current implementation
 
@@ -83,7 +83,7 @@ The sample includes payload methods `http`, `ssl`, `udp`, `direct`. Category nam
 ### C. Windows engine adapters
 
 - [x] Keep the provider-neutral `TunnelEngine` contract and existing Xray/Wintun safety implementation.
-- [ ] Implement OpenVPN adapter only after the Android launch/configuration contract is known.
+- [ ] Do not implement an OpenVPN adapter from the `OpenVPNClient` name alone; first prove the protected class uses the OpenVPN wire protocol and recover its launch/configuration contract.
 - [ ] Implement additional mode adapters only for modes confirmed by evidence.
 - [ ] Ensure each adapter has bounded startup, process ownership, readiness checks, health supervision and reliable cleanup.
 - [ ] Do not let a UI state say CONNECTED until the engine's real handshake and routed egress checks pass.
