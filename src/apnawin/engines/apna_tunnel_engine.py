@@ -1,7 +1,6 @@
 """APNA SSH transport connected to the existing elevated Xray/Wintun TUN runtime."""
 from __future__ import annotations
 
-import json
 from typing import Callable
 
 from apnawin.domain.profile import ConnectionProfile, Transport
@@ -38,8 +37,12 @@ class ApnaTunnelEngine:
     ) -> None:
         if not callable(session_config_loader):
             raise TypeError("session_config_loader must be callable")
-        if not isinstance(config_store, XrayConfigStore):
-            raise TypeError("config_store must be an XrayConfigStore")
+        if (
+            config_store is None
+            or not callable(getattr(config_store, "save", None))
+            or not callable(getattr(config_store, "remove", None))
+        ):
+            raise TypeError("config_store must provide save() and remove() operations")
         if xray_supervisor is None:
             raise TypeError("xray_supervisor is required")
         self._session_config_loader = session_config_loader
@@ -137,6 +140,8 @@ class ApnaTunnelEngine:
                 ConnectionState.ERROR if cleanup_errors or self._session is not None
                 else ConnectionState.DISCONNECTED
             )
+            if self._state is ConnectionState.DISCONNECTED and not self._config_saved:
+                self._profile = None
             if cleanup_errors:
                 raise ApnaTunnelEngineError(
                     f"APNA tunnel startup failed: {exc}; cleanup also failed: "
