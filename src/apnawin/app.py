@@ -865,13 +865,21 @@ class MainWindow(QMainWindow):
         updated = list(self.profiles)
         updated.pop(row)
         if self._save_profiles(updated):
+            cleanup_errors = []
             try:
                 self.xray_config_store.remove(profile.name)
             except (OSError, ValueError) as exc:
+                cleanup_errors.append(f"Xray ({type(exc).__name__})")
+            try:
+                self.apna_profile_store.remove(profile.name)
+            except (OSError, ValueError) as exc:
+                cleanup_errors.append(f"APNA ({type(exc).__name__})")
+            if cleanup_errors:
                 QMessageBox.warning(
                     self,
                     "Encrypted config cleanup",
-                    f"The profile was removed, but its encrypted Xray config remains stored. ({type(exc).__name__})",
+                    "The profile was removed, but encrypted settings remain stored: "
+                    + ", ".join(cleanup_errors),
                 )
             self._refresh_profiles(min(row, len(updated) - 1))
 
