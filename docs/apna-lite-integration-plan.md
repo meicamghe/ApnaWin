@@ -140,7 +140,7 @@ Green unit tests, a successful build, or an artifact upload are necessary engine
 
 ## 6. Current release decision
 
-**Do not advertise APNA server connectivity yet.** The embedded catalog decode and discovery-only source are useful verified milestones, but profile generation and live Windows connectivity remain blocked on Android runtime reconstruction and real endpoint validation.
+**Do not advertise APNA server connectivity yet.** Profile import, SSH/payload transport, UDPGW/SOCKS5 bridging and Xray/Wintun orchestration now exist in code. Provider acceptance, protected Android selection semantics and real Windows endpoint validation remain unverified.
 
 
 ## 7. Windows CI evidence update — 2026-11-16
@@ -153,9 +153,9 @@ The following results are from the Windows/native workflow executions on this br
 - The current branch test now explicitly covers both `[host]` (hostname only) and `[host_port]` (hostname plus port) in the same formatted payload. The original failing run used an earlier revision; a fresh CI result for the corrected test is still required.
 - Windows packaging reached a successful application/helper/runtime build and smoke test, but the artifact upload step was cancelled. No Windows application artifact from run `43888482419` is available for release.
 
-**Next gates:** rerun the full Windows test/package workflow against the current branch revision; confirm a downloadable portable application artifact; integrate a verified provider-compatible transport into the Xray/Wintun path; then perform authorized APNA server authentication and real routed TCP/UDP/DNS tests on Windows 10/11. Until those gates pass, APNA connectivity remains unverified.
+**Next gates:** rerun and inspect the full Windows test/package workflow against the current branch revision; confirm a downloadable portable application artifact; then perform authorized APNA server authentication and real routed TCP/UDP/DNS tests on Windows 10/11. The SSH/UDPGW-to-SOCKS5-to-Xray/Wintun orchestration is already implemented; it must not be described as a missing integration step. Until live provider traffic passes, APNA connectivity remains unverified.
 
 
 ## 8. CI trigger correction — 2026-11-16
 
-The Windows validation workflow now supports manual dispatch and push-triggered validation on `vpn/dual-stack-egress-readiness`, in addition to pull requests targeting `main`. This makes subsequent branch commits run the full Windows lint, test, security, VPN-readiness and packaging tracks. A trigger configuration change alone is not a passing test result; the new run must be inspected before treating the branch as green.
+The Windows validation workflow supports manual dispatch and push-triggered validation on `vpn/dual-stack-egress-readiness`, in addition to pull requests targeting `main`. This is intended to run the full Windows lint, test, security, VPN-readiness and packaging tracks. The current engine selects one DNS resolver by default (`1.1.1.1`); although the generated TUN installs IPv4 and IPv6 default routes, the default engine probe therefore proves only IPv4 DNS reachability. IPv6 DNS and real IPv6 application egress remain explicit live-validation gates. A trigger configuration change alone is not a passing test result; the new run must be inspected before treating the branch as green.
