@@ -193,6 +193,10 @@ The SpeedLiteVpn repository's own license page describes a mixture of components
 
 ## 5. Catalog downloader: discrepancies and freshness
 
+The exact-package manifest in the external analysis repository marks the overall APNA Lite integration as PARTIAL: its catalog target is CONNECTED, but connection_authentication is explicitly UNCONFIRMED and the limitations say no new live service validation was asserted. This matches the boundary in this project: catalog decoding and provider discovery are not evidence of a successful VPN handshake.
+
+The same external repository also analyzes a different product, APNA VPN 3.9 (package my.teamapna.tunnel, versionCode 30). That report shows OpenVPNClient.r() performing the catalog updater GET. It is a separate package and only a cross-check for the catalog algorithm; it is not proof that APNA Lite uses OpenVPN on the wire. The class name OpenVPNClient must not be treated as a protocol identification.
+
 The external APNA decoder's README reports a live observation dated 2026-11-13: catalog version 850, 50 free servers and 644 payloads. The external 2026-11-14 integration report explicitly says APNA's integration path had no new remote verification in that delivery. These statements are compatible: the README records an earlier observation, while the later integration pass did not repeat it.
 
 The external script adds a ranged-download fallback after ordinary GET attempts fail. Its own comments describe this as a downloader workaround because the host sometimes truncates bodies. It is **not** evidence that the Android app sends Range headers. The script itself says the app makes a plain GET; its retry/resume behavior belongs to the research tool unless separately verified.
