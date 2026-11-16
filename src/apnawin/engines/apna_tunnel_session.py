@@ -113,6 +113,7 @@ class ApnaTunnelSession:
             raise ApnaTunnelSessionError("APNA tunnel session is already initialized")
 
         ssh_session = self._ssh_session_factory(self.config.ssh, self.config.payload)
+        self._ssh_session = ssh_session
         gateway = None
         try:
             ssh_host, ssh_port = ssh_session.connect()
@@ -147,12 +148,11 @@ class ApnaTunnelSession:
                 connect_timeout=self.config.connect_timeout,
             )
             gateway = self._gateway_factory(gateway_config)
+            self._gateway = gateway
             gateway.start()
             address = gateway.address
             if not ipaddress.ip_address(address[0]).is_loopback or not 1 <= address[1] <= 65535:
                 raise ApnaTunnelSessionError("Local SOCKS5 gateway did not bind to loopback")
-            self._ssh_session = ssh_session
-            self._gateway = gateway
             self._connected = True
             return address
         except Exception as exc:
@@ -160,12 +160,18 @@ class ApnaTunnelSession:
             if gateway is not None:
                 try:
                     gateway.close()
+                    self._gateway = None
                 except Exception as cleanup_exc:
                     cleanup_errors.append(cleanup_exc)
-            try:
-                ssh_session.close()
-            except Exception as cleanup_exc:
-                cleanup_errors.append(cleanup_exc)
+            # Keep SSH alive if the gateway could not be closed; a listener
+            # that remains bound may still depend on its upstream transport.
+            if self._gateway is None and self._ssh_session is not None:
+                try:
+                    ssh_session.close()
+                    self._ssh_session = None
+                except Exception as cleanup_exc:
+                    cleanup_errors.append(cleanup_exc)
+            self._connected = False
             if cleanup_errors:
                 raise ApnaTunnelSessionError(
                     f"APNA transport startup failed: {exc}; cleanup also failed: "
