@@ -236,3 +236,17 @@ def test_tls_http_proxy_uses_proxy_sni_and_expands_cf_and_brand() -> None:
     assert received == [
         b"GET / HTTP/1.1\r\nHost: front.example.test\r\nX-Brand: ApnaWin\r\n\r\n"
     ]
+
+
+@pytest.mark.parametrize("field", ["connect_timeout", "read_timeout"])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), 0, -1, True])
+def test_payload_socket_config_rejects_non_finite_or_non_positive_timeouts(field, value):
+    with pytest.raises(ValueError, match="finite and positive"):
+        PayloadSocketConfig(
+            mode=PayloadSocketMode.DIRECT,
+            connect_host="ssh.example.test",
+            connect_port=22,
+            target_host="ssh.example.test",
+            target_port=22,
+            **{field: value},
+        )
