@@ -92,9 +92,31 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+
+  vpn-readiness:
+    name: VPN runtime readiness and egress tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install test dependencies
+        run: python -m pip install "pytest>=8.0"
+      - name: Validate TUN startup, dual-stack routes, DNS, egress and supervision
+        run: >-
+          python -m pytest -q
+          tests/test_elevated_xray.py
+          tests/test_windows_tunnel_diagnostics.py
+          tests/test_windows_tunnel_egress.py
+          tests/test_xray_tunnel_supervisor.py
+          tests/test_xray_process.py
+          tests/test_windows_network_transaction.py
+
   publish-windows:
     name: Publish verified portable artifact
-    needs: [lint, test, security-check, build-windows]
+    needs: [lint, test, security-check, vpn-readiness, build-windows]
     runs-on: windows-latest
     steps:
       - name: Download successful Windows build candidate
