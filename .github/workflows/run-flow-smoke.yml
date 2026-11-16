@@ -1,0 +1,22 @@
+name: Run Flow smoke test
+
+on:
+  push:
+    branches: [run-flow-smoke-test]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Minimal GitHub Actions execution
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm runner started
+        run: |
+          echo "RUN_FLOW_SMOKE_TEST=STARTED"
+          echo "GitHub Actions runner is executing."
+      - name: Confirm workflow completed
+        run: |
+          echo "RUN_FLOW_SMOKE_TEST=SUCCESS"
