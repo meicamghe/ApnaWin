@@ -5,7 +5,11 @@ carry UDP; UDPGW is a separate protocol path.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import ipaddress
+import re
 import socket
 import socketserver
 import threading
@@ -25,6 +29,21 @@ class ApnaSshError(ConnectionError):
     """SSH authentication, host-key verification, or forwarding failed."""
 
 
+class _PinnedHostKeyPolicy(paramiko.MissingHostKeyPolicy):
+    """Accept an otherwise unknown host key only when its SHA-256 pin matches."""
+
+    def __init__(self, expected_fingerprint: str) -> None:
+        self._expected = expected_fingerprint
+
+    def missing_host_key(self, client, hostname, key) -> None:
+        digest = base64.b64encode(hashlib.sha256(key.asbytes()).digest()).decode("ascii")
+        actual = "SHA256:" + digest.rstrip("=")
+        if not hmac.compare_digest(actual, self._expected):
+            raise paramiko.SSHException(
+                f"SSH host key fingerprint mismatch for {hostname}"
+            )
+
+
 @dataclass(frozen=True, slots=True)
 class ApnaSshConfig:
     ssh_host: str
@@ -33,6 +52,7 @@ class ApnaSshConfig:
     password: str | None = field(default=None, repr=False)
     key_filename: str | None = None
     known_hosts_files: tuple[str, ...] = ()
+    host_key_sha256: str | None = None
     local_host: str = "127.0.0.1"
     local_port: int = 0
     connect_timeout: float = 10.0
@@ -63,6 +83,11 @@ class ApnaSshConfig:
             raise TypeError("known_hosts_files must be a tuple")
         if any(not isinstance(path, str) or not path for path in self.known_hosts_files):
             raise ValueError("known_hosts_files contains an invalid path")
+        if self.host_key_sha256 is not None and (
+            not isinstance(self.host_key_sha256, str)
+            or not re.fullmatch(r"SHA256:[A-Za-z0-9+/]{43}", self.host_key_sha256)
+        ):
+            raise ValueError("host_key_sha256 must be an OpenSSH SHA256 fingerprint")
         try:
             local = ipaddress.ip_address(self.local_host)
         except ValueError as exc:
@@ -257,7 +282,14 @@ class ApnaSshSession:
             client.load_system_host_keys()
             for known_hosts in self.config.known_hosts_files:
                 client.load_host_keys(str(Path(known_hosts)))
-            client.set_missing_host_key_policy(paramiko.RejectPolicy())
+            if self.config.host_key_sha256 is None:
+                # Unknown hosts are rejected unless the user supplied a known_hosts
+                # entry or an explicit SHA-256 pin through the profile.
+                client.set_missing_host_key_policy(paramiko.RejectPolicy())
+            else:
+                client.set_missing_host_key_policy(
+                    _PinnedHostKeyPolicy(self.config.host_key_sha256)
+                )
             sock = self._connector.connect(self.payload_config)
             client.connect(
                 hostname=self.config.ssh_host,
