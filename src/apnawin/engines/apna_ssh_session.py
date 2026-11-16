@@ -296,6 +296,45 @@ class ApnaSshSession:
                 "SSH transport or authentication failed; host-key verification is enforced"
             ) from exc
 
+    def open_direct_channel(
+        self,
+        destination_host: str,
+        destination_port: int,
+        *,
+        source_host: str = "127.0.0.1",
+        source_port: int = 0,
+    ):
+        """Open an authenticated SSH direct-tcpip channel (e.g. remote UDPGW)."""
+        if not isinstance(destination_host, str) or not destination_host:
+            raise ValueError("destination_host is required")
+        if any(ord(char) < 0x21 or ord(char) > 0x7E for char in destination_host):
+            raise ValueError("destination_host contains whitespace or control characters")
+        for name, value in (("destination_port", destination_port), ("source_port", source_port)):
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{name} must be an integer")
+            minimum = 1 if name == "destination_port" else 0
+            if not minimum <= value <= 65535:
+                raise ValueError(f"{name} is outside the valid port range")
+        try:
+            ipaddress.ip_address(source_host)
+        except ValueError as exc:
+            raise ValueError("source_host must be an IP literal") from exc
+        if self._ssh_client is None or not self.is_authenticated:
+            raise ApnaSshError("SSH session is not authenticated")
+        transport = self._ssh_client.get_transport()
+        try:
+            channel = transport.open_channel(
+                "direct-tcpip",
+                (destination_host, destination_port),
+                (source_host, source_port),
+                timeout=self._channel_timeout,
+            )
+        except (OSError, paramiko.SSHException) as exc:
+            raise ApnaSshError("Could not open SSH direct-tcpip channel") from exc
+        if channel is None:
+            raise ApnaSshError("SSH server refused the direct-tcpip channel")
+        return channel
+
     def close(self) -> None:
         if self._closed:
             return
