@@ -299,3 +299,8 @@ class ApnaProfileStore:
         if key in records:
             del records[key]
             self._write(records)
+
+    def has_config(self, profile_name: str) -> bool:
+        """Return whether an encrypted APNA configuration exists for a profile."""
+        key = _profile_key(profile_name)
+        return key in self._read()
