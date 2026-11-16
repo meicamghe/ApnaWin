@@ -73,7 +73,10 @@ The sample includes payload methods `http`, `ssl`, `udp`, `direct`. Category nam
 - [x] Confirm separate service launch paths for SSH, XRay and SOCKS/HTTP forwarders.
 - [x] Identify custom-payload formatter and CR/LF/SSH placeholder token references; the primary DEX exposes `[instant_split]` and `[delay_split]`.
 - [x] Add an isolated APNA payload compiler for host/port/protocol/SSH/line-ending tokens, ISO-8859-1 encoding, instant/delayed segment boundaries and `[rotate=...]`; tests cover chunk ordering, flushes, delays and rotation. The 1-second delay is a configurable sibling-source default, not yet confirmed from protected APNA bytecode.
-- [ ] Verify the remaining replacement order/defaults from APNA protected method bytecode and wire the compiler into a real SSH handshake engine.
+- [x] Add a lower-level payload socket connector for direct TCP, HTTP payload injection, and TLS-before-payload; validate bounded HTTP 200 responses, preserve Dropbear no-response mode, and close sockets on all failures. This is a stream transport only, not SSH authentication.
+- [ ] Verify APNA's protected service/mode selection and catalog-to-endpoint mapping before enabling any transport mode.
+- [ ] Add a real SSH client/authentication layer with explicit host-key verification and dynamic local SOCKS forwarding; then connect it to the payload socket connector.
+- [ ] Build/validate the UDPGW packet relay and integrate the TUN data plane for UDP as well as TCP.
 - [x] Record server and payload fields, methods, categories and ambiguous values.
 - [ ] Trace server/payload category matching and selection/fallback rules.
 - [ ] Recover the Android SSH + payload-injection contract and local forwarding topology.
