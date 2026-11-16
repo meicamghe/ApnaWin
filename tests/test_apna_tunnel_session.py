@@ -199,3 +199,27 @@ def test_failed_gateway_cleanup_retains_both_handles_for_retry():
     assert events[-1] == "gateway-close"
     session.disconnect()
     assert events[-2:] == ["gateway-close", "ssh-close"]
+
+
+def test_startup_cleanup_failure_retains_gateway_and_ssh_for_retry():
+    events = []
+    class FlakyGateway(_FakeGateway):
+        def __init__(self, config, *, events):
+            super().__init__(config, events=events, fail=True)
+            self.fail_close = True
+
+        def close(self):
+            events.append("gateway-close")
+            if self.fail_close:
+                self.fail_close = False
+                raise OSError("gateway still bound")
+    session = ApnaTunnelSession(
+        _config(udpgw_host=None, udpgw_port=None),
+        ssh_session_factory=lambda *args: _FakeSshSession(*args, events=events),
+        gateway_factory=lambda config: FlakyGateway(config, events=events),
+    )
+    with pytest.raises(ApnaTunnelSessionError, match="cleanup also failed"):
+        session.connect()
+    assert events == ["ssh-connect", "gateway-start", "gateway-close"]
+    session.disconnect()
+    assert events[-2:] == ["gateway-close", "ssh-close"]
