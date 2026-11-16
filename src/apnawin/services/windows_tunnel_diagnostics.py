@@ -46,7 +46,7 @@ class WindowsTunnelDiagnostics:
         *,
         adapter_name: str = "ApnaWin",
         powershell_executable: str = "powershell.exe",
-        timeout: float = 5.0,
+        timeout: float = 15.0,
         runner: Callable[..., subprocess.CompletedProcess] | None = None,
     ) -> None:
         if (
@@ -90,16 +90,25 @@ if ($null -eq $a) {{
 }}
 $idx = [int]$a.ifIndex
 # Require the best combined route/interface metric to select only the TUN.
+# Fetch interface metrics once per address family instead of issuing a CIM query per route.
+$if4 = @{{}}
+Get-NetIPInterface -AddressFamily IPv4 -ErrorAction SilentlyContinue | ForEach-Object {{
+    $if4[[int]$_.InterfaceIndex] = [long]$_.InterfaceMetric
+}}
+$if6 = @{{}}
+Get-NetIPInterface -AddressFamily IPv6 -ErrorAction SilentlyContinue | ForEach-Object {{
+    $if6[[int]$_.InterfaceIndex] = [long]$_.InterfaceMetric
+}}
 $r4 = @(Get-NetRoute -DestinationPrefix '0.0.0.0/0' -PolicyStore ActiveStore -ErrorAction SilentlyContinue | ForEach-Object {{
-    $ipif = Get-NetIPInterface -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($null -ne $ipif) {{
-        [pscustomobject]@{{ InterfaceIndex = [int]$_.InterfaceIndex; Metric = [long]$_.RouteMetric + [long]$ipif.InterfaceMetric }}
+    $routeIndex = [int]$_.InterfaceIndex
+    if ($if4.ContainsKey($routeIndex)) {{
+        [pscustomobject]@{{ InterfaceIndex = $routeIndex; Metric = [long]$_.RouteMetric + $if4[$routeIndex] }}
     }}
 }})
 $r6 = @(Get-NetRoute -DestinationPrefix '::/0' -PolicyStore ActiveStore -ErrorAction SilentlyContinue | ForEach-Object {{
-    $ipif = Get-NetIPInterface -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv6 -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($null -ne $ipif) {{
-        [pscustomobject]@{{ InterfaceIndex = [int]$_.InterfaceIndex; Metric = [long]$_.RouteMetric + [long]$ipif.InterfaceMetric }}
+    $routeIndex = [int]$_.InterfaceIndex
+    if ($if6.ContainsKey($routeIndex)) {{
+        [pscustomobject]@{{ InterfaceIndex = $routeIndex; Metric = [long]$_.RouteMetric + $if6[$routeIndex] }}
     }}
 }})
 $best4 = @()

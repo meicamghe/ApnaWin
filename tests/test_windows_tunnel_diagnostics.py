@@ -122,7 +122,9 @@ def test_snapshot_script_checks_effective_route_and_interface_metrics(monkeypatc
 
     WindowsTunnelDiagnostics(runner=runner).snapshot()
     script = observed["script"]
-    assert "Get-NetIPInterface" in script
+    assert script.count("Get-NetIPInterface") == 2
+    assert "$if4.ContainsKey($routeIndex)" in script
+    assert "$if6.ContainsKey($routeIndex)" in script
     assert "RouteMetric" in script
     assert "InterfaceMetric" in script
     assert "$best4" in script and "$best6" in script
