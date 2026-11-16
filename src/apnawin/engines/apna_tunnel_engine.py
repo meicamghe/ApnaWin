@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from pathlib import Path
 from typing import Callable
 
 from apnawin.domain.profile import ConnectionProfile, Transport
@@ -107,7 +108,12 @@ class ApnaTunnelEngine:
             raise ValueError(
                 "Full-tunnel APNA requires a configured UDPGW endpoint; TCP-only mode is disabled"
             )
-        if config.ssh.host_key_sha256 is None and not config.ssh.known_hosts_files:
+        default_known_hosts = Path.home() / ".ssh" / "known_hosts"
+        if (
+            config.ssh.host_key_sha256 is None
+            and not config.ssh.known_hosts_files
+            and not default_known_hosts.is_file()
+        ):
             raise ValueError(
                 "SSH host identity must be verified with a SHA-256 pin or known_hosts file"
             )
@@ -168,6 +174,8 @@ class ApnaTunnelEngine:
                     self._xray_profile = None
                 except Exception as cleanup_exc:
                     cleanup_errors.append(cleanup_exc)
+            if not self._xray_started:
+                self._xray_profile = None
             if not self._xray_started and self._session is not None:
                 try:
                     self._session.disconnect()
@@ -254,5 +262,7 @@ class ApnaTunnelEngine:
             self._config_name = None
 
         self._profile = None
+        self._validated_profile = None
+        self._validated_config = None
         self._state = ConnectionState.DISCONNECTED
         self.last_error = None
