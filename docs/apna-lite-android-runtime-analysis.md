@@ -24,7 +24,8 @@ The primary DEX class-definition table includes:
 - `TunnelUtils`, `VpnUtils`
 - `Tun2Socks`, `Tun2SocksJni`
 - `Pdnsd`
-- `SalamanderService`, `SocksDNSService`, `XRayDNSService`
+
+The primary DEX also references service descriptors named `SalamanderService`, `SocksDNSService`, and `XRayDNSService`; those names are not class definitions in the inspected primary DEX.
 
 The existence of these classes and their method references is direct static evidence. It does not establish that every class is selected for every APNA server category.
 
@@ -77,7 +78,7 @@ The primary DEX defines the following explicit static helper methods on `TunnelM
 
 The start methods create an explicit service `Intent` and invoke `Context.startService`; the DEX type references map the targets: `startSsh` → `SalamanderService`, `startXRay` → `XRayDNSService`, and `startSocksHttp` → `SocksDNSService`. The stop methods send broadcasts. **Important boundary:** these service descriptors are referenced by the visible primary DEX but their class definitions are not present in its class-definition table. Their implementations therefore remain unavailable in the inspected visible DEX and may be protected, dynamically supplied or external; the helper-to-service mapping is confirmed, but the service internals are not.
 
-It also defines `SalamanderService`, `SocksDNSService`, and `XRayDNSService`. The presence of these symbols shows that more than one service/forwarding path exists. It does not yet prove which APNA `category` or `method` selects which service.
+These referenced service descriptors show that more than one service/forwarding path is intended. Their implementations are not available in the inspected primary DEX, and the APNA `category`/`method` to service mapping is not yet proven.
 
 Do not infer that a payload whose category contains `xray` is directly an Xray JSON config. It may select a local forwarding helper, a SOCKS endpoint, a DNS component, or a protected runtime class. Likewise, `UDP Connected` is not sufficient to determine whether UDP is carried by an SSH UDP gateway, a custom datagram forwarder, or another engine.
 
