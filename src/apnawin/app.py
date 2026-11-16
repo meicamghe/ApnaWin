@@ -411,16 +411,19 @@ class MainWindow(QMainWindow):
         row = self.profile_list.currentRow()
         profile = self.profiles[row] if 0 <= row < len(self.profiles) else None
         has_config = False
-        if profile is not None and profile.transport is Transport.XRAY:
+        if profile is not None:
             try:
-                has_config = self.xray_config_store.has_config(profile.name)
+                if profile.transport is Transport.XRAY:
+                    has_config = self.xray_config_store.has_config(profile.name)
+                elif profile.transport is Transport.APNA_SSH:
+                    has_config = self.apna_profile_store.has_config(profile.name)
             except (OSError, ValueError):
                 has_config = False
         state = controller.state if controller is not None else ConnectionState.DISCONNECTED
         self.connect_button.setEnabled(
             not busy and controller is not None and profile is not None
-            and profile.transport is Transport.XRAY and has_config
-            and state is ConnectionState.DISCONNECTED
+            and profile.transport in {Transport.XRAY, Transport.APNA_SSH}
+            and has_config and state is ConnectionState.DISCONNECTED
         )
         self.disconnect_button.setEnabled(
             not busy and controller is not None
@@ -431,7 +434,10 @@ class MainWindow(QMainWindow):
         if self.connection_controller is None or self._connection_worker is not None:
             return
         row = self.profile_list.currentRow()
-        if 0 <= row < len(self.profiles) and self.profiles[row].transport is Transport.XRAY:
+        if (
+            0 <= row < len(self.profiles)
+            and self.profiles[row].transport in {Transport.XRAY, Transport.APNA_SSH}
+        ):
             self._start_connection_worker("connect", self.profiles[row])
 
     def _disconnect_tunnel(self):
@@ -565,6 +571,9 @@ class MainWindow(QMainWindow):
         editable = selected and self.profile_storage_writable
         self.edit_button.setEnabled(editable)
         self.remove_button.setEnabled(editable)
+        self.import_apna_apk_button.setEnabled(
+            self.profile_storage_writable and os.name == "nt"
+        )
         if not selected:
             self.import_xray_config_button.setEnabled(False)
             self.profile_details.setText("No profile selected.")
@@ -572,26 +581,46 @@ class MainWindow(QMainWindow):
             return
         profile = self.profiles[row]
         has_xray_config = False
-        config_store_ok = True
+        has_apna_config = False
         try:
             has_xray_config = self.xray_config_store.has_config(profile.name)
         except (OSError, ValueError) as exc:
-            config_store_ok = False
             self.status_label.setText(
-                "Encrypted Xray config storage is unavailable; config import is disabled. "
+                "Encrypted Xray config storage is unavailable. "
+                f"({type(exc).__name__})"
+            )
+        try:
+            has_apna_config = self.apna_profile_store.has_config(profile.name)
+        except (OSError, ValueError) as exc:
+            self.status_label.setText(
+                "Encrypted APNA profile storage is unavailable. "
                 f"({type(exc).__name__})"
             )
         self.import_xray_config_button.setEnabled(
-            self.profile_storage_writable
-            and config_store_ok
-            and profile.transport == Transport.XRAY
+            self.profile_storage_writable and profile.transport == Transport.XRAY
         )
         details = (
             f"{profile.transport.value.upper()}  •  "
             f"{profile.endpoint_host}:{profile.endpoint_port}"
         )
-        if has_xray_config:
+        if has_xray_config and profile.transport is Transport.XRAY:
             details += "\nXray TUN config: imported and encrypted for this Windows user"
+        if has_apna_config and profile.transport is Transport.APNA_SSH:
+            try:
+                config = self.apna_profile_store.load(profile)
+                details += (
+                    "\nAPNA SSH settings: encrypted for this Windows user"
+                    f"\nPayload transport: {config.payload.mode.value}"
+                    f"\nPayload endpoint: {config.payload.connect_host}:{config.payload.connect_port}"
+                )
+                if config.udpgw_host and config.udpgw_port:
+                    details += f"\nUDP gateway: {config.udpgw_host}:{config.udpgw_port}"
+                if config.ssh.host_key_sha256:
+                    details += f"\nSSH host key: pinned ({config.ssh.host_key_sha256})"
+                else:
+                    details += "\nSSH host key: system known_hosts verification"
+            except (OSError, ValueError, TypeError) as exc:
+                details += f"\nAPNA encrypted settings unavailable ({type(exc).__name__})"
         self.profile_details.setText(details)
         self._update_connection_controls()
 
