@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 )
 
 from apnawin.domain.profile import ConnectionProfile, Transport
+from apnawin.domain.state import ConnectionState
 from apnawin.engines.xray_process import (
     MAX_XRAY_CONFIG_BYTES,
     inspect_tun_inbound,
@@ -215,6 +216,114 @@ class MainWindow(QMainWindow):
             self._connection_timer.start()
         self._update_connection_controls()
 
+    def _create_live_connection_controller(self):
+        """Build the real engine only from the protected Program Files installation."""
+        if os.name != "nt":
+            return None
+        program_files = os.environ.get("ProgramFiles")
+        if not program_files:
+            return None
+        helper = Path(program_files) / "ApnaWin" / "ApnaWinElevator.exe"
+        if helper.is_symlink() or not helper.is_file():
+            return None
+        supervisor = XrayTunnelSupervisor(helper, self.xray_config_store)
+        engine = XrayTunnelEngine(supervisor, helper, self.xray_config_store)
+        return ConnectionController(engine)
+
+    def _update_connection_controls(self):
+        controller = self.connection_controller
+        busy = self._connection_worker is not None and self._connection_worker.isRunning()
+        row = self.profile_list.currentRow()
+        profile = self.profiles[row] if 0 <= row < len(self.profiles) else None
+        has_config = False
+        if profile is not None and profile.transport is Transport.XRAY:
+            try:
+                has_config = self.xray_config_store.has_config(profile.name)
+            except (OSError, ValueError):
+                has_config = False
+        state = controller.state if controller is not None else ConnectionState.DISCONNECTED
+        self.connect_button.setEnabled(
+            not busy and controller is not None and profile is not None
+            and profile.transport is Transport.XRAY and has_config
+            and state in {ConnectionState.DISCONNECTED, ConnectionState.ERROR}
+        )
+        self.disconnect_button.setEnabled(
+            not busy and controller is not None
+            and state in {ConnectionState.CONNECTED, ConnectionState.ERROR}
+        )
+
+    def _connect_selected_profile(self):
+        if self.connection_controller is None or self._connection_worker is not None:
+            return
+        row = self.profile_list.currentRow()
+        if 0 <= row < len(self.profiles) and self.profiles[row].transport is Transport.XRAY:
+            self._start_connection_worker("connect", self.profiles[row])
+
+    def _disconnect_tunnel(self):
+        if self.connection_controller is None or self._connection_worker is not None:
+            return
+        self._start_connection_worker("disconnect")
+
+    def _start_connection_worker(self, action, profile=None):
+        self.status_label.setText(
+            "Connecting — verifying TUN, IPv4/IPv6 routes, DNS and external egress..."
+            if action == "connect" else "Disconnecting — stopping VPN helper..."
+        )
+        worker = _ConnectionWorker(self.connection_controller, action, profile)
+        self._connection_worker = worker
+        worker.operation_finished.connect(self._connection_operation_finished)
+        worker.finished.connect(self._connection_worker_finished)
+        self._update_connection_controls()
+        worker.start()
+
+    def _connection_operation_finished(self, success, detail):
+        if success and detail == "connect":
+            self.status_label.setText("Connected — TUN, dual-stack routes, DNS and external TLS egress verified.")
+        elif success:
+            self.status_label.setText("Disconnected — VPN helper stopped.")
+        else:
+            self.status_label.setText("VPN operation failed: " + detail)
+        self._update_connection_controls()
+
+    def _connection_worker_finished(self):
+        worker = self._connection_worker
+        self._connection_worker = None
+        if worker is not None:
+            worker.deleteLater()
+        self._update_connection_controls()
+        if self._close_after_disconnect:
+            self._close_after_disconnect = False
+            self.close()
+
+    def _poll_connection(self):
+        if self.connection_controller is None:
+            return
+        if self._connection_worker is not None and self._connection_worker.isRunning():
+            return
+        try:
+            state = self.connection_controller.refresh()
+        except Exception as exc:
+            state = self.connection_controller.state
+            self.status_label.setText("VPN health check failed: " + type(exc).__name__ + ": " + str(exc))
+        if state is ConnectionState.ERROR:
+            engine = getattr(self.connection_controller, "_engine", None)
+            detail = getattr(engine, "last_error", None)
+            self.status_label.setText("VPN connection lost or unhealthy. " + (detail or "Disconnect and retry."))
+        self._update_connection_controls()
+
+    def closeEvent(self, event):
+        worker = self._connection_worker
+        if worker is not None and worker.isRunning():
+            self._close_after_disconnect = True
+            event.ignore()
+            return
+        if self.connection_controller is not None and self.connection_controller.state is not ConnectionState.DISCONNECTED:
+            self._close_after_disconnect = True
+            event.ignore()
+            self._disconnect_tunnel()
+            return
+        super().closeEvent(event)
+
     def _load_profiles(self) -> None:
         try:
             self.profiles = load_profiles(self.profiles_path)
@@ -260,6 +369,7 @@ class MainWindow(QMainWindow):
         self.profile_list.blockSignals(False)
         self._show_selected_profile(self.profile_list.currentRow())
         self.export_button.setEnabled(bool(self.profiles))
+        self._update_connection_controls()
 
     def _show_selected_profile(self, row: int) -> None:
         selected = 0 <= row < len(self.profiles)
@@ -293,6 +403,7 @@ class MainWindow(QMainWindow):
         if has_xray_config:
             details += "\nXray TUN config: imported and encrypted for this Windows user"
         self.profile_details.setText(details)
+        self._update_connection_controls()
 
     def _add_profile(self) -> None:
         if not self.profile_storage_writable:
@@ -441,9 +552,10 @@ class MainWindow(QMainWindow):
             return
         self.status_label.setText(
             f"Xray TUN config imported and encrypted for {profile.name}. "
-            "Connect remains disabled until route/DNS rollback, leak-protection and end-to-end VPN acceptance tests pass."
+            "The installed helper verifies TUN routes, DNS, WFP leak protection and external egress."
         )
         self._show_selected_profile(row)
+        self._update_connection_controls()
 
     def _export_profiles(self) -> None:
         """Export all currently loaded non-secret profile metadata."""
