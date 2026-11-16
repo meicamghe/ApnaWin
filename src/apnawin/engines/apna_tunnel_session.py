@@ -7,6 +7,7 @@ TUN interface.
 from __future__ import annotations
 
 import ipaddress
+import math
 import socket
 from dataclasses import dataclass
 from typing import Callable
@@ -73,8 +74,13 @@ class ApnaTunnelSessionConfig:
             raise ValueError("max_udp_flows must be between 1 and 65535")
         for name in ("keepalive_interval", "udp_idle_timeout", "connect_timeout"):
             value = getattr(self, name)
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
-                raise ValueError(f"{name} must be positive")
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value <= 0
+            ):
+                raise ValueError(f"{name} must be a finite positive number")
 
 
 class ApnaTunnelSession:
