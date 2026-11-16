@@ -18,3 +18,8 @@ Before the helper signals ready, it requires certificate-validated TLS handshake
 ## Ongoing egress supervision
 
 After the initial independent dual-stack TLS readiness probes, the elevated helper repeats both fixed-IP, certificate-validated TLS probes every 15 seconds. Three consecutive failed probes trigger graceful Xray shutdown and a distinct helper exit code. Route/DNS health remains sampled every two seconds. These checks reduce the chance of leaving a dead tunnel marked connected; they do not replace real provider-specific traffic and leak acceptance.
+
+
+## Abnormal helper exit handling
+
+The desktop supervisor retains the exited helper handle after an unexpected non-zero exit. It does not silently discard session ownership, report a successful disconnect, or start a replacement tunnel while route/DNS cleanup is uncertain. A normal disconnect still signals the live helper and waits for its graceful cleanup. An abnormal helper exit remains an explicit ERROR because CI cannot prove that Windows route, DNS and adapter state was restored after a crash; recovery must be verified before another tunnel is started.
