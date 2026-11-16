@@ -20,7 +20,7 @@ def _socket_pair_factory(server_callback):
     return client, worker
 
 
-def test_http_proxy_payload_is_sent_and_success_response_is_consumed(monkeypatch) -> None:
+def test_http_proxy_payload_is_sent_and_success_response_is_consumed() -> None:
     received = []
 
     def server(server_socket):
@@ -127,4 +127,46 @@ def test_config_rejects_invalid_endpoint_and_port() -> None:
             connect_port=70000,
             target_host="ssh.example.test",
             target_port=22,
+        )
+
+
+def test_http_proxy_can_explicitly_accept_websocket_upgrade_101() -> None:
+    received = []
+
+    def server(server_socket):
+        received.append(server_socket.recv(4096))
+        server_socket.sendall(
+            b"HTTP/1.1 101 Switching Protocols\\r\\nUpgrade: websocket\\r\\n\\r\\n"
+        )
+        server_socket.close()
+
+    client, worker = _socket_pair_factory(server)
+    connector = ApnaPayloadSocketConnector(
+        socket_factory=lambda address, timeout: client
+    )
+    config = PayloadSocketConfig(
+        mode=PayloadSocketMode.HTTP_PROXY,
+        connect_host="proxy.example.test",
+        connect_port=8080,
+        target_host="ssh.example.test",
+        target_port=443,
+        payload="GET / HTTP/1.1[crlf]Host: [host][crlf][crlf]",
+        expected_http_statuses=(101,),
+    )
+    connected = connector.connect(config)
+    assert connected is client
+    connected.close()
+    worker.join(timeout=1)
+    assert received == [b"GET / HTTP/1.1\\r\\nHost: ssh.example.test\\r\\n\\r\\n"]
+
+
+def test_config_rejects_invalid_http_status_policy() -> None:
+    with pytest.raises(ValueError, match="invalid HTTP status"):
+        PayloadSocketConfig(
+            mode=PayloadSocketMode.HTTP_PROXY,
+            connect_host="proxy.example.test",
+            connect_port=8080,
+            target_host="ssh.example.test",
+            target_port=443,
+            expected_http_statuses=(200, 700),
         )
