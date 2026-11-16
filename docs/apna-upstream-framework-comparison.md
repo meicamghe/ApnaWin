@@ -133,6 +133,32 @@ A second related implementation, sockshttp's Tun2Socks.java plus CustomNativeLoa
 
 The Cordova plugin is an Android/JNI integration and is not itself a Windows runtime. Its plugin manifest declares Apache 2.0, while individual Java/native source files carry Psiphon/BadVPN notices. Audit the exact file-level notices and transitive dependencies before reuse. For ApnaWin, the Windows side must implement an equivalent TUN-to-SOCKS plus UDPGW bridge with Windows-native TUN/Wintun handling; the Android JNI binary cannot simply be loaded on Windows.
 
+
+## 3B. Exact uProxy JNI package match and missing native split
+
+The APNA primary DEX references the exact Java class descriptor org/uproxy/tun2socks/Tun2SocksJni and the library names libtun2socks and libtun2socks.so. A public repository, UWNetworksLab/cordova-plugin-tun2socks, contains that exact package/class:
+
+- [Tun2SocksJni.java](https://github.com/UWNetworksLab/cordova-plugin-tun2socks/blob/9b686fb3bad6792142425931799b8f7690a932eb/android/java/org/uproxy/tun2socks/Tun2SocksJni.java)
+- [Tunnel.java](https://github.com/UWNetworksLab/cordova-plugin-tun2socks/blob/9b686fb3bad6792142425931799b8f7690a932eb/android/java/org/uproxy/tun2socks/Tunnel.java)
+- [JNI/native bridge](https://github.com/UWNetworksLab/cordova-plugin-tun2socks/blob/9b686fb3bad6792142425931799b8f7690a932eb/android/jni/tun2socks/tun2socks.c)
+- [Plugin manifest and declared license](https://github.com/UWNetworksLab/cordova-plugin-tun2socks/blob/9b686fb3bad6792142425931799b8f7690a932eb/plugin.xml)
+
+The public JNI method signature is:
+
+`runTun2Socks(fd, mtu, vpnIpAddress, vpnNetMask, socksServerAddress, udpRelayAddress, dnsResolverAddress, transparentDNS)`
+
+Its source comment explicitly describes TCP being routed through the SOCKS proxy and UDP being sent to a separate UDPGW server. The native JNI bridge maps those arguments to the native SOCKS address, UDP relay address, DNS resolver address and transparent-DNS setting. The public Tunnel wrapper passes the TUN descriptor, interface MTU/address/netmask and those endpoints to the native method.
+
+The exact class/package match plus the APNA DEX's UDPGW fields is strong evidence that APNA includes this uProxy/BadVPN-derived bridge or a close fork. It does not identify the precise native commit or prove the APNA argument values. The APNA DEX also contains the unusual string cluster TUN2SOCKS_BIN, fileTun2Socks, tun2SocksProcess, SUPPORTED_ABIS, nativeLibraryDir, sourceDir and getFilesDir, which matches the loader/executable-launch pattern in the related sockshttp source.
+
+**Important APK packaging gap:** the supplied file is named base.apk. A full ZIP scan of its 1,479 entries found no .so entry and no entry beginning with the ELF magic bytes. The DEX nevertheless references libtun2socks.so. This does not prove the installed app lacks the library: Android App Bundle delivery can put ABI-specific native libraries in a separate split APK (for example, an arm64-v8a split), or the protected app may extract/load it by another mechanism. The native implementation therefore cannot be audited from the supplied base.apk alone. A complete installed-package pull, including every split APK, is needed to recover the exact binary and version.
+
+
+
+A second related implementation, sockshttp's Tun2Socks.java plus CustomNativeLoader.java, shows a process-based loading path: check ApplicationInfo.nativeLibraryDir for tun2socks.so; if absent, enumerate supported ABIs and look for lib/<abi>/tun2socks.so or jni/<abi>/tun2socks.so in the APK; copy it to the app files directory as tun2socks; mark it executable; then launch it with the TUN fd, local SOCKS endpoint, optional UDPGW endpoint and DNS flags. Its code contains an old commented JNI/library-loading alternative as well. Because APNA DEX contains both Tun2SocksJni references and the process/ABI/file-path string cluster, the active APNA route should be determined from the actual method call graph rather than assuming the JNI wrapper is the active path. The absence of .so entries in base.apk is consistent with an ABI split being installed into nativeLibraryDir.
+
+The Cordova plugin is an Android/JNI integration and is not itself a Windows runtime. Its plugin manifest declares Apache 2.0, while individual Java/native source files carry Psiphon/BadVPN notices. Audit the exact file-level notices and transitive dependencies before reuse. For ApnaWin, the Windows side must implement an equivalent TUN-to-SOCKS plus UDPGW bridge with Windows-native TUN/Wintun handling; the Android JNI binary cannot simply be loaded on Windows.
+
 ## 3A. UDP gateway path — strong framework match, APNA endpoint still unknown
 
 The APNA primary DEX string table contains all of the following exact identifiers:
@@ -165,6 +191,7 @@ This means the APNA path likely has two independent transports after the TUN int
 **Windows implication:** the inspected BadVPN source makes the limitation explicit: the UDPGW client initialization, command-line options and packet-submit path are wrapped in `#ifndef BADVPN_USE_WINAPI`, so this revision compiles the UDPGW feature out for Windows. The changelog (version 1.999.128) also records the lack of Windows support on the UDPGW side. Although the tree has generic Windows socket backends, that does not enable this feature. A Windows client must port/enable the SOCKS-to-UDPGW client path or use a different provider-confirmed UDP engine. This is a concrete compatibility gate, not proof that a Windows implementation is impossible.
 
 The BadVPN C files carry a BSD-style license notice; the Android Java wrappers and Psiphon-derived components have separate notices. Audit every native and Java dependency before reuse. The current work uses this source only to understand the protocol shape and does not copy its implementation.
+
 
 ## 4. Security and licensing findings — do not copy blindly
 
