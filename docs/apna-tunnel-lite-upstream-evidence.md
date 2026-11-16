@@ -12,6 +12,8 @@ This note records externally published reverse-engineering findings and direct, 
 - Decoder notes: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM/blob/main/decoders/Python/apps/APNA_Tunnel_Lite/README.md
 - External analysis report: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM/blob/main/analysis/platform/supplied-integrations/2026-11-14/ANALYSIS.md
 
+A second public-source comparison of the SSH/TUN framework lineage, payload grammar, licensing and security caveats is documented in [APNA upstream framework comparison](apna-upstream-framework-comparison.md).
+
 These are third-party reverse-engineering sources, not official provider documentation. Their claims are leads to validate against the local APK and fresh responses. The external repository's own result report distinguishes structural integration tests from authenticated/live provider connection tests.
 
 ## Local APK observations (2026-11-16)
