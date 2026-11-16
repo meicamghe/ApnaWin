@@ -13,3 +13,8 @@ Before Xray starts, the helper checks that no pre-existing Windows adapter alrea
 The helper verifies the protected runtime manifest and SHA-256 hashes of `xray.exe` and `wintun.dll` before starting. It refuses to reuse an existing adapter with the configured TUN name, and monitors the adapter, effective dual-stack default routes and configured DNS while the tunnel is active. Three consecutive unhealthy samples trigger graceful Xray shutdown.
 
 Before the helper signals ready, it also requires a certificate-validated TLS handshake to at least one of two independent public HTTPS endpoints by fixed IP address. This probe is initiated by the helper (not Xray), so it exercises the system TUN route and is subject to Xray's WFP leak filters. Failure to reach either endpoint fails startup closed. It is an egress smoke test, not a substitute for provider-specific application traffic acceptance.
+
+
+## Ongoing egress supervision
+
+After the initial independent TLS readiness probe, the elevated helper now repeats the same fixed-IP, certificate-validated TLS probe every 15 seconds. Three consecutive failed probes trigger graceful Xray shutdown and a distinct helper exit code. Route/DNS health remains sampled every two seconds. These checks reduce the chance of leaving a dead tunnel marked connected; they do not replace real provider-specific traffic and leak acceptance.

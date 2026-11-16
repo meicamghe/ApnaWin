@@ -29,7 +29,7 @@ from apnawin.engines.xray_process import (
 from apnawin.services.windows_tunnel_diagnostics import WindowsTunnelDiagnostics
 from apnawin.storage.xray_config_store import XrayConfigStore
 from apnawin.services.vpn_runtime import verify_vpn_runtime
-from apnawin.services.windows_tunnel_egress import probe_tun_egress
+from apnawin.services.windows_tunnel_egress import TunnelEgressError, probe_tun_egress
 
 
 _SEE_MASK_NOCLOSEPROCESS = 0x00000040
@@ -445,6 +445,16 @@ def _wait_for_tun_network_ready(
         sleep(min(float(poll_interval), deadline - now))
 
 
+
+def _tun_egress_is_healthy(probe=probe_tun_egress) -> bool:
+    """Return false when independent TLS egress through the TUN is unavailable."""
+    try:
+        probe()
+    except TunnelEgressError:
+        return False
+    return True
+
+
 def _cleanup_stale_configs(runtime_dir: Path) -> None:
     cutoff = time.time() - 24 * 60 * 60
     for candidate in runtime_dir.glob("xray-*.json"):
@@ -549,7 +559,9 @@ def elevated_helper_main(argv: list[str] | None = None) -> int:
 
         health_diagnostics = WindowsTunnelDiagnostics(adapter_name=tun_inbound.name)
         next_health_check = time.monotonic() + 2.0
+        next_egress_check = time.monotonic() + 15.0
         unhealthy_checks = 0
+        unhealthy_egress_checks = 0
         while True:
             stop_result = api.kernel32.WaitForSingleObject(stop_handle, 100)
             if stop_result == _WAIT_OBJECT_0:
@@ -580,6 +592,18 @@ def elevated_helper_main(argv: list[str] | None = None) -> int:
                 if unhealthy_checks >= 3:
                     runner.stop()
                     return 15
+
+            # Route presence alone does not prove that the tunnel still reaches
+            # the public network. Recheck independent TLS egress periodically.
+            if time.monotonic() >= next_egress_check:
+                next_egress_check = time.monotonic() + 15.0
+                egress_healthy = _tun_egress_is_healthy()
+                unhealthy_egress_checks = (
+                    0 if egress_healthy else unhealthy_egress_checks + 1
+                )
+                if unhealthy_egress_checks >= 3:
+                    runner.stop()
+                    return 16
     except (OSError, ValueError, PermissionError, RuntimeError, subprocess.SubprocessError):
         return 20
     finally:

@@ -452,3 +452,16 @@ def test_helper_supervises_xray_until_parent_exits(tmp_path, monkeypatch):
     assert FakeRunner.instance.new_console is True
     assert api.kernel32.set_events == [32]
     assert not list((tmp_path / "LocalAppData" / "ApnaWin" / "runtime").glob("xray-*.json"))
+
+
+
+def test_tun_egress_health_fails_closed_when_tls_probe_fails():
+    from apnawin.services.elevated_xray import _tun_egress_is_healthy
+    from apnawin.services.windows_tunnel_egress import TunnelEgressError
+
+    assert _tun_egress_is_healthy(lambda: True) is True
+
+    def unavailable():
+        raise TunnelEgressError("no external TLS route")
+
+    assert _tun_egress_is_healthy(unavailable) is False
