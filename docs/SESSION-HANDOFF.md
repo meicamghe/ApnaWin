@@ -1,16 +1,20 @@
 # Session handoff
 
-## Current repository state
+## Current repository state — 2026-11-16
 
-The native Windows application shell, profile management, Xray process runner, Windows Job Object supervision, remote catalog schema/cache, refresh coordinator, bounded HTTPS transport and privacy-conscious APK inventory are implemented. Android APK inspection is static metadata analysis only; native Android `.so` files are not treated as Windows DLLs.
+The current Windows x64 branch is `vpn/integrated-tun-readiness-runtime`, HEAD `76503f2d927eefbf75500c50e0282747513bf68a`. Pull request [#4](https://github.com/meicamghe/ApnaWin/pull/4) is open and mergeable.
 
-The Connect button remains intentionally disabled because a verified Windows tunnel/TUN integration and authorized end-to-end server configuration are not available.
+The desktop Connect flow is wired to the fixed-path elevated Xray helper. Connect is enabled only for a validated encrypted XRAY TUN profile when the helper is installed under Program Files. The helper verifies the packaged Xray/Wintun hashes, validates the strict dual-stack TUN config, waits for the adapter, effective IPv4/IPv6 default routes and configured DNS, then requires an independent certificate-validated IPv4 TLS egress probe. Adapter/routes/DNS are monitored while connected; repeated unhealthy samples trigger Xray shutdown.
 
-## Latest CI verification
+**This is local tunnel-readiness integration, not release acceptance.** It does not establish APNA-provider compatibility, IPv6 application egress, DNS/IPv4/IPv6 leak resistance under failure, or cleanup after forced termination/reboot. Xray's WFP filters are process-owned; ApnaWin has no independent persistent kill switch. The journal/plan/transaction modules remain experimental injected-adapter infrastructure and are not in the production route/DNS path.
 
-Workflow [43714910902](https://github.com/meicamghe/ApnaWin/actions/runs/43714910902) passed on commit `b1012d9d7725247f2409fff6fe6cf6b7c39ac756`: 619 tests passed (one warning from a duplicate ZIP-entry fixture); Windows x64 PyInstaller folder build, packaged executable smoke test and portable artifact upload all succeeded. Artifact ID: `14161764950`.
+An authorized APNA Xray configuration/catalog/authentication source is still unavailable. Do not invent endpoints, credentials or protocol details. Do not claim a working APNA connection until a real authorized profile is tested on clean Windows 10/11 systems.
 
-CI validates configured tests and packaging, not live VPN connectivity.
+## Latest CI and portable artifact
+
+Workflow [43819919964](https://github.com/meicamghe/ApnaWin/actions/runs/43819919964) (run 358) passed all 6 jobs on HEAD `76503f2d927eefbf75500c50e0282747513bf68a`: 903 passed, 1 skipped in the full unit/integration suite; VPN readiness/egress, installer/runtime security, Ruff, Windows x64 packaging and final artifact publication all succeeded.
+
+Published artifact: `ApnaWin-Windows-x64`, artifact ID `14204335649`, 76,806,229 bytes, SHA-256 `1b48b8b45a3faf57ef33fc9f0ae2c3ef498e26c3f210ff1b9f921f6ea0d513`. The ZIP contains the desktop executable, elevated helper, Xray, Wintun, runtime manifest, licenses and installer script. CI validates configured tests and packaging; it does not execute a real APNA tunnel or prove leak resistance.
 
 ## Windows network transaction
 
