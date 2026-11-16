@@ -39,7 +39,7 @@ The following call relationships and Android API references are present in DEX c
 4. The service calls `VpnService.Builder.establish()` and retains the resulting `ParcelFileDescriptor`.
 5. The `Tun2Socks` worker launches `libtun2socks.so` from the app's private data directory.
 6. The worker passes the TUN file descriptor to the native process using an Android local socket and `setFileDescriptorsForSend`.
-7. The `Tunnel.startTunneling` method accepts a SOCKS server string, a DNS resolver string array, boolean settings and additional routing parameters. `TunnelVpnSettings` contains explicit fields for `mSocksServer`, `mDnsResolver`, `mUdpResolver`, `mUdpDnsRelay`, `mDnsForward`, `mExcludeIps`, `mFilterApps`, `mEnableFilterApps`, `mFilterBypassMode`, `bypass`, and `mTetheringSubnet`. This confirms the TUN layer is configured to hand traffic to a local SOCKS endpoint and has separate DNS/UDP relay controls. The tunnel stop path terminates Tun2Socks, joins its worker, stops DNS support and closes the TUN descriptor.
+7. The `Tunnel.startTunneling` method accepts a SOCKS server string, a DNS resolver string array, boolean settings and additional routing parameters. `TunnelVpnSettings` contains explicit fields for `mSocksServer`, `mDnsResolver`, `mUdpResolver`, `mUdpDnsRelay`, `mDnsForward`, `mExcludeIps`, `mFilterApps`, `mEnableFilterApps`, `mFilterBypassMode`, `bypass`, and `mTetheringSubnet`. This confirms the TUN layer is configured to hand traffic to a local SOCKS endpoint and has separate DNS/UDP relay controls. Additional primary-DEX strings include `mUdpgwServerAddress`, `mUdpgwTransparentDNS`, and `--udpgw-transparent-dns`, strongly indicating an optional BadVPN-style UDP gateway and transparent DNS flag in the native tun2socks path. The tunnel stop path terminates Tun2Socks, joins its worker, stops DNS support and closes the TUN descriptor.
 
 This is a conventional Android userspace VPN architecture: Android creates the TUN interface, and a userspace forwarding engine moves packets between that interface and one or more proxy transports. The Windows port must reproduce the forwarding/proxy semantics, not the Android `VpnService` API itself.
 
@@ -80,7 +80,7 @@ The start methods create an explicit service `Intent` and invoke `Context.startS
 
 These referenced service descriptors show that more than one service/forwarding path is intended. Their implementations are not available in the inspected primary DEX, and the APNA `category`/`method` to service mapping is not yet proven.
 
-Do not infer that a payload whose category contains `xray` is directly an Xray JSON config. It may select a local forwarding helper, a SOCKS endpoint, a DNS component, or a protected runtime class. Likewise, `UDP Connected` is not sufficient to determine whether UDP is carried by an SSH UDP gateway, a custom datagram forwarder, or another engine.
+Do not infer that a payload whose category contains `xray` is directly an Xray JSON config. It may select a local forwarding helper, a SOCKS endpoint, a DNS component, or a protected runtime class. The explicit UDPGW fields and `--udpgw-transparent-dns` flag now make a BadVPN-style UDP gateway the leading explanation for the TUN UDP path. The actual APNA UDPGW endpoint, protocol version and protected service that supplies it remain unverified; `UDP Connected` alone does not establish that the gateway handshake succeeds.
 
 ## 6. Implications for the Windows architecture
 
@@ -103,7 +103,7 @@ The Android TUN layer and Windows Wintun layer solve the packet-capture/route pr
 - [ ] Trace how the selected server record and payload record populate the SSH client and forwarder settings.
 - [ ] Determine the exact `[ssh]` placeholder substitution and CR/LF token behavior.
 - [ ] Identify the SSH library/service implementation and its authentication/host-key policy.
-- [x] Confirm the Android TUN settings explicitly carry a SOCKS server endpoint and separate DNS/UDP relay settings.
+- [x] Confirm the Android TUN settings explicitly carry a SOCKS endpoint, DNS resolver/forwarding controls, UDP gateway endpoint and transparent-DNS flag.
 - [ ] Determine local SOCKS/HTTP listener ports and which listener receives TUN traffic.
 - [x] Map explicit service launch targets: SSH → `SalamanderService`, XRay → `XRayDNSService`, SOCKS/HTTP → `SocksDNSService`.
 
