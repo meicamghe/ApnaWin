@@ -376,6 +376,7 @@ class MainWindow(QMainWindow):
         if not selected:
             self.import_xray_config_button.setEnabled(False)
             self.profile_details.setText("No profile selected.")
+            self._update_connection_controls()
             return
         profile = self.profiles[row]
         has_xray_config = False
