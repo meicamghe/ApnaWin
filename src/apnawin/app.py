@@ -41,6 +41,7 @@ from apnawin.engines.apna_host_key import scan_apna_ssh_host_key
 from apnawin.engines.apna_tunnel_engine import ApnaTunnelEngine
 from apnawin.engines.multi_transport import MultiTransportTunnelEngine
 from apnawin.services.apna_lite_catalog import decode_apna_lite_apk_catalog
+from apnawin.services.apna_lite_source import ApnaLiteCatalogSource
 from apnawin.services.apna_lite_profile_mapper import (
     build_apna_lite_ssh_profile,
     list_apna_lite_ssh_payloads,
@@ -262,6 +263,24 @@ class ApnaCatalogImportDialog(QDialog):
         return self._build_profile()
 
 
+class _ApnaCatalogFetchWorker(QThread):
+    """Fetch the live catalog off the UI thread without persisting plaintext."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.catalog = None
+        self.error = None
+
+    def run(self) -> None:
+        try:
+            self.catalog = ApnaLiteCatalogSource(
+                timeout_seconds=8.0,
+                retry_attempts=2,
+            ).fetch_document()
+        except Exception as exc:
+            self.error = f"{type(exc).__name__}: {exc}"
+
+
 class _ConnectionWorker(QThread):
     operation_finished = Signal(bool, str)
 
@@ -304,7 +323,9 @@ class MainWindow(QMainWindow):
         )
         self.connection_controller = connection_controller or self._create_live_connection_controller()
         self._connection_worker = None
+        self._catalog_worker = None
         self._close_after_disconnect = False
+        self._close_after_catalog_fetch = False
         self.profiles: list[ConnectionProfile] = []
         self.profile_storage_writable = True
 
@@ -338,6 +359,9 @@ class MainWindow(QMainWindow):
         self.import_apna_apk_button = QPushButton("Import APNA APK…")
         self.import_apna_apk_button.clicked.connect(self._import_apna_apk)
         self.import_apna_apk_button.setEnabled(os.name == "nt")
+        self.import_apna_live_button = QPushButton("Fetch live APNA catalog…")
+        self.import_apna_live_button.clicked.connect(self._fetch_live_apna_catalog)
+        self.import_apna_live_button.setEnabled(os.name == "nt")
         self.edit_button.setEnabled(False)
         self.remove_button.setEnabled(False)
 
@@ -349,6 +373,7 @@ class MainWindow(QMainWindow):
         profile_actions.addWidget(self.export_button)
         profile_actions.addWidget(self.import_xray_config_button)
         profile_actions.addWidget(self.import_apna_apk_button)
+        profile_actions.addWidget(self.import_apna_live_button)
         profile_actions.addStretch(1)
 
         self.connect_button = QPushButton("Connect")
@@ -509,6 +534,11 @@ class MainWindow(QMainWindow):
         self._update_connection_controls()
 
     def closeEvent(self, event):
+        catalog_worker = self._catalog_worker
+        if catalog_worker is not None and catalog_worker.isRunning():
+            self._close_after_catalog_fetch = True
+            event.ignore()
+            return
         worker = self._connection_worker
         if worker is not None and worker.isRunning():
             self._close_after_disconnect = True
@@ -533,6 +563,7 @@ class MainWindow(QMainWindow):
             self.import_button.setEnabled(False)
             self.import_xray_config_button.setEnabled(False)
             self.import_apna_apk_button.setEnabled(False)
+            self.import_apna_live_button.setEnabled(False)
             self.status_label.setText(
                 "Profile storage is unavailable — editing is disabled to protect existing data."
             )
@@ -576,6 +607,11 @@ class MainWindow(QMainWindow):
         self.remove_button.setEnabled(editable)
         self.import_apna_apk_button.setEnabled(
             self.profile_storage_writable and os.name == "nt"
+        )
+        self.import_apna_live_button.setEnabled(
+            self.profile_storage_writable
+            and os.name == "nt"
+            and self._catalog_worker is None
         )
         if not selected:
             self.import_xray_config_button.setEnabled(False)
@@ -784,6 +820,49 @@ class MainWindow(QMainWindow):
             self._refresh_profiles(len(updated) - 1)
             self.status_label.setText(f"Imported {len(imported)} profile(s).")
 
+    def _fetch_live_apna_catalog(self) -> None:
+        """Fetch the latest APNA catalog asynchronously, keeping the UI responsive."""
+        if not self.profile_storage_writable or os.name != "nt":
+            return
+        if self._catalog_worker is not None and self._catalog_worker.isRunning():
+            return
+        worker = _ApnaCatalogFetchWorker(self)
+        self._catalog_worker = worker
+        worker.finished.connect(self._live_apna_catalog_finished)
+        self.import_apna_live_button.setEnabled(False)
+        self.status_label.setText(
+            "Fetching the live APNA catalog with bounded retries and range resume…"
+        )
+        worker.start()
+
+    def _live_apna_catalog_finished(self) -> None:
+        worker = self._catalog_worker
+        if worker is None:
+            return
+        catalog, error = worker.catalog, worker.error
+        self._catalog_worker = None
+        worker.deleteLater()
+        self.import_apna_live_button.setEnabled(
+            self.profile_storage_writable and os.name == "nt"
+        )
+        if self._close_after_catalog_fetch:
+            self._close_after_catalog_fetch = False
+            self.close()
+            return
+        if error is not None or not isinstance(catalog, dict):
+            detail = error or "The catalog response was empty or invalid."
+            self.status_label.setText(
+                "Live APNA catalog unavailable. You can still import an APK catalog."
+            )
+            QMessageBox.warning(
+                self,
+                "Live APNA catalog failed",
+                "The latest APNA server catalog could not be downloaded or decoded. "
+                "No plaintext catalog was saved. (" + detail + ")",
+            )
+            return
+        self._import_apna_catalog(catalog, source_label="live catalog")
+
     def _import_apna_apk(self) -> None:
         """Import an embedded APNA Lite catalog and encrypt the selected SSH profile."""
         if not self.profile_storage_writable or os.name != "nt":
@@ -798,7 +877,6 @@ class MainWindow(QMainWindow):
             return
         try:
             catalog = decode_apna_lite_apk_catalog(Path(filename))
-            servers = list_apna_lite_ssh_servers(catalog)
         except (OSError, TypeError, ValueError) as exc:
             QMessageBox.warning(
                 self,
@@ -806,11 +884,24 @@ class MainWindow(QMainWindow):
                 f"The selected APK catalog could not be read. ({type(exc).__name__}: {exc})",
             )
             return
+        self._import_apna_catalog(catalog, source_label="APK")
+
+    def _import_apna_catalog(self, catalog: dict, *, source_label: str) -> None:
+        """Map a catalog entry to an encrypted APNA SSH profile."""
+        try:
+            servers = list_apna_lite_ssh_servers(catalog)
+        except (TypeError, ValueError) as exc:
+            QMessageBox.warning(
+                self,
+                "APNA catalog import failed",
+                f"The catalog structure is unsupported. ({type(exc).__name__}: {exc})",
+            )
+            return
         if not servers:
             QMessageBox.information(
                 self,
                 "No supported APNA servers",
-                "The embedded catalog contains no server entries supported by the current SSH engine.",
+                f"The {source_label} contains no server entries supported by the current SSH engine.",
             )
             return
 
@@ -840,7 +931,7 @@ class MainWindow(QMainWindow):
         if self._save_profiles(updated):
             self._refresh_profiles(len(updated) - 1)
             self.status_label.setText(
-                f"Imported APNA SSH profile '{mapped.profile.name}'. "
+                f"Imported APNA SSH profile '{mapped.profile.name}' from {source_label}. "
                 "Credentials and payload settings are encrypted for this Windows user."
             )
             if not mapped.session_config.ssh.host_key_sha256:
