@@ -212,8 +212,12 @@ def build_apna_lite_ssh_profile(
         connect_host = selected_payload_host
         if "[brand]" in payload_text and brand is None:
             raise ApnaLiteProfileError("This payload requires an explicit [brand] substitution")
+        # Related Android injectors keep the socket open for both an HTTP
+        # CONNECT success (200) and an Upgrade response (101); SSH key exchange
+        # is the definitive next-stage validation. Do not require 101 solely
+        # because the payload contains an Upgrade header.
         expected_statuses = (
-            (101,)
+            (200, 101)
             if "upgrade: websocket" in payload_text.lower()
             else (200,)
         )
