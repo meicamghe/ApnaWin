@@ -157,3 +157,38 @@ def test_java_split_discards_trailing_empty_segment_without_extra_delay() -> Non
         "A[delay_split]", host="h.test", port=22
     )
     assert delayed == (PayloadChunk(b"A", 0),)
+
+
+
+def test_cf_and_brand_catalog_tokens_are_expanded_before_rotation():
+    rotation = PayloadRotation()
+    template = "GET / [cf] [brand] [rotate=a;b] [host][crlf]"
+    chunks = render_apna_payload(
+        template,
+        host="ssh.example.test",
+        port=443,
+        cf_host="front.example.test",
+        brand="ApnaWin",
+        rotation=rotation,
+    )
+    assert chunks[0].data == (
+        b"GET / front.example.test ApnaWin a ssh.example.test:443 "
+        b"ssh.example.test\\r\\n"
+    )
+
+
+def test_rotation_state_resets_when_expanded_host_changes():
+    rotation = PayloadRotation()
+    template = "CONNECT [rotate=a;b] [host_port]"
+    first = render_apna_payload(
+        template, host="ssh-a.example.test", port=443, rotation=rotation
+    )
+    second = render_apna_payload(
+        template, host="ssh-a.example.test", port=443, rotation=rotation
+    )
+    changed = render_apna_payload(
+        template, host="ssh-b.example.test", port=443, rotation=rotation
+    )
+    assert first[0].data.startswith(b"CONNECT a ")
+    assert second[0].data.startswith(b"CONNECT b ")
+    assert changed[0].data.startswith(b"CONNECT a ")
