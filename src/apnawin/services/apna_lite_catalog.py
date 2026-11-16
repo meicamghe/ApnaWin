@@ -242,7 +242,7 @@ def decode_apna_lite_catalog(encrypted: bytes) -> dict[str, Any]:
     _validate_records(document, "Payloads", _PAYLOAD_FIELDS)
     for section in _SERVER_SECTIONS[1:]:
         if section in document:
-            _validate_records(document, section, _SERVER_FIELDS)
+            _validate_records(document, section, None)
 
     for field in ("Username", "Password"):
         if field in document and not isinstance(document[field], str):
