@@ -98,8 +98,8 @@ class _FakeXrayEngine:
         assert profile.transport is Transport.XRAY
         assert self.store.has_config(profile.name)
         config = json.loads(self.store.records[profile.name])
-        assert config["outbounds"][0]["protocol"] == "socks"
-        assert config["outbounds"][0]["settings"]["port"] == 23145
+        assert config["outbounds"][0]["protocol"] == "socks"\n    assert config["outbounds"][0]["settings"]["servers"][0]["address"] == "127.0.0.1"
+        assert config["outbounds"][0]["settings"]["servers"][0]["port"] == 23145
 
     def connect(self, profile):
         self.events.append("xray-connect")
