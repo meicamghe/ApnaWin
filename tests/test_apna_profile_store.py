@@ -119,3 +119,28 @@ def test_store_has_config_tracks_encrypted_profile_presence(tmp_path):
     assert store.has_config("apna WORK")
     store.remove("APNA work")
     assert not store.has_config("APNA work")
+
+
+
+def test_store_renames_profile_without_exposing_secret(tmp_path):
+    store = _store(tmp_path)
+    store.save(_profile(), _config())
+    renamed = ConnectionProfile(
+        "APNA work renamed", Transport.APNA_SSH, "ssh.example.test", 443
+    )
+    store.rename(_profile(), renamed)
+    assert not store.has_config("APNA work")
+    assert store.has_config("APNA work renamed")
+    assert store.load(renamed).ssh.password == "do-not-log"
+
+
+def test_store_rename_rejects_changed_endpoint(tmp_path):
+    store = _store(tmp_path)
+    store.save(_profile(), _config())
+    changed = ConnectionProfile(
+        "APNA work renamed", Transport.APNA_SSH, "other.example.test", 443
+    )
+    with pytest.raises(ValueError, match="match"):
+        store.rename(_profile(), changed)
+    assert store.has_config("APNA work")
+    assert not store.has_config("APNA work renamed")
