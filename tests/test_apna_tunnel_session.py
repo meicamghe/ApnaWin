@@ -13,6 +13,12 @@ from apnawin.engines.apna_tunnel_session import (
 )
 
 
+def _probe_socket():
+    probe, peer = socket.socketpair()
+    peer.close()
+    return probe
+
+
 def _config(**overrides):
     values = {
         "ssh": ApnaSshConfig("ssh.example.test", 22, "user", password="secret"),
@@ -74,7 +80,7 @@ def test_connect_preflights_udpgw_and_starts_gateway_after_ssh():
     def preflight(config):
         events.append("udpgw-preflight")
         probes.append(config)
-        return socket.socketpair()[0]
+        return _probe_socket()
 
     session = ApnaTunnelSession(
         _config(),
@@ -127,7 +133,7 @@ def test_gateway_start_failure_closes_ssh_and_gateway():
         _config(),
         ssh_session_factory=lambda *args: _FakeSshSession(*args, events=events),
         gateway_factory=lambda config: _FakeGateway(config, events=events, fail=True),
-        preflight_connector=lambda config: socket.socketpair()[0],
+        preflight_connector=lambda config: _probe_socket(),
     )
     with pytest.raises(ApnaTunnelSessionError, match="startup failed"):
         session.connect()
