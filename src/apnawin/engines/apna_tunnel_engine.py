@@ -11,7 +11,6 @@ from apnawin.engines.apna_tunnel_session import (
 )
 from apnawin.engines.apna_xray_config import build_apna_xray_tun_config
 from apnawin.services.xray_tunnel_supervisor import XrayTunnelSupervisor
-from apnawin.storage.xray_config_store import XrayConfigStore
 
 
 class ApnaTunnelEngineError(RuntimeError):
