@@ -68,6 +68,8 @@ The sample includes payload methods `http`, `ssl`, `udp`, `direct`. Category nam
 - [x] Identify exact package and app version from the supplied APK.
 - [x] Identify the `OpenVPNClient` descriptor reference and LIAPP-protected asset; confirm the descriptor alone does not establish OpenVPN protocol use.
 - [x] Trace the primary DEX-defined Android TUN stack: `VpnService`, `TunnelVpnManager`, `Tun2Socks`, `libtun2socks.so`, SSH manager and DNS helpers.
+- [x] Confirm the TUN settings pass traffic to a configured SOCKS endpoint and expose separate DNS/UDP relay controls.
+- [x] Confirm separate service launch paths for SSH, XRay and SOCKS/HTTP forwarders.
 - [x] Identify custom-payload formatter and CR/LF/SSH placeholder token references.
 - [x] Record server and payload fields, methods, categories and ambiguous values.
 - [ ] Trace server/payload category matching and selection/fallback rules.
