@@ -67,6 +67,25 @@ This closely matches the APNA primary-DEX evidence: startClienteSSH, startForwar
 
 **Still unproven for APNA:** the exact settings source, whether all APNA SSH categories use this path, the local listener address/port, service implementation identity, credential selection, and whether the APK's protected service diverges from this public framework.
 
+## 2B. Independent confirmation of the exact APNA split tokens
+
+A second public implementation contains the exact method pair `formatCustomPayload` / `injectSplitPayload` and, importantly, an `injectSimpleSplit` branch that explicitly recognizes `[instant_split]`:
+
+- Repository: https://github.com/Andley302/SecondVPN
+- Inspected file at commit `8e6e96fb8b437efbff6e9df03b9683ef17cfee44`: [TunnelUtils.java](https://github.com/Andley302/SecondVPN/blob/8e6e96fb8b437efbff6e9df03b9683ef17cfee44/app/src/main/java/app/one/secondvpnlite/tunnel/TunnelUtils.java)
+- Additional related copy: [flutter_vpn TunnelUtils.java](https://github.com/hossein119gh/flutter_vpn/blob/02ff60c86e7b4f02a1008e49f3706baed4aa6ca3/android/src/main/java/com/slipkprojects/ultrasshservice/tunnel/TunnelUtils.java)
+
+The SecondVPN implementation confirms the following behavior in that codebase:
+- `[instant_split]` divides the payload into sequential writes, each followed by flush, with no deliberate sleep.
+- `[delay_split]` divides it into pieces and sleeps 1,000 ms between pieces.
+- `[rotate=a;b;c]` chooses one list entry per formatter invocation and advances round-robin on subsequent invocations; it resets when the payload template changes.
+- `[host]`, `[host_port]`, `[port]`, `[protocol]`, `[ssh]`, `[crlf]`, `[cr]`, `[lf]`, and `[lfcr]` are expanded by the related formatter; its protocol default is HTTP/1.0 and SSH token becomes host:port.
+- Bytes are written using ISO-8859-1 and flushed after each segment.
+
+This is substantially stronger corroboration for APNA's observed `[instant_split]` token than the earlier source that only implemented `[split]`. However, it remains sibling-source evidence: the APNA protected bytecode has not yet been fully reconstructed, so the exact default protocol, delay duration, rotation state scope, and replacement order are still verification items.
+
+ApnaWin now contains an isolated, tested payload compiler at `src/apnawin/engines/apna_payload.py`. It implements the DEX-observed placeholders, ISO-8859-1 encoding, instant/delayed segment boundaries and per-profile round-robin rotation. The one-second delay is configurable and explicitly documented as a sibling-derived default. Unknown tokens are preserved rather than guessed. This compiler is not yet wired into an SSH connection engine; it is a tested building block, not a claim of APNA connectivity.
+
 ## 2A. SSH connection and proxy-handshake branches in the related source
 
 The related TunnelManagerThread reads SSH server/port, username, password, optional key path and local SOCKS port from its settings, connects with 10-second connect and 20-second read timeouts, authenticates, creates a dynamic local SOCKS forwarder, then starts the TUN service.
