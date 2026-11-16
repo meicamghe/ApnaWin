@@ -12,6 +12,10 @@ import binascii
 import json
 import re
 import struct
+import zipfile
+from dataclasses import dataclass, field
+from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 MAX_INPUT_BYTES = 8 * 1024 * 1024
@@ -25,6 +29,22 @@ MASK = 0xFFFFFFFF
 # Fixed catalog-format constant recovered from the published decoder and
 # independently verified against the supplied APNA TUNNEL LITE v51 APK asset.
 _CATALOG_KEY = b"...|..."
+
+
+MAX_APK_BYTES = 128 * 1024 * 1024
+_EMBEDDED_CATALOG_PATH = "assets/janur.json"
+
+
+@dataclass(frozen=True, repr=False)
+class ApnaLiteCredentials:
+    """Secret-bearing account values recovered from the encrypted catalog."""
+
+    username: str = field(repr=False)
+    password: str = field(repr=False)
+
+    def __repr__(self) -> str:
+        return "ApnaLiteCredentials(<redacted>)"
+
 
 _SERVER_FIELDS = frozenset(
     {
@@ -249,6 +269,84 @@ def decode_apna_lite_catalog(encrypted: bytes) -> dict[str, Any]:
             raise ApnaLiteCatalogError(f"{field} must be a string")
 
     return document
+
+
+
+def decode_apna_lite_catalog_credential(encoded: str) -> str:
+    """Decode one Base64 + XXTEA catalog credential without logging its value."""
+    if not isinstance(encoded, str):
+        raise TypeError("catalog credential must be text")
+    if not encoded or len(encoded) > 16 * 1024:
+        raise ApnaLiteCatalogError("Catalog credential size is invalid")
+    try:
+        ciphertext = base64.b64decode(encoded.encode("ascii"), validate=True)
+    except (UnicodeEncodeError, binascii.Error, ValueError) as exc:
+        raise ApnaLiteCatalogError("Catalog credential encoding is invalid") from exc
+    plaintext = _decrypt_xxtea(ciphertext)
+    try:
+        value = plaintext.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ApnaLiteCatalogError("Catalog credential is not UTF-8") from exc
+    if not value or any(ord(char) < 0x20 or ord(char) == 0x7F for char in value):
+        raise ApnaLiteCatalogError("Catalog credential contains invalid characters")
+    return value
+
+
+def decode_apna_lite_catalog_credentials(document: dict[str, Any]) -> ApnaLiteCredentials:
+    """Return the root account credentials as a redacted, secret-bearing value."""
+    if not isinstance(document, dict):
+        raise TypeError("document must be a dictionary")
+    try:
+        username = decode_apna_lite_catalog_credential(document["Username"])
+        password = decode_apna_lite_catalog_credential(document["Password"])
+    except KeyError as exc:
+        raise ApnaLiteCatalogError("Catalog account credentials are missing") from exc
+    return ApnaLiteCredentials(username=username, password=password)
+
+
+def decode_apna_lite_apk_catalog(apk: bytes | str | Path) -> dict[str, Any]:
+    """Extract and decode assets/janur.json from a bounded APNA Lite APK.
+
+    The returned document may contain credentials. Callers must keep it in
+    memory, avoid logs/diagnostics, and move secrets into DPAPI storage.
+    """
+    if isinstance(apk, bytes):
+        if not apk or len(apk) > MAX_APK_BYTES:
+            raise ApnaLiteCatalogError("APK size is invalid")
+        archive_source = BytesIO(apk)
+    elif isinstance(apk, (str, Path)):
+        path = Path(apk)
+        try:
+            size = path.stat().st_size
+        except OSError as exc:
+            raise ApnaLiteCatalogError("APK file cannot be read") from exc
+        if size <= 0 or size > MAX_APK_BYTES:
+            raise ApnaLiteCatalogError("APK size is invalid")
+        archive_source = path
+    else:
+        raise TypeError("apk must be bytes or a filesystem path")
+
+    try:
+        with zipfile.ZipFile(archive_source) as archive:
+            matches = [
+                info for info in archive.infolist()
+                if info.filename == _EMBEDDED_CATALOG_PATH
+            ]
+            if len(matches) != 1:
+                raise ApnaLiteCatalogError("APK must contain exactly one embedded APNA catalog")
+            info = matches[0]
+            if (
+                info.is_dir()
+                or info.flag_bits & 0x1
+                or info.file_size <= 0
+                or info.file_size > MAX_INPUT_BYTES
+                or info.compress_size > MAX_INPUT_BYTES
+            ):
+                raise ApnaLiteCatalogError("Embedded APNA catalog size or flags are invalid")
+            encrypted = archive.read(info)
+    except (OSError, zipfile.BadZipFile, RuntimeError, KeyError) as exc:
+        raise ApnaLiteCatalogError("APK archive is invalid or unreadable") from exc
+    return decode_apna_lite_catalog(encrypted)
 
 
 def summarize_apna_lite_catalog(document: dict[str, Any]) -> dict[str, int | str]:
