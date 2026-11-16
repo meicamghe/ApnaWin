@@ -227,6 +227,20 @@ class ApnaTunnelEngine:
         if exit_code is not None:
             self._state = ConnectionState.ERROR
             self.last_error = f"Xray helper exited unexpectedly with code {exit_code}"
+            return self._state
+        try:
+            session_healthy = (
+                self._session is not None and self._session.is_healthy
+            )
+        except Exception as exc:
+            self._state = ConnectionState.ERROR
+            self.last_error = f"Could not inspect APNA SSH session health: {exc}"
+            return self._state
+        if not session_healthy:
+            self._state = ConnectionState.ERROR
+            self.last_error = (
+                "APNA SSH authentication or the local SOCKS5 gateway stopped unexpectedly"
+            )
         return self._state
 
     def disconnect(self) -> None:
