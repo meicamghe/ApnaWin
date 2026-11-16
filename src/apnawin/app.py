@@ -459,7 +459,7 @@ class MainWindow(QMainWindow):
 
     def _connection_operation_finished(self, success, detail):
         if success and detail == "connect":
-            self.status_label.setText("Connected — TUN, dual-stack routes, DNS and external TLS egress verified.")
+            self.status_label.setText("Connected — selected tunnel, TUN, dual-stack routes, DNS and external egress verified.")
         elif success:
             self.status_label.setText("Disconnected — VPN helper stopped.")
         else:
@@ -530,6 +530,7 @@ class MainWindow(QMainWindow):
             self.add_button.setEnabled(False)
             self.import_button.setEnabled(False)
             self.import_xray_config_button.setEnabled(False)
+            self.import_apna_apk_button.setEnabled(False)
             self.status_label.setText(
                 "Profile storage is unavailable — editing is disabled to protect existing data."
             )
@@ -917,7 +918,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Export failed", str(exc))
             return
         self.status_label.setText(
-            f"Exported {len(self.profiles)} profile(s). Xray credentials/configs are not included."
+            f"Exported {len(self.profiles)} profile(s). Xray and APNA secrets/configs are not included."
         )
 
     def _remove_profile(self) -> None:
