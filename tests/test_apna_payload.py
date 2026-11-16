@@ -128,7 +128,7 @@ def test_apna_formatter_expands_method_and_default_user_agent() -> None:
     )
     assert chunks[0].data == (
         b"CONNECT ssh.example.test 22 ssh.example.test:22 HTTP/1.0 "
-        b"ssh.example.test:22\\r\\n"
+        b"ssh.example.test:22\r\n"
         b"Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 "
         b"(KHTML, like Gecko) Chrome/44.0.2403.130 Safari/537.36"
     )
