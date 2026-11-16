@@ -136,7 +136,7 @@ def test_http_proxy_can_explicitly_accept_websocket_upgrade_101() -> None:
     def server(server_socket):
         received.append(server_socket.recv(4096))
         server_socket.sendall(
-            b"HTTP/1.1 101 Switching Protocols\\r\\nUpgrade: websocket\\r\\n\\r\\n"
+            b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\r\n"
         )
         server_socket.close()
 
@@ -157,7 +157,7 @@ def test_http_proxy_can_explicitly_accept_websocket_upgrade_101() -> None:
     assert connected is client
     connected.close()
     worker.join(timeout=1)
-    assert received == [b"GET / HTTP/1.1\\r\\nHost: ssh.example.test\\r\\n\\r\\n"]
+    assert received == [b"GET / HTTP/1.1\r\nHost: ssh.example.test\r\n\r\n"]
 
 
 def test_config_rejects_invalid_http_status_policy() -> None:
