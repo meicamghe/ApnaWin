@@ -109,7 +109,6 @@ def test_direct_mode_does_not_inject_payload(monkeypatch) -> None:
         connect_port=22,
         target_host="ssh.example.test",
         target_port=22,
-        payload="must not be sent",
     )
     connected = connector.connect(config)
     server.settimeout(0.05)
@@ -168,5 +167,72 @@ def test_config_rejects_invalid_http_status_policy() -> None:
             connect_port=8080,
             target_host="ssh.example.test",
             target_port=443,
+            payload="GET / HTTP/1.1[crlf][crlf]",
             expected_http_statuses=(200, 700),
         )
+
+
+def test_tls_direct_wraps_socket_and_sends_no_http_payload() -> None:
+    client, server = socket.socketpair()
+    seen = {}
+    class TlsContext:
+        def wrap_socket(self, sock, *, server_hostname):
+            seen["sni"] = server_hostname
+            return sock
+    connector = ApnaPayloadSocketConnector(
+        socket_factory=lambda address, timeout: client,
+        tls_context=TlsContext(),
+    )
+    config = PayloadSocketConfig(
+        mode=PayloadSocketMode.TLS_DIRECT,
+        connect_host="ssh.example.test",
+        connect_port=443,
+        target_host="ssh.example.test",
+        target_port=1194,
+        sni="amtun.example.test",
+    )
+    connected = connector.connect(config)
+    assert connected is client
+    assert seen["sni"] == "amtun.example.test"
+    server.settimeout(0.05)
+    with pytest.raises(TimeoutError):
+        server.recv(1)
+    connected.close()
+    server.close()
+
+
+def test_tls_http_proxy_uses_proxy_sni_and_expands_cf_and_brand() -> None:
+    received = []
+    def server(server_socket):
+        received.append(server_socket.recv(4096))
+        server_socket.sendall(b"HTTP/1.1 101 Switching Protocols\\r\\n\\r\\n")
+        server_socket.close()
+    client, worker = _socket_pair_factory(server)
+    seen = {}
+    class TlsContext:
+        def wrap_socket(self, sock, *, server_hostname):
+            seen["sni"] = server_hostname
+            return sock
+    connector = ApnaPayloadSocketConnector(
+        socket_factory=lambda address, timeout: client,
+        tls_context=TlsContext(),
+    )
+    config = PayloadSocketConfig(
+        mode=PayloadSocketMode.TLS_HTTP_PROXY,
+        connect_host="front.example.test",
+        connect_port=443,
+        target_host="ssh.example.test",
+        target_port=1194,
+        payload="GET / HTTP/1.1[crlf]Host: [cf][crlf]X-Brand: [brand][crlf][crlf]",
+        sni="front.example.test",
+        brand="ApnaWin",
+        expected_http_statuses=(101,),
+    )
+    connected = connector.connect(config)
+    assert connected is client
+    assert seen["sni"] == "front.example.test"
+    connected.close()
+    worker.join(timeout=1)
+    assert received == [
+        b"GET / HTTP/1.1\\r\\nHost: front.example.test\\r\\nX-Brand: ApnaWin\\r\\n\\r\\n"
+    ]
