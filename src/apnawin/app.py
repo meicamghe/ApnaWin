@@ -104,6 +104,28 @@ class ProfileDialog(QDialog):
         )
 
 
+class _ConnectionWorker(QThread):
+    operation_finished = Signal(bool, str)
+
+    def __init__(self, controller, action, profile=None):
+        super().__init__()
+        self.controller = controller
+        self.action = action
+        self.profile = profile
+
+    def run(self):
+        try:
+            if self.action == "connect":
+                self.controller.connect(self.profile)
+            elif self.action == "disconnect":
+                self.controller.disconnect()
+            else:
+                raise ValueError("Unsupported connection operation")
+        except Exception as exc:
+            self.operation_finished.emit(False, f"{type(exc).__name__}: {exc}")
+        else:
+            self.operation_finished.emit(True, self.action)
+
 class MainWindow(QMainWindow):
     def __init__(
         self,
