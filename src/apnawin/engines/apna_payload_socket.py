@@ -23,6 +23,7 @@ class PayloadSocketMode(str, Enum):
     DIRECT = "direct"
     HTTP_PROXY = "http_proxy"
     TLS_DIRECT = "tls_direct"
+    TLS_HTTP_PROXY = "tls_http_proxy"
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +35,8 @@ class PayloadSocketConfig:
     target_port: int
     payload: str = ""
     sni: str | None = None
+    cf_host: str | None = None
+    brand: str | None = None
     protocol: str = "HTTP/1.0"
     dropbear_no_response: bool = False
     validate_http_response: bool = True
@@ -70,6 +73,23 @@ class PayloadSocketConfig:
                 raise ValueError(f"{name} must be positive")
         if not 64 <= self.max_response_header_bytes <= 64 * 1024:
             raise ValueError("max_response_header_bytes is outside the safe range")
+        if self.cf_host is not None and (
+            not isinstance(self.cf_host, str)
+            or not self.cf_host
+            or len(self.cf_host) > 253
+            or any(ord(char) < 0x21 or ord(char) > 0x7E for char in self.cf_host)
+        ):
+            raise ValueError("cf_host is invalid")
+        if self.brand is not None and (
+            not isinstance(self.brand, str)
+            or len(self.brand) > 128
+            or any(ord(char) < 0x20 or ord(char) > 0x7E for char in self.brand)
+        ):
+            raise ValueError("brand is invalid")
+        if self.mode in {PayloadSocketMode.DIRECT, PayloadSocketMode.TLS_DIRECT} and self.payload:
+            raise ValueError("direct transport modes must not contain an HTTP payload")
+        if self.mode in {PayloadSocketMode.HTTP_PROXY, PayloadSocketMode.TLS_HTTP_PROXY} and not self.payload:
+            raise ValueError("HTTP proxy transport modes require a non-empty payload")
         if self.sni is not None and (
             not isinstance(self.sni, str)
             or not self.sni
@@ -150,14 +170,19 @@ class ApnaPayloadSocketConnector:
             raw_socket.settimeout(config.read_timeout)
             active_socket = raw_socket
 
-            if config.mode is PayloadSocketMode.TLS_DIRECT:
+            if config.mode in {PayloadSocketMode.TLS_DIRECT, PayloadSocketMode.TLS_HTTP_PROXY}:
+                default_sni = (
+                    config.connect_host
+                    if config.mode is PayloadSocketMode.TLS_HTTP_PROXY
+                    else config.target_host
+                )
                 active_socket = self._tls_context.wrap_socket(
                     raw_socket,
-                    server_hostname=config.sni or config.target_host,
+                    server_hostname=config.sni or default_sni,
                 )
                 active_socket.settimeout(config.read_timeout)
 
-            if config.mode is PayloadSocketMode.DIRECT:
+            if config.mode in {PayloadSocketMode.DIRECT, PayloadSocketMode.TLS_DIRECT}:
                 return active_socket
 
             chunks = render_apna_payload(
@@ -165,6 +190,8 @@ class ApnaPayloadSocketConnector:
                 host=config.target_host,
                 port=config.target_port,
                 protocol=config.protocol,
+                cf_host=config.cf_host or config.connect_host,
+                brand=config.brand,
                 rotation=self._rotation,
             )
             send_payload(_SocketWriter(active_socket), chunks)
@@ -172,7 +199,7 @@ class ApnaPayloadSocketConnector:
             if (
                 config.validate_http_response
                 and not config.dropbear_no_response
-                and config.mode in {PayloadSocketMode.HTTP_PROXY, PayloadSocketMode.TLS_DIRECT}
+                and config.mode in {PayloadSocketMode.HTTP_PROXY, PayloadSocketMode.TLS_HTTP_PROXY}
             ):
                 _read_http_connect_response(
                     active_socket,
