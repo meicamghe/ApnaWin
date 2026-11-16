@@ -46,6 +46,11 @@ jobs:
         run: python -m pip install -e ".[dev]"
       - name: Run full test suite
         run: python -m pytest -q
+      - name: Non-blocking live APNA catalog reachability probe
+        continue-on-error: true
+        run: >-
+          python -c "from apnawin.services.apna_lite_source import ApnaLiteCatalogSource;
+          print(ApnaLiteCatalogSource(timeout_seconds=8.0, retry_attempts=2).fetch_summary())"
 
   security-check:
     name: Installer and runtime security tests
