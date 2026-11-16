@@ -8,9 +8,9 @@ This note records externally published reverse-engineering findings and direct, 
 - Package: `com.apnatunnel.lite`
 - APK metadata reported by the analysis: versionCode 51, versionName `APNA`
 - External analysis repository: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM
-- Decoder source: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDMDM/blob/main/decoders/Python/apps/APNA_Tunnel_Lite/APNA_Tunnel_Lite.py
-- Decoder notes: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDMDM/blob/main/decoders/Python/apps/APNA_Tunnel_Lite/README.md
-- External analysis report: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDMDM/blob/main/analysis/platform/supplied-integrations/2026-11-14/ANALYSIS.md
+- Decoder source: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM/blob/main/decoders/Python/apps/APNA_Tunnel_Lite/APNA_Tunnel_Lite.py
+- Decoder notes: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM/blob/main/decoders/Python/apps/APNA_Tunnel_Lite/README.md
+- External analysis report: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM/blob/main/analysis/platform/supplied-integrations/2026-11-14/ANALYSIS.md
 
 These are third-party reverse-engineering sources, not official provider documentation. Their claims are leads to validate against the local APK and fresh responses. The external repository's own result report distinguishes structural integration tests from authenticated/live provider connection tests.
 
