@@ -153,7 +153,7 @@ def test_engine_starts_ssh_then_encrypted_xray_tun_and_reports_connected():
     engine, store, supervisor, _sessions = _engine(events)
     engine.connect(_profile())
     assert engine.state is ConnectionState.CONNECTED
-    assert events == ["session-connect", "config-save", "xray-start"]
+    assert events == ["session-connect", "config-save", "xray-start", "udp-dns-probe"]
     assert store.saved
     assert supervisor.started_profile.transport is Transport.XRAY
     assert supervisor.started_profile.endpoint_port == 12345
