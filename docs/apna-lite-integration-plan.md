@@ -76,7 +76,9 @@ The sample includes payload methods `http`, `ssl`, `udp`, `direct`. Category nam
 - [x] Add a lower-level payload socket connector for direct TCP, HTTP payload injection, and TLS-before-payload; validate bounded HTTP 200 responses, preserve Dropbear no-response mode, and close sockets on all failures. This is a stream transport only, not SSH authentication.
 - [ ] Verify APNA's protected service/mode selection and catalog-to-endpoint mapping before enabling any transport mode.
 - [ ] Add a real SSH client/authentication layer with explicit host-key verification and dynamic local SOCKS forwarding; then connect it to the payload socket connector.
-- [ ] Build/validate the UDPGW packet relay and integrate the TUN data plane for UDP as well as TCP.
+- [x] Implement and test the BadVPN-compatible UDPGW/PacketProto wire codec (IPv4/IPv6, DNS/REBIND/keepalive flags, little-endian framing and incremental stream parsing).
+- [ ] Implement a local SOCKS5 gateway: TCP CONNECT via the SSH SOCKS endpoint; UDP ASSOCIATE via a persistent UDPGW stream tunneled through SSH; bounded flow-ID/LRU lifecycle and keepalives.
+- [ ] Connect the local SOCKS5 gateway to the existing Xray/Wintun TUN outbound and verify real TCP, UDP and DNS traffic. Do not use BadVPN's Windows TAP-Windows device path unless a separate TAP driver is deliberately selected.
 - [x] Record server and payload fields, methods, categories and ambiguous values.
 - [ ] Trace server/payload category matching and selection/fallback rules.
 - [ ] Recover the Android SSH + payload-injection contract and local forwarding topology.
