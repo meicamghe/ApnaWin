@@ -51,8 +51,14 @@ class XrayTunnelSupervisor:
         if profile.transport != Transport.XRAY:
             raise ValueError("The elevated TUN supervisor accepts XRAY profiles only")
         if self._process is not None:
-            if self._process.poll() is None:
+            exit_code = self._process.poll()
+            if exit_code is None:
                 raise RuntimeError("An elevated Xray session is already running")
+            if exit_code != 0:
+                raise RuntimeError(
+                    "The previous VPN helper exited abnormally; network cleanup is unverified. "
+                    "A new tunnel will not be started over uncertain network state."
+                )
             self._process.close()
             self._process = None
         if not self.config_store.has_config(profile.name):
@@ -67,19 +73,23 @@ class XrayTunnelSupervisor:
         return process.pid
 
     def poll(self) -> int | None:
+        """Observe helper exit but retain ownership until cleanup is acknowledged."""
         if self._process is None:
             return None
-        code = self._process.poll()
-        if code is not None:
-            self._process.close()
-            self._process = None
-        return code
+        return self._process.poll()
 
     def stop(self) -> None:
         if self._process is None:
             return
         process = self._process
-        process.terminate(timeout=self.stop_timeout)
+        exit_code = process.poll()
+        if exit_code is not None and exit_code != 0:
+            raise RuntimeError(
+                "VPN helper exited abnormally; route/DNS cleanup cannot be confirmed. "
+                "The session is retained as ERROR instead of reporting a false disconnect."
+            )
+        if exit_code is None:
+            process.terminate(timeout=self.stop_timeout)
         process.close()
         self._process = None
 
