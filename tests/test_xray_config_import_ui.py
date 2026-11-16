@@ -91,7 +91,7 @@ def test_import_xray_config_is_validated_and_encrypted(tmp_path, qapp, monkeypat
     assert store.load("OFFICE") == valid_config_bytes()
     assert b"secret-value" not in store.path.read_bytes()
     assert "imported and encrypted" in window.profile_details.text()
-    assert "Connect remains disabled" in window.status_label.text()
+    assert "installed helper verifies TUN routes" in window.status_label.text()
     assert not window.connect_button.isEnabled()
     window.close()
 
