@@ -529,3 +529,46 @@ def test_failed_disconnect_does_not_retry_forever_on_window_close(
     assert window._close_after_disconnect is False
     assert window._connection_worker is None
     window._connection_timer.stop()
+
+
+def test_live_apna_catalog_button_is_present_and_windows_gated(tmp_path, qapp):
+    window = MainWindow(profiles_path=tmp_path / "profiles.json")
+
+    assert window.import_apna_live_button.isEnabled() is (os.name == "nt")
+    window.close()
+
+
+def test_live_catalog_worker_returns_catalog_without_writing_plaintext(monkeypatch, qapp):
+    import apnawin.app as app_module
+
+    class FakeSource:
+        def __init__(self, **kwargs):
+            assert kwargs == {"timeout_seconds": 8.0, "retry_attempts": 2}
+
+        def fetch_document(self):
+            return {"Version": "synthetic", "Free_servers": [], "Payloads": []}
+
+    monkeypatch.setattr(app_module, "ApnaLiteCatalogSource", FakeSource)
+    worker = app_module._ApnaCatalogFetchWorker()
+    worker.run()
+
+    assert worker.catalog["Version"] == "synthetic"
+    assert worker.error is None
+
+
+def test_live_catalog_worker_reports_only_exception_type_and_message(monkeypatch, qapp):
+    import apnawin.app as app_module
+
+    class FakeSource:
+        def __init__(self, **kwargs):
+            pass
+
+        def fetch_document(self):
+            raise OSError("temporary network failure")
+
+    monkeypatch.setattr(app_module, "ApnaLiteCatalogSource", FakeSource)
+    worker = app_module._ApnaCatalogFetchWorker()
+    worker.run()
+
+    assert worker.catalog is None
+    assert worker.error == "OSError: temporary network failure"
