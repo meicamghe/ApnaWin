@@ -85,7 +85,7 @@ class PayloadRandom:
                 raise PayloadFormatError("Random selector returned an out-of-range index")
             return values[selected]
 
-        return re.sub(r"\\[random=(.*?)\\]", replace, payload)
+        return re.sub(r"\[random=(.*?)\]", replace, payload)
 
 
 
@@ -136,7 +136,9 @@ def render_apna_payload(
         if not isinstance(value, str) or not value or len(value) > limit:
             raise PayloadFormatError(f"{name} is invalid")
         if any(ord(char) < 0x20 or ord(char) > 0x7E for char in value):
-            raise PayloadFormatError(f"{name} contains whitespace or control characters")
+            raise PayloadFormatError(f"{name} contains control or non-ASCII characters")
+        if name == "method" and any(char.isspace() for char in value):
+            raise PayloadFormatError("method cannot contain whitespace")
     if isinstance(delay_split_ms, bool) or not isinstance(delay_split_ms, int):
         raise TypeError("Split delay must be an integer number of milliseconds")
     if not 0 <= delay_split_ms <= 10_000:
@@ -191,10 +193,10 @@ def _replace_rotate_first(payload: str) -> str:
 
 def _expand_repeated_line_endings(payload: str) -> str:
     replacements = (
-        (re.compile(r"\\[cr\\*(\\d+)\\]"), "\\r"),
+        (re.compile(r"\[cr\*(\d+)\]"), "\r"),
         (re.compile(r"\\[lf\\*(\\d+)\\]"), "\\n"),
-        (re.compile(r"\\[crlf\\*(\\d+)\\]"), "\\r\\n"),
-        (re.compile(r"\\[lfcr\\*(\\d+)\\]"), "\\n\\r"),
+        (re.compile(r"\[cr\*(\d+)\]"), "\r"),
+        (re.compile(r"\[lfcr\*(\d+)\]"), "\n\r"),
     )
     for pattern, ending in replacements:
         def replace(match: re.Match[str]) -> str:
@@ -206,12 +208,6 @@ def _expand_repeated_line_endings(payload: str) -> str:
         payload = pattern.sub(replace, payload)
     return payload
 
-
-def _first_rotate_value(value: str) -> str:
-    values = value.split(";")
-    if not values or any(not item for item in values):
-        raise PayloadFormatError("Rotate expressions must contain non-empty values")
-    return values[0]
 
 
 def _chunk(text: str, delay_after_ms: int) -> PayloadChunk:
