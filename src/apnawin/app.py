@@ -287,6 +287,7 @@ class MainWindow(QMainWindow):
         self,
         profiles_path: Path | None = None,
         xray_config_store: XrayConfigStore | None = None,
+        apna_profile_store: ApnaProfileStore | None = None,
         connection_controller: ConnectionController | None = None,
     ) -> None:
         super().__init__()
@@ -295,6 +296,9 @@ class MainWindow(QMainWindow):
         self.profiles_path = profiles_path or profile_file_path()
         self.xray_config_store = xray_config_store or XrayConfigStore(
             self.profiles_path.with_name("xray-configs.json")
+        )
+        self.apna_profile_store = apna_profile_store or ApnaProfileStore(
+            self.profiles_path.with_name("apna-profiles.json")
         )
         self.connection_controller = connection_controller or self._create_live_connection_controller()
         self._connection_worker = None
@@ -329,6 +333,9 @@ class MainWindow(QMainWindow):
         self.import_xray_config_button = QPushButton("Import Xray config…")
         self.import_xray_config_button.clicked.connect(self._import_xray_config)
         self.import_xray_config_button.setEnabled(False)
+        self.import_apna_apk_button = QPushButton("Import APNA APK…")
+        self.import_apna_apk_button.clicked.connect(self._import_apna_apk)
+        self.import_apna_apk_button.setEnabled(os.name == "nt")
         self.edit_button.setEnabled(False)
         self.remove_button.setEnabled(False)
 
@@ -339,6 +346,7 @@ class MainWindow(QMainWindow):
         profile_actions.addWidget(self.import_button)
         profile_actions.addWidget(self.export_button)
         profile_actions.addWidget(self.import_xray_config_button)
+        profile_actions.addWidget(self.import_apna_apk_button)
         profile_actions.addStretch(1)
 
         self.connect_button = QPushButton("Connect")
@@ -381,8 +389,20 @@ class MainWindow(QMainWindow):
         helper = Path(program_files) / "ApnaWin" / "ApnaWinElevator.exe"
         if helper.is_symlink() or not helper.is_file():
             return None
-        supervisor = XrayTunnelSupervisor(helper, self.xray_config_store)
-        engine = XrayTunnelEngine(supervisor, helper, self.xray_config_store)
+        xray_supervisor = XrayTunnelSupervisor(helper, self.xray_config_store)
+        xray_engine = XrayTunnelEngine(
+            xray_supervisor, helper, self.xray_config_store
+        )
+        apna_supervisor = XrayTunnelSupervisor(helper, self.xray_config_store)
+        apna_engine = ApnaTunnelEngine(
+            self.apna_profile_store.load,
+            self.xray_config_store,
+            apna_supervisor,
+        )
+        engine = MultiTransportTunnelEngine({
+            Transport.XRAY: xray_engine,
+            Transport.APNA_SSH: apna_engine,
+        })
         return ConnectionController(engine)
 
     def _update_connection_controls(self):
