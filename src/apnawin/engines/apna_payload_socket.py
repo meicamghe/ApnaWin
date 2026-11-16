@@ -36,11 +36,24 @@ class PayloadSocketConfig:
     sni: str | None = None
     protocol: str = "HTTP/1.0"
     dropbear_no_response: bool = False
+    validate_http_response: bool = True
+    expected_http_statuses: tuple[int, ...] = (200,)
     connect_timeout: float = 10.0
     read_timeout: float = 20.0
     max_response_header_bytes: int = 16 * 1024
 
     def __post_init__(self) -> None:
+        if not isinstance(self.mode, PayloadSocketMode):
+            raise ValueError("mode must be a PayloadSocketMode")
+        if not isinstance(self.expected_http_statuses, tuple) or not self.expected_http_statuses:
+            raise ValueError("expected_http_statuses must be a non-empty tuple")
+        if any(
+            isinstance(status, bool) or not isinstance(status, int) or not 100 <= status <= 599
+            for status in self.expected_http_statuses
+        ):
+            raise ValueError("expected_http_statuses contains an invalid HTTP status")
+        if len(set(self.expected_http_statuses)) != len(self.expected_http_statuses):
+            raise ValueError("expected_http_statuses must not contain duplicates")
         for name in ("connect_host", "target_host"):
             value = getattr(self, name)
             if not isinstance(value, str) or not value or len(value) > 253:
@@ -78,7 +91,11 @@ class _SocketWriter:
         return None
 
 
-def _read_http_connect_response(sock: socket.socket, limit: int) -> int:
+def _read_http_connect_response(
+    sock: socket.socket,
+    limit: int,
+    expected_statuses: tuple[int, ...],
+) -> int:
     """Read only through CRLFCRLF so SSH bytes following the header stay buffered."""
     response = bytearray()
     while not response.endswith(b"\r\n\r\n"):
@@ -98,8 +115,11 @@ def _read_http_connect_response(sock: socket.socket, limit: int) -> int:
         status = int(parts[1])
     except (UnicodeError, ValueError) as exc:
         raise PayloadTransportError("Proxy returned an invalid HTTP status line") from exc
-    if status != 200:
-        raise PayloadTransportError(f"Proxy rejected the SSH payload (HTTP {status})")
+    if status not in expected_statuses:
+        expected = ", ".join(str(value) for value in expected_statuses)
+        raise PayloadTransportError(
+            f"Proxy returned HTTP {status}; expected one of: {expected}"
+        )
     return status
 
 
@@ -149,8 +169,16 @@ class ApnaPayloadSocketConnector:
             )
             send_payload(_SocketWriter(active_socket), chunks)
 
-            if config.mode is PayloadSocketMode.HTTP_PROXY and not config.dropbear_no_response:
-                _read_http_connect_response(active_socket, config.max_response_header_bytes)
+            if (
+                config.validate_http_response
+                and not config.dropbear_no_response
+                and config.mode in {PayloadSocketMode.HTTP_PROXY, PayloadSocketMode.TLS_DIRECT}
+            ):
+                _read_http_connect_response(
+                    active_socket,
+                    config.max_response_header_bytes,
+                    config.expected_http_statuses,
+                )
 
             return active_socket
         except Exception as exc:
