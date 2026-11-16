@@ -50,3 +50,29 @@ The primary DEX identifies these components and fields:
 - The ABI split/native binary used by the APK. The supplied base APK has no ELF `.so`; its native library path is resolved at runtime through `ApplicationInfo.nativeLibraryDir` / extracted app data.
 
 No server address, port, username or password has been guessed. The next implementation gate is recovering the protected service/catalog mapping and building a Windows UDPGW-capable data path, then testing it with an authorized real profile.
+
+## LIAPP hidden DEX container inspection
+
+The supplied APK's `assets/.bxdtcxfzx.dex` is not a second ordinary application DEX. Its DEX header declares a 428-byte stub with one `com.liapp` class; the ZIP entry is 99,335 bytes, leaving 98,907 bytes appended beyond the declared DEX file size. `assets/LIAPP.ini` identifies LIAPP 5.1.1.190. The appended region is therefore protected LIAPP payload, not a set of readable DEX classes. The ordinary DEX inventory cannot recover `SalamanderService` from this asset without the LIAPP runtime/decryption path.
+
+This narrows the reverse-engineering gate: the remaining SSH service implementation and exact mode selection are not simply overlooked classes in the visible secondary DEX. The next useful inputs are a runtime trace from an installed APNA app (service intents, resolved settings, sockets/ports) or an authorized deprotected/split installation image. No attempt has been made to bypass LIAPP licensing or tamper protections.
+
+## Embedded catalog verification against the supplied APK
+
+The actual `assets/janur.json` was decoded locally with the fixed catalog-format key already implemented in `apna_lite_catalog.py`; its SHA-256-matched APK asset reports Version 580, 44 free servers and 623 payload records. The top-level credential fields were not logged or copied into fixtures.
+
+The SSH mapper's four supported server categories are present in this exact catalog snapshot:
+- `ocsws`: 8 free server records; 469 payloads (223 `ssl`, 245 `http`, 1 `direct`)
+- `ocscf`: 2 server records; 118 `http` payloads
+- `ocsnormal`: 2 server records; 1 `http` payload
+- `ocshttp`: 4 server records; 1 `ssl` payload
+
+Every server record in these four categories has numeric `server_port`, `ssl_port`, and `server_udp_port` in this embedded snapshot. The observed values are 1194, 443 and 53 respectively. This is a property of the supplied Version 580 catalog, not a promise that a later live catalog will use the same values.
+
+## Windows integration status
+
+The branch now includes an end-to-end component chain in code: APK catalog decode → SSH-family profile mapper → DPAPI-protected APNA profile store → payload TCP/TLS connector → Paramiko SSH authentication and loopback SOCKS5 TCP forwarding → BadVPN-compatible UDPGW stream/flow codec → local SOCKS5 TCP/UDP gateway → Xray native Wintun TUN engine. The desktop UI imports an APNA APK, selects server/payload records, optionally probes an SSH host key, stores encrypted settings and routes APNA profiles to `ApnaTunnelEngine`.
+
+These components are covered by unit/integration tests with synthetic catalogs, fake SSH transports and socket pairs. They have **not** yet authenticated to a real APNA server or carried real user traffic. The current execution environment cannot resolve the embedded APNA hostnames (DNS returns a temporary resolver failure), so no live endpoint/authentication result is available here.
+
+A compatibility correction now accepts both HTTP 200 CONNECT success and HTTP 101 Upgrade success for payloads containing a WebSocket Upgrade header. The related Android injector returns the socket for either class of response; SSH host-key exchange and authentication remain the decisive next checks. Non-WebSocket payloads still require HTTP 200.
