@@ -163,3 +163,33 @@ def test_disconnect_is_idempotent():
     )
     session.disconnect()
     session.disconnect()
+
+
+def test_failed_gateway_cleanup_retains_both_handles_for_retry():
+    events = []
+    class FlakyGateway(_FakeGateway):
+        def __init__(self, config, *, events):
+            super().__init__(config, events=events)
+            self.fail_close = True
+
+        def close(self):
+            events.append("gateway-close")
+            if self.fail_close:
+                self.fail_close = False
+                raise OSError("busy")
+    ssh_instances = []
+    def make_ssh(*args):
+        instance = _FakeSshSession(*args, events=events)
+        ssh_instances.append(instance)
+        return instance
+    session = ApnaTunnelSession(
+        _config(udpgw_host=None, udpgw_port=None),
+        ssh_session_factory=make_ssh,
+        gateway_factory=lambda config: FlakyGateway(config, events=events),
+    )
+    session.connect()
+    with pytest.raises(ApnaTunnelSessionError, match="ownership is retained"):
+        session.disconnect()
+    assert events[-1] == "gateway-close"
+    session.disconnect()
+    assert events[-2:] == ["gateway-close", "ssh-close"]
