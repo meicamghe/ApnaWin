@@ -4,11 +4,12 @@ Tunnel connection remains disabled until the privileged lifecycle, route/DNS
 rollback, leak protection and end-to-end Windows acceptance tests pass.
 """
 
+import os
 import sys
 from html import escape
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths, Qt
+from PySide6.QtCore import QStandardPaths, Qt, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -36,6 +37,9 @@ from apnawin.engines.xray_process import (
 )
 from apnawin.storage.profile_store import load_profiles, save_profiles
 from apnawin.storage.xray_config_store import XrayConfigStore
+from apnawin.engines.xray_tunnel import XrayTunnelEngine
+from apnawin.services.connection_controller import ConnectionController
+from apnawin.services.xray_tunnel_supervisor import XrayTunnelSupervisor
 
 
 def profile_file_path() -> Path:
