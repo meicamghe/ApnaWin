@@ -38,7 +38,10 @@ The JSON has top-level `Username` and `Password` values. They are credentials an
 The embedded record shapes are consistent across this sample:
 - Each free-server record has string fields: `server_name`, `server_host`, `server_port`, `server_udp_port`, `ssl_port`, `category`, `username`, `password`, and `custom_cert`.
 - Each payload record has string fields: `friendly_name`, `category`, `host`, `port`, `method`, `payload`, `query`, `sslws`, `sausage`, `dothost`, and `message`.
-- The sample uses payload methods `http`, `ssl`, `udp`, and `direct`; the payload port field includes the literal `Pulled` in some records. The app's runtime meaning and substitution rules still need to be traced.
+- The sample uses payload methods `http`, `ssl`, `udp`, and `direct`. The `ocsws` category contains both HTTP and SSL records; `ocscf` records are HTTP, `ocsudp` records are UDP, while `ocsshadow` records are direct and the `ocstrojanworker`, `ocsxray`, and `ocsv2ray` records are SSL. These labels are useful clues, not proof of the underlying tunnel engine.
+- The payload port field contains the literal `Pulled` in many records. Its runtime meaning and substitution rules still need to be traced.
+- `server_host` can contain a semicolon-delimited host pool rather than one hostname. In this APK sample, 26 of 44 server records contain multiple hosts.
+- Only 16 of 44 free-server records have non-empty `server_port`, `server_udp_port`, and `ssl_port` values; the other 28 have all three blank. The app's rules for resolving the effective endpoint/port therefore matter.
 - Server and payload category values overlap, which is evidence that the app associates records by category. The exact selection, fallback and connection logic remain to be verified.
 
 This is a successful decode of the embedded APK asset, not yet a fresh live updater-response test and not proof that any listed endpoint currently accepts a connection. XXTEA here is obfuscation, not authenticated encryption; parsed JSON must still be treated as untrusted input.
