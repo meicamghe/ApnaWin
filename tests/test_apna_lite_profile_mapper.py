@@ -9,6 +9,8 @@ from apnawin.services.apna_lite_catalog import _encrypt_xxtea
 from apnawin.services.apna_lite_profile_mapper import (
     ApnaLiteProfileError,
     build_apna_lite_ssh_profile,
+    list_apna_lite_ssh_payloads,
+    list_apna_lite_ssh_servers,
 )
 
 
@@ -155,3 +157,24 @@ def test_allows_explicit_host_key_pin_and_dns_override():
     assert mapped.session_config.ssh.host_key_sha256 == "SHA256:" + "A" * 43
     assert mapped.session_config.transparent_dns is True
     assert mapped.session_config.dns_resolver == "9.9.9.9"
+
+
+
+def test_catalog_choice_helpers_filter_out_non_ssh_protocols():
+    catalog = {
+        "Free_servers": [
+            _server(),
+            _server("ocsudp"),
+        ],
+        "Payloads": [
+            _payload(),
+            _payload(method="udp"),
+            _payload().copy() | {"category": "ocsudp"},
+        ],
+    }
+    servers = list_apna_lite_ssh_servers(catalog)
+    payloads = list_apna_lite_ssh_payloads(catalog, "ocsws")
+    assert len(servers) == 1
+    assert len(payloads) == 1
+    assert payloads[0]["method"] == "http"
+    assert list_apna_lite_ssh_payloads(catalog, "ocsudp") == []
