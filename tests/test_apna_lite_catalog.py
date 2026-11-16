@@ -7,6 +7,8 @@ from __future__ import annotations
 import base64
 import json
 import struct
+import zipfile
+from io import BytesIO
 
 import pytest
 
@@ -15,6 +17,9 @@ from apnawin.services.apna_lite_catalog import (
     MASK,
     ApnaLiteCatalogError,
     _CATALOG_KEY,
+    decode_apna_lite_apk_catalog,
+    decode_apna_lite_catalog_credential,
+    decode_apna_lite_catalog_credentials,
     _mx,
     _words,
     decode_apna_lite_catalog,
@@ -148,3 +153,45 @@ def test_rejects_oversized_input() -> None:
 def test_rejects_non_bytes_input() -> None:
     with pytest.raises(TypeError, match="bytes"):
         decode_apna_lite_catalog("not bytes")  # type: ignore[arg-type]
+
+
+
+def test_decode_apk_embedded_catalog_asset() -> None:
+    apk = BytesIO()
+    with zipfile.ZipFile(apk, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("assets/janur.json", _encrypted(_document()))
+        archive.writestr("classes.dex", b"synthetic dex")
+    decoded = decode_apna_lite_apk_catalog(apk.getvalue())
+    assert decoded["Version"] == "test-1"
+    assert len(decoded["Free_servers"]) == 1
+
+
+def test_apk_import_rejects_missing_or_duplicate_catalog_asset() -> None:
+    missing = BytesIO()
+    with zipfile.ZipFile(missing, "w") as archive:
+        archive.writestr("classes.dex", b"synthetic")
+    with pytest.raises(ApnaLiteCatalogError, match="exactly one"):
+        decode_apna_lite_apk_catalog(missing.getvalue())
+
+    duplicate = BytesIO()
+    with zipfile.ZipFile(duplicate, "w") as archive:
+        archive.writestr("assets/janur.json", _encrypted(_document()))
+        archive.writestr("assets/janur.json", _encrypted(_document()))
+    with pytest.raises(ApnaLiteCatalogError, match="exactly one"):
+        decode_apna_lite_apk_catalog(duplicate.getvalue())
+
+
+def test_decode_catalog_credentials_redacts_repr() -> None:
+    document = _document()
+    document["Username"] = base64.b64encode(_encrypt_xxtea(b"synthetic-user")).decode()
+    document["Password"] = base64.b64encode(_encrypt_xxtea(b"synthetic-password")).decode()
+    credentials = decode_apna_lite_catalog_credentials(document)
+    assert credentials.username == "synthetic-user"
+    assert credentials.password == "synthetic-password"
+    assert "synthetic-user" not in repr(credentials)
+    assert "synthetic-password" not in repr(credentials)
+
+
+def test_decode_catalog_credential_rejects_invalid_encoding() -> None:
+    with pytest.raises(ApnaLiteCatalogError, match="encoding"):
+        decode_apna_lite_catalog_credential("not-base64!")
