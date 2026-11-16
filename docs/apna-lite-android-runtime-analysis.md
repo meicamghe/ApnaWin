@@ -57,13 +57,14 @@ The primary DEX contains the following methods in `TunnelManagerThread`:
 
 The reconnect worker closes and restarts the SSH client when network availability or tunnel state changes. The status strings include `SSH_AUTHENTICATING`, `SSH_CONNECTED`, `SSH_CONNECTING`, and `SSH_DISCONNECTED`. The manager also emits `UDP Connected` as a status string.
 
-`TunnelUtils` includes `formatCustomPayload`, `injectSplitPayload`, `injectSimpleSplit`, `parseRotate`, and `restartRotate`. The method bytecode references token strings:
+`TunnelUtils` includes `formatCustomPayload`, `injectSplitPayload`, `injectSimpleSplit`, `parseRotate`, and `restartRotate`. The primary DEX string table contains these payload-related tokens/patterns:
 
-- `[ssh]`
-- `[crlf]`
-- `[cr]`
-- `[lf]`
-- `[lfcr]`
+- `[host]`, `[host_port]`, `[port]`, `[protocol]`, `[ssh]`
+- `[crlf]`, `[cr]`, `[lf]`, `[lfcr]`
+- `[delay_split]` and `[instant_split]`
+- a rotate-expression pattern (`[rotate=...]`)
+
+The related public framework uses `[split]`, but APNA's visible DEX uses `[instant_split]`; do not substitute the sibling token without checking APNA's method bytecode. The inspected primary DEX does not expose the sibling's `[method]`, `[ua]`, or `[random=...]` tokens. The protected secondary asset remains a separate evidence gap.
 
 The payload-writing routines use `ISO-8859-1` byte conversion and write/flush to an output stream. This strongly indicates that payload strings are transformed into bytes and injected into a socket stream as part of the proxy handshake. The exact full grammar, substitution order, TLS/WS behavior, and how catalog fields feed this formatter still need tracing. The `startSsh` helper explicitly launches `SalamanderService`, while `startXRay` launches `XRayDNSService`; this ties the app's visible SSH and XRay control paths to separate Android services.
 
