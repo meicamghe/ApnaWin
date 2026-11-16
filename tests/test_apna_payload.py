@@ -5,7 +5,6 @@ import pytest
 from apnawin.engines.apna_payload import (
     PayloadFormatError,
     PayloadRotation,
-    PayloadRandom,
     PayloadChunk,
     render_apna_payload,
     send_payload,
@@ -14,13 +13,13 @@ from apnawin.engines.apna_payload import (
 
 def test_expands_apna_observed_endpoint_and_line_ending_tokens() -> None:
     chunks = render_apna_payload(
-        "[method] [host] [host_port] [port] [protocol] [ssh][crlf][cr][lf][lfcr]",
+        "[host] [host_port] [port] [protocol] [ssh][crlf][cr][lf][lfcr]",
         host="ssh.example.test",
         port=443,
     )
     assert chunks == (
         PayloadChunk(
-            b"CONNECT ssh.example.test ssh.example.test:443 443 HTTP/1.0 "
+            b"ssh.example.test ssh.example.test:443 443 HTTP/1.0 "
             b"ssh.example.test:443\r\n\r\n\n\r"
         ),
     )
@@ -144,3 +143,21 @@ def test_repeated_line_ending_macros_expand_with_bounds() -> None:
 def test_rejects_excessive_repeated_line_ending_count() -> None:
     with pytest.raises(PayloadFormatError, match="count exceeds"):
         render_apna_payload("[cr*4097]", host="h.test", port=22)
+
+
+def test_escaped_newline_tokens_are_converted_to_control_bytes() -> None:
+    chunks = render_apna_payload(
+        r"A\nB\rC",
+        host="ssh.example.test",
+        port=22,
+    )
+    assert chunks[0].data == b"A\nB\rC"
+
+
+def test_apna_formatter_leaves_unobserved_method_token_untouched() -> None:
+    chunks = render_apna_payload(
+        "[method] [host]",
+        host="ssh.example.test",
+        port=22,
+    )
+    assert chunks[0].data == b"[method] ssh.example.test"
