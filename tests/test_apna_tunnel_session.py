@@ -223,3 +223,10 @@ def test_startup_cleanup_failure_retains_gateway_and_ssh_for_retry():
     assert events == ["ssh-connect", "gateway-start", "gateway-close"]
     session.disconnect()
     assert events[-2:] == ["gateway-close", "ssh-close"]
+
+
+@pytest.mark.parametrize("field", ["keepalive_interval", "udp_idle_timeout", "connect_timeout"])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), 0, -1, True])
+def test_config_rejects_non_finite_or_non_positive_timeouts(field, value):
+    with pytest.raises(ValueError, match="finite positive"):
+        _config(**{field: value})
