@@ -242,6 +242,15 @@ class Socks5Gateway:
         host, port = self._server.server_address[:2]
         return str(host), int(port)
 
+    @property
+    def is_running(self) -> bool:
+        """Whether the local SOCKS5 listener thread is still serving requests."""
+        return (
+            self._server is not None
+            and self._thread is not None
+            and self._thread.is_alive()
+        )
+
     def start(self) -> Socks5Gateway:
         if self._server is not None:
             return self
