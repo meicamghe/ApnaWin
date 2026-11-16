@@ -62,7 +62,7 @@ The external decoder documents the following catalog pipeline:
 
 The external README reports a live catalog observation dated 2026-11-13 (version v850, 50 free servers and 644 payloads) and an embedded APK observation (v580, 44 free servers and 623 payloads). These are historical observations, not current availability guarantees.
 
-The external analysis identifies an `OpenVPNClient` class and reports that its implementation resides in a secondary LIAPP-protected DEX. This makes OpenVPN a strong investigation lead, but it does **not** establish the complete profile schema, authentication behavior, OpenVPN directives, certificate/key handling, or compatibility of a Windows OpenVPN binary. The local APK's primary DEX contains only a reference, not a class definition, for that descriptor. Do not treat the class name alone as an end-to-end protocol specification.
+The external analysis identifies an `OpenVPNClient` class. Direct inspection of the supplied APK shows that this descriptor is referenced but not defined in the primary DEX; the primary DEX instead defines a substantial `prince.open.vpn.service.vpn` stack built around Android `VpnService`, `TunnelVpnManager`, SSH management, `Tun2Socks`, and local DNS components. The name `OpenVPNClient` therefore must **not** be treated as proof of the OpenVPN wire protocol. See [Android runtime static analysis](apna-lite-android-runtime-analysis.md). Protected/dynamically loaded selection code remains to be recovered.
 
 ## Implementation decisions for ApnaWin
 
@@ -71,7 +71,7 @@ The external analysis identifies an `OpenVPNClient` class and reports that its i
 - Implement the APNA-specific HTTP provider using normal TLS certificate validation, finite connect/read timeouts, strict response-size limits, redirect rejection, and bounded retry/resume behavior. The reported request headers are a testable hypothesis for live requests; verify them before relying on them.
 - Keep raw decrypted catalog content and all connection credentials out of logs, crash reports, screenshots, CI artifacts, fixtures, and committed files. Tests should use synthetic data and redacted metadata only.
 - Never interpret `Free_servers` or `Payloads` as directly connectable profiles until their fields and the app's selection/combination logic are verified.
-- Investigate OpenVPN and the other category-specific modes in parallel with the existing Windows TUN/route/DNS safety work. Do not remove Xray code or claim Xray compatibility based solely on APK library names.
+- Investigate the Android SSH + custom-payload + Tun2Socks path, Xray helper path, UDP forwarding path and direct mode separately, in parallel with the existing Windows TUN/route/DNS safety work. Do not remove Xray code or claim a category-to-engine mapping based solely on names.
 - A green CI run can validate parsing, transport boundaries, process supervision and cleanup; it cannot certify that APNA accepts the generated profile. A real connection claim requires an authorized APNA profile, a Windows 10/11 run, successful tunnel handshake, verified routed traffic, DNS/IPv4/IPv6 checks and clean disconnect.
 
 ## Next evidence gates
@@ -79,7 +79,7 @@ The external analysis identifies an `OpenVPNClient` class and reports that its i
 1. Port the decoder and verify it against the embedded APK fixture using synthetic test keys/fixtures only; no real catalog credentials in tests.
 2. Fetch a fresh bounded updater response using the reported headers and compare its decoded schema/counts without logging or storing secret fields.
 3. Trace the app's server/payload category matching and selection logic, including the meaning of `Pulled`, `sslws`, `sausage`, and `query`.
-4. Recover the exact runtime mode for each supported category and the OpenVPN launch/configuration contract, including authentication and certificate requirements.
+4. Recover the exact runtime mode for each supported category, including SSH authentication/payload injection, Xray helper configuration, UDP gateway framing and direct-mode semantics.
 5. Implement provider-specific normalization and the relevant Windows engine adapter(s) behind the existing `TunnelEngine` contract, with synthetic fixtures first.
 6. Perform authorized Windows 10/11 end-to-end tests before enabling APNA Connect in the UI.
 
