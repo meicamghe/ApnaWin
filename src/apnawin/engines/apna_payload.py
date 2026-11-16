@@ -194,8 +194,8 @@ def _replace_rotate_first(payload: str) -> str:
 def _expand_repeated_line_endings(payload: str) -> str:
     replacements = (
         (re.compile(r"\[cr\*(\d+)\]"), "\r"),
-        (re.compile(r"\\[lf\\*(\\d+)\\]"), "\\n"),
-        (re.compile(r"\[cr\*(\d+)\]"), "\r"),
+        (re.compile(r"\[lf\*(\d+)\]"), "\n"),
+        (re.compile(r"\[crlf\*(\d+)\]"), "\r\n"),
         (re.compile(r"\[lfcr\*(\d+)\]"), "\n\r"),
     )
     for pattern, ending in replacements:
