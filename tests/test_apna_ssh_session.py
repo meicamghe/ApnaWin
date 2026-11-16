@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import socket
-import threading
-
 import pytest
 
 from apnawin.engines.apna_payload_socket import PayloadSocketConfig, PayloadSocketMode
-from apnawin.engines.apna_ssh_session import ApnaSshConfig, ApnaSshError, ApnaSshSession
+from apnawin.engines.apna_ssh_session import ApnaSshConfig, ApnaSshSession
 
 
 def _payload_config() -> PayloadSocketConfig:
