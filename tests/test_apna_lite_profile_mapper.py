@@ -1,17 +1,40 @@
 from __future__ import annotations
 
 import base64
+import struct
 
 import pytest
 
 from apnawin.engines.apna_payload_socket import PayloadSocketMode
-from apnawin.services.apna_lite_catalog import _encrypt_xxtea
+from apnawin.services.apna_lite_catalog import DELTA, MASK, _CATALOG_KEY, _mx, _words
 from apnawin.services.apna_lite_profile_mapper import (
     ApnaLiteProfileError,
     build_apna_lite_ssh_profile,
     list_apna_lite_ssh_payloads,
     list_apna_lite_ssh_servers,
 )
+
+
+def _encrypt_xxtea(plaintext: bytes) -> bytes:
+    """Test-only XXTEA encoder for synthetic catalog credentials."""
+    values = _words(plaintext) + [len(plaintext)]
+    key = _words(_CATALOG_KEY.ljust(16, b"\0"))
+    last = len(values) - 1
+    rounds = 6 + 52 // len(values)
+    total = 0
+    z = values[last]
+    while rounds:
+        total = (total + DELTA) & MASK
+        e = (total >> 2) & 3
+        for index in range(last):
+            y = values[index + 1]
+            values[index] = (values[index] + _mx(total, y, z, index, e, key)) & MASK
+            z = values[index]
+        y = values[0]
+        values[last] = (values[last] + _mx(total, y, z, last, e, key)) & MASK
+        z = values[last]
+        rounds -= 1
+    return struct.pack("<" + "I" * len(values), *values)
 
 
 def _catalog():
