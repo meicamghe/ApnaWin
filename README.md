@@ -19,7 +19,7 @@ A native Windows 10/11 desktop client project inspired by the workflow of APNA T
 
 The desktop UI is wired to the connection controller and fixed-path UAC/Xray supervisor. Connect is enabled only for a selected XRAY profile with an imported, validated, DPAPI-protected full-tunnel config and an installed protected helper/runtime. The helper verifies Xray/Wintun hashes, waits for stable effective IPv4/IPv6 default routes and configured DNS, then requires a certificate-validated external TLS egress probe before signaling ready. While connected it monitors adapter/routes/DNS and periodically rechecks independent TLS egress; repeated health failures trigger graceful Xray shutdown. CI verifies the application build and these component-level behaviors, but it does not execute an authorized live APNA server session. Clean Windows 10/11 acceptance for provider-specific traffic, DNS/IPv4/IPv6 leak behavior, WFP under failure, disconnect and crash/reboot cleanup remains outstanding. The portable artifact is not a signed installer or a verified APNA VPN client. No APNA TUNNEL server compatibility is claimed.
 
-The Android app may refresh its server catalog and connection parameters remotely. This is a first-class requirement for the Windows product, but the actual API, schema, authentication and refresh policy have not yet been verified. See [remote configuration discovery](docs/remote-configuration.md); no guessed backend endpoint or static replacement server list will be shipped.
+The Android app may refresh its server catalog and connection parameters remotely. This is a first-class requirement for the Windows product. Third-party reverse-engineering research has now identified a candidate APNA Lite catalog endpoint, request headers, and a modified-XXTEA format, and reports an OpenVPN client class. However, the published decoder contains a placeholder key and the protected OpenVPN implementation/profile contract remain unverified. See [remote configuration discovery](docs/remote-configuration.md) and [APNA Tunnel Lite upstream evidence](docs/apna-tunnel-lite-upstream-evidence.md). No guessed key, authentication data, or static replacement server list will be shipped.
 
 ## Run from source
 
@@ -64,6 +64,7 @@ It does not store passwords, access tokens, private keys or other credentials. D
 - `docs/architecture.md` — architecture, milestones and security boundaries
 - `docs/SESSION-HANDOFF.md` — durable implementation status and next engineering steps
 - `docs/apk-analysis.md` — preliminary APK observations and reproducible verification checklist
+- `docs/apna-tunnel-lite-upstream-evidence.md` — third-party APNA Lite catalog/engine findings, evidence limits and next verification gates
 - `docs/remote-configuration.md` — evidence plan and security contract for Android-style server/config refresh
 - `docs/engine-contract.md` — requirements for production tunnel adapters
 - `docs/profile-storage.md` — schema, atomic-write behavior and credential boundary
@@ -73,7 +74,7 @@ It does not store passwords, access tokens, private keys or other credentials. D
 
 ## Important compatibility note
 
-Android ARM64 native libraries are not Windows binaries. The current Windows path is an imported Xray TUN configuration plus a Windows Xray/Wintun runtime. No APNA-specific server endpoint, authentication schema or remote configuration protocol has been verified; the client does not fabricate these details. APK class and library names are only clues; they do not prove backend compatibility. See the analysis document before making implementation assumptions.
+Android ARM64 native libraries are not Windows binaries. The current Windows path is an imported Xray TUN configuration plus a Windows Xray/Wintun runtime. The APNA-specific catalog and OpenVPN findings are being investigated separately; neither a provider-compatible profile nor an end-to-end APNA connection is verified yet. APK class and library names are clues, not proof of compatibility. See the upstream evidence document before making implementation assumptions.
 
 ## Development direction
 
