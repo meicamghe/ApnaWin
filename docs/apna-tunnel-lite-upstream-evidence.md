@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-This note records externally published reverse-engineering findings for the exact Android application:
+This note records externally published reverse-engineering findings and direct, local APK observations for the exact Android application:
 
 - Display name: APNA TUNNEL LITE
 - Package: `com.apnatunnel.lite`
@@ -12,7 +12,7 @@ This note records externally published reverse-engineering findings for the exac
 - Decoder notes: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDMDM/blob/main/decoders/Python/apps/APNA_Tunnel_Lite/README.md
 - External analysis report: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDMDM/blob/main/analysis/platform/supplied-integrations/2026-11-14/ANALYSIS.md
 
-These are third-party reverse-engineering claims, not official provider documentation. They are leads to validate against the APK already held in the project Library and against fresh responses. The external repository's own result report explicitly distinguishes structural integration tests from authenticated/live provider connection tests.
+These are third-party reverse-engineering sources, not official provider documentation. Their claims are leads to validate against the local APK and fresh responses. The external repository's own result report distinguishes structural integration tests from authenticated/live provider connection tests.
 
 ## Local APK observations (2026-11-16)
 
@@ -22,9 +22,26 @@ The existing Library APK was materialized and inspected without executing it:
 - `assets/janur.json`: 366,636 bytes; SHA-256 `1e69333f038cba74fb559c6a791ec5d29c2f3ad69f29adefc6eb58f36c3a472d`
 - The archive contains `classes.dex` and `assets/.bxdtcxfzx.dex` (99,335 bytes).
 - The primary DEX contains an `OpenVPNClient` type/string reference, but that descriptor is not defined among the primary DEX class definitions.
-- The small secondary DEX asset exposes only a minimal LIAPP-related class stub in its DEX string/class tables; it does not expose the protected OpenVPN implementation or the catalog key as readable strings.
+- The small secondary DEX asset exposes only a minimal LIAPP-related class stub in its DEX string/class tables; it does not expose the protected OpenVPN implementation as readable strings.
 
-These observations are structural only. They do not reveal the embedded catalog plaintext or prove which connection path the app selects at runtime.
+### Embedded catalog successfully decoded
+
+The published decoder's exact key literal, `b"...|..."`, is **not** a placeholder for this APK sample. Applying the published Base64 + modified-XXTEA algorithm, delta `0x9E5729B1`, little-endian words and final-word plaintext length to the local `assets/janur.json` produces valid UTF-8 JSON. The result matches the independently reported embedded-catalog fingerprint:
+
+- `Version`: `580`
+- `Free_servers`: 44 records
+- `Payloads`: 623 records
+- `Premium_servers`, `Vip_servers`, and `Private_servers`: empty arrays
+
+The JSON has top-level `Username` and `Password` values. They are credentials and must never be printed, logged, committed, placed in fixtures, or included in CI artifacts. Only redacted metadata was inspected.
+
+The embedded record shapes are consistent across this sample:
+- Each free-server record has string fields: `server_name`, `server_host`, `server_port`, `server_udp_port`, `ssl_port`, `category`, `username`, `password`, and `custom_cert`.
+- Each payload record has string fields: `friendly_name`, `category`, `host`, `port`, `method`, `payload`, `query`, `sslws`, `sausage`, `dothost`, and `message`.
+- The sample uses payload methods `http`, `ssl`, `udp`, and `direct`; the payload port field includes the literal `Pulled` in some records. The app's runtime meaning and substitution rules still need to be traced.
+- Server and payload category values overlap, which is evidence that the app associates records by category. The exact selection, fallback and connection logic remain to be verified.
+
+This is a successful decode of the embedded APK asset, not yet a fresh live updater-response test and not proof that any listed endpoint currently accepts a connection. XXTEA here is obfuscation, not authenticated encryption; parsed JSON must still be treated as untrusted input.
 
 ## Evidence reported by the external analysis
 
@@ -35,43 +52,32 @@ The external decoder documents the following catalog pipeline:
 2. Request headers reported as:
    - `User-Agent: Dalvik/2.1.0`
    - `Accept-Encoding: identity`
-3. Remove whitespace from the response body, decode standard Base64, then decrypt a modified XXTEA envelope.
+3. Remove whitespace from the response body, decode standard Base64, then decrypt the modified XXTEA envelope.
 4. The reported XXTEA delta is `0x9E5729B1`; words are little-endian 32-bit values and the final word stores the original plaintext length.
 5. The decoded UTF-8 document is JSON. The top-level `Version` field is a string, and `Free_servers` and `Payloads` are arrays. The report also names optional `Premium_servers`, `Vip_servers`, and `Private_servers` arrays.
-6. The APK's embedded catalog asset is reported as `assets/janur.json`.
+6. The APK's embedded catalog asset is `assets/janur.json`.
 
 The external README reports a live catalog observation dated 2026-11-13 (version v850, 50 free servers and 644 payloads) and an embedded APK observation (v580, 44 free servers and 623 payloads). These are historical observations, not current availability guarantees.
 
-The external analysis identifies an `OpenVPNClient` class and reports that its implementation resides in a secondary LIAPP-protected DEX. This makes OpenVPN a strong investigation lead for the Windows engine, but it does **not** establish the complete profile schema, authentication behavior, OpenVPN directives, certificate/key handling, or compatibility of a Windows OpenVPN binary. Do not treat the class name alone as an end-to-end protocol specification.
-
-## Critical decoder limitation
-
-The published Python decoder currently contains:
-
-```python
-KEY = b"...|..."
-```
-
-That is visibly a placeholder, not a usable production key. Therefore, the published script must **not** be copied into ApnaWin as a working decryptor, and its reported algorithm parameters do not yet make the live catalog decryptable. The key must be recovered independently from the APK's protected code or another authorized source, then verified against the APK's embedded `assets/janur.json` and a fresh response.
-
-Do not guess, brute-force, hard-code a fabricated key, or silently accept undecoded bytes. A decoder must fail closed until a verified key is available.
+The external analysis identifies an `OpenVPNClient` class and reports that its implementation resides in a secondary LIAPP-protected DEX. This makes OpenVPN a strong investigation lead, but it does **not** establish the complete profile schema, authentication behavior, OpenVPN directives, certificate/key handling, or compatibility of a Windows OpenVPN binary. The local APK's primary DEX contains only a reference, not a class definition, for that descriptor. Do not treat the class name alone as an end-to-end protocol specification.
 
 ## Implementation decisions for ApnaWin
 
-- Keep the existing provider-neutral refresh coordinator and normalized catalog model. The upstream JSON is a provider-specific source format; it must be adapted into the internal model only after the real record schema has been established.
-- Add an APNA-specific HTTP provider only after its request behavior has been independently checked. If implemented, use normal TLS certificate validation, finite connect/read timeouts, strict response-size limits, redirect rejection, and bounded retry/resume behavior. Do not disable TLS verification.
+- The embedded catalog decoder is now reproducible for the supplied APK sample. Port the algorithm into a provider-specific module with strict bounds and schema validation; keep the key isolated from logs and never expose decoded credential fields to diagnostics.
+- Keep the existing provider-neutral refresh coordinator and normalized catalog model. The upstream JSON is a provider-specific source format; adapt it only after the server/payload association and profile generation rules are established.
+- Implement the APNA-specific HTTP provider using normal TLS certificate validation, finite connect/read timeouts, strict response-size limits, redirect rejection, and bounded retry/resume behavior. The reported request headers are a testable hypothesis for live requests; verify them before relying on them.
 - Keep raw decrypted catalog content and all connection credentials out of logs, crash reports, screenshots, CI artifacts, fixtures, and committed files. Tests should use synthetic data and redacted metadata only.
 - Never interpret `Free_servers` or `Payloads` as directly connectable profiles until their fields and the app's selection/combination logic are verified.
-- Investigate OpenVPN as the first provider-specific engine candidate in parallel with the existing Windows TUN/route/DNS safety work. Do not remove Xray code or claim Xray compatibility based solely on APK library names.
+- Investigate OpenVPN and the other category-specific modes in parallel with the existing Windows TUN/route/DNS safety work. Do not remove Xray code or claim Xray compatibility based solely on APK library names.
 - A green CI run can validate parsing, transport boundaries, process supervision and cleanup; it cannot certify that APNA accepts the generated profile. A real connection claim requires an authorized APNA profile, a Windows 10/11 run, successful tunnel handshake, verified routed traffic, DNS/IPv4/IPv6 checks and clean disconnect.
 
 ## Next evidence gates
 
-1. Recover and independently verify the real XXTEA key from the protected APK code; confirm decryption of the embedded catalog without exposing its secrets.
-2. Compare the embedded catalog schema with a fresh, bounded updater response; record only field names, types, counts and redacted examples.
-3. Trace the app's server and payload selection logic to determine how a server record and payload become an OpenVPN configuration or other connection request.
-4. Recover the exact OpenVPN launch/configuration contract, including authentication and certificate requirements, from authorized APK analysis.
-5. Implement provider-specific normalization and an OpenVPN engine adapter behind the existing `TunnelEngine` contract, with synthetic fixtures first.
+1. Port the decoder and verify it against the embedded APK fixture using synthetic test keys/fixtures only; no real catalog credentials in tests.
+2. Fetch a fresh bounded updater response using the reported headers and compare its decoded schema/counts without logging or storing secret fields.
+3. Trace the app's server/payload category matching and selection logic, including the meaning of `Pulled`, `sslws`, `sausage`, and `query`.
+4. Recover the exact runtime mode for each supported category and the OpenVPN launch/configuration contract, including authentication and certificate requirements.
+5. Implement provider-specific normalization and the relevant Windows engine adapter(s) behind the existing `TunnelEngine` contract, with synthetic fixtures first.
 6. Perform authorized Windows 10/11 end-to-end tests before enabling APNA Connect in the UI.
 
-Until gates 1–4 are complete, the APNA provider remains discovery-only and no APNA-compatible connection profile may be fabricated.
+The catalog decryption gate is passed for the embedded APK. Live refresh, profile-generation semantics and Windows end-to-end connection remain unverified.
