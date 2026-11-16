@@ -154,12 +154,12 @@ def render_apna_payload(
         "[ssh]": f"{host}:{port}",
         "[vpn]": f"{host}:{port}",
         "[ua]": user_agent,
-        "[crlf]": "\\r\\n",
-        "[cr]": "\\r",
-        "[lf]": "\\n",
-        "[lfcr]": "\\n\\r",
-        r"\\n": "\\n",
-        r"\\r": "\\r",
+        "[crlf]": "\r\n",
+        "[cr]": "\r",
+        "[lf]": "\n",
+        "[lfcr]": "\n\r",
+        r"\n": "\n",
+        r"\r": "\r",
     }
     expanded = template
     for token, value in substitutions.items():
