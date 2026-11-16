@@ -115,6 +115,7 @@ jobs:
           tests/test_windows_network_transaction.py
           tests/test_windows_tunnel_diagnostics_integration.py
           tests/test_xray_graceful_stop.py
+          tests/test_xray_tunnel_engine.py
 
   publish-windows:
     name: Publish verified portable artifact

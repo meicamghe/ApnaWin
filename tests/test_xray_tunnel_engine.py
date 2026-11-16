@@ -67,8 +67,10 @@ def test_validation_requires_windows_xray_helper_runtime_and_config(tmp_path):
     engine.validate_profile(profile())
     with pytest.raises(ValueError, match="XRAY"):
         engine.validate_profile(profile(Transport.SOCKS))
+    other = tmp_path / "other"
+    other.mkdir()
     with pytest.raises(OSError, match="only on Windows"):
-        make_engine(tmp_path / "other", platform_name="posix")[0].validate_profile(profile())
+        make_engine(other, platform_name="posix")[0].validate_profile(profile())
 
 
 def test_validation_fails_closed_when_runtime_or_config_missing(tmp_path):
