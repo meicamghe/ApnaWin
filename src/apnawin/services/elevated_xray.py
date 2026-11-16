@@ -377,14 +377,11 @@ def _wait_for_tun_network_ready(
         ):
             raise ValueError(f"{name} must be a positive finite number")
 
-    diagnostics = diagnostics_factory(
-        adapter_name=inbound.name,
-        timeout=min(5.0, float(timeout)),
-    )
     expected_dns = set(inbound.dns)
     deadline = monotonic() + float(timeout)
     ready_since = None
     last_error = None
+    diagnostics = None
 
     while True:
         if api.kernel32.WaitForSingleObject(stop_handle, 0) == _WAIT_OBJECT_0:
@@ -394,6 +391,13 @@ def _wait_for_tun_network_ready(
         if not runner.is_running:
             raise ElevatedXrayError(
                 "Xray exited before its TUN adapter, routes and DNS became ready"
+            )
+        # Do not query Windows networking after cancellation, desktop exit, or
+        # Xray failure. Construct diagnostics lazily only after ownership is valid.
+        if diagnostics is None:
+            diagnostics = diagnostics_factory(
+                adapter_name=inbound.name,
+                timeout=min(5.0, float(timeout)),
             )
         try:
             snapshot = diagnostics.snapshot()
