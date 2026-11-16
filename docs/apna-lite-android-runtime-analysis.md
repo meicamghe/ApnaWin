@@ -43,6 +43,18 @@ The following call relationships and Android API references are present in DEX c
 
 This is a conventional Android userspace VPN architecture: Android creates the TUN interface, and a userspace forwarding engine moves packets between that interface and one or more proxy transports. The Windows port must reproduce the forwarding/proxy semantics, not the Android `VpnService` API itself.
 
+## 3A. Direct method-table inspection: where the SSH implementation is missing
+
+The APK primary DEX was re-parsed at the method/code-item level (not just with `strings`). This resolves an important ambiguity in the earlier call-graph summary:
+
+- `TunnelManagerThread.startClienteSSH()` (method index 50445) updates the displayed status to `CONNECTED` / `UDP Connected` and invokes `startTunnelVpnService()`. It does **not** itself perform SSH socket connect or authentication.
+- `TunnelManagerThread.startForwarder(int)` (50446) starts the VPN service and launches an inner worker thread. The visible primary-DEX code still does not expose a Trilead/JSch SSH handshake.
+- The actual SSH engine is referenced through service descriptors `prince.open.vpn.service.SalamanderService`, `SocksDNSService`, and `XRayDNSService`. These descriptors are not present in the primary DEX type table or class-definition table. The corresponding service implementations are therefore not recoverable from the supplied base DEX as ordinary classes; they may be supplied by protected/dynamic loading, another installed split, or another runtime mechanism. The base APK alone does not establish which.
+- `TunnelVpnManager.onStartCommand()` receives the parcelled `TunnelVpnSettings`, validates the SOCKS endpoint and DNS resolver inputs, then starts the VPN worker. `Tunnel.routeThroughTunnel()` creates the local DNS helper and starts `Tun2Socks` with the SOCKS endpoint, optional UDPGW endpoint, DNS resolver, and transparent-DNS flag.
+- The exact native JNI bridge class is defined as `org.uproxy.tun2socks.Tun2SocksJni`, with native declarations `runTun2Socks(...)` and `terminateTun2Socks()`. The primary DEX also defines a separate process-based `prince.open.vpn.service.vpn.Tun2Socks` worker which constructs the `libtun2socks.so` command line and sends the Android TUN file descriptor over a local Unix socket. The existence of both paths means the active JNI-vs-process selection must be established from the protected settings/runtime, not guessed.
+
+**Engineering consequence:** the missing blocker is now narrowed to the protected SSH service / dynamic module and its configuration handoff. Porting only the visible `TunnelManagerThread` class would not recreate APNA's SSH transport. The next evidence needed is the installed split APK/runtime payload that defines `SalamanderService` (and related service classes), or a controlled trace from a running APNA Lite installation. Until then, catalog-to-SSH mode selection and SSH credentials/host mapping remain unconfirmed.
+
 ## 4. SSH and custom payload evidence
 
 The primary DEX contains the following methods in `TunnelManagerThread`:
