@@ -131,6 +131,7 @@ class MainWindow(QMainWindow):
         self,
         profiles_path: Path | None = None,
         xray_config_store: XrayConfigStore | None = None,
+        connection_controller: ConnectionController | None = None,
     ) -> None:
         super().__init__()
         self.setWindowTitle("ApnaWin")
@@ -139,6 +140,9 @@ class MainWindow(QMainWindow):
         self.xray_config_store = xray_config_store or XrayConfigStore(
             self.profiles_path.with_name("xray-configs.json")
         )
+        self.connection_controller = connection_controller or self._create_live_connection_controller()
+        self._connection_worker = None
+        self._close_after_disconnect = False
         self.profiles: list[ConnectionProfile] = []
         self.profile_storage_writable = True
 
@@ -182,10 +186,12 @@ class MainWindow(QMainWindow):
         profile_actions.addStretch(1)
 
         self.connect_button = QPushButton("Connect")
+        self.connect_button.clicked.connect(self._connect_selected_profile)
         self.connect_button.setEnabled(False)
-        self.connect_button.setToolTip(
-            "Connection remains disabled until the UAC supervisor is wired into the UI and route/DNS, leak-protection and end-to-end VPN tests pass."
-        )
+        self.connect_button.setToolTip("Waits for verified TUN routes, DNS and external TLS egress.")
+        self.disconnect_button = QPushButton("Disconnect")
+        self.disconnect_button.clicked.connect(self._disconnect_tunnel)
+        self.disconnect_button.setEnabled(False)
 
         layout = QVBoxLayout()
         layout.addWidget(heading)
@@ -195,12 +201,19 @@ class MainWindow(QMainWindow):
         layout.addLayout(profile_actions)
         layout.addWidget(self.profile_details)
         layout.addWidget(self.connect_button)
+        layout.addWidget(self.disconnect_button)
         layout.addStretch(1)
 
         root = QWidget()
         root.setLayout(layout)
         self.setCentralWidget(root)
         self._load_profiles()
+        self._connection_timer = QTimer(self)
+        self._connection_timer.setInterval(1500)
+        self._connection_timer.timeout.connect(self._poll_connection)
+        if self.connection_controller is not None:
+            self._connection_timer.start()
+        self._update_connection_controls()
 
     def _load_profiles(self) -> None:
         try:
