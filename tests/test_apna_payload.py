@@ -162,7 +162,7 @@ def test_java_split_discards_trailing_empty_segment_without_extra_delay() -> Non
 
 def test_cf_and_brand_catalog_tokens_are_expanded_before_rotation():
     rotation = PayloadRotation()
-    template = "GET / [cf] [brand] [rotate=a;b] [host][crlf]"
+    template = "GET / [cf] [brand] [rotate=a;b] [host] [host_port][crlf]"
     chunks = render_apna_payload(
         template,
         host="ssh.example.test",
@@ -172,7 +172,7 @@ def test_cf_and_brand_catalog_tokens_are_expanded_before_rotation():
         rotation=rotation,
     )
     assert chunks[0].data == (
-        b"GET / front.example.test ApnaWin a ssh.example.test\r\n"
+        b"GET / front.example.test ApnaWin a ssh.example.test ssh.example.test:443\r\n"
     )
 
 
