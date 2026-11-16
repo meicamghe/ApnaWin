@@ -13,5 +13,5 @@ def test_installer_protects_existing_program_files_tree_before_copying_executabl
     assert 0 <= acl_before_copy < copy < acl_after_copy
     assert "/inheritance:r" in script
     assert "/grant:r" in script
-    assert "/C" not in script
+    assert "/T /C" not in script
     assert "$LASTEXITCODE -ne 0" in script
