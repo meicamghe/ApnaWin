@@ -267,6 +267,12 @@ class ApnaProfileStore:
         records[key] = base64.b64encode(ciphertext).decode("ascii")
         self._write(records)
 
+    def has_profile(self, profile: ConnectionProfile) -> bool:
+        """Return whether encrypted settings exist without decrypting secrets."""
+        if not isinstance(profile, ConnectionProfile) or profile.transport is not Transport.APNA_SSH:
+            raise TypeError("profile must be an APNA_SSH ConnectionProfile")
+        return _profile_key(profile.name) in self._read()
+
     def load(self, profile: ConnectionProfile) -> ApnaTunnelSessionConfig:
         if not isinstance(profile, ConnectionProfile) or profile.transport is not Transport.APNA_SSH:
             raise TypeError("profile must be an APNA_SSH ConnectionProfile")
