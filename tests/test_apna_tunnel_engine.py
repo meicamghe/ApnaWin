@@ -110,7 +110,7 @@ def _profile():
 
 def _session_config():
     return ApnaTunnelSessionConfig(
-        ssh=ApnaSshConfig("ssh.example.test", 443, "user", password="secret"),
+        ssh=ApnaSshConfig("ssh.example.test", 443, "user", password="secret", host_key_sha256="SHA256:" + "A" * 43),
         payload=PayloadSocketConfig(
             mode=PayloadSocketMode.DIRECT,
             connect_host="ssh.example.test",
