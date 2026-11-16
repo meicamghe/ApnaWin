@@ -75,7 +75,7 @@ The primary DEX defines the following explicit static helper methods on `TunnelM
 - `startSocksHttp` / `stopSocksHttp`
 - `restartSocksHttp`
 
-The start methods create an explicit service `Intent` and invoke `Context.startService`; the DEX type references map them directly: `startSsh` starts `SalamanderService`, `startXRay` starts `XRayDNSService`, and `startSocksHttp` starts `SocksDNSService`. The stop methods send broadcasts. These are confirmed service destinations, although the full internal behavior of the protected services is not yet reconstructed.
+The start methods create an explicit service `Intent` and invoke `Context.startService`; the DEX type references map the targets: `startSsh` → `SalamanderService`, `startXRay` → `XRayDNSService`, and `startSocksHttp` → `SocksDNSService`. The stop methods send broadcasts. **Important boundary:** these service descriptors are referenced by the visible primary DEX but their class definitions are not present in its class-definition table. Their implementations therefore remain unavailable in the inspected visible DEX and may be protected, dynamically supplied or external; the helper-to-service mapping is confirmed, but the service internals are not.
 
 It also defines `SalamanderService`, `SocksDNSService`, and `XRayDNSService`. The presence of these symbols shows that more than one service/forwarding path exists. It does not yet prove which APNA `category` or `method` selects which service.
 
@@ -123,7 +123,7 @@ The Android TUN layer and Windows Wintun layer solve the packet-capture/route pr
 ## 8. Evidence boundaries
 
 - The class and method references above come from the supplied APK's primary DEX. They are not guessed from server names.
-- The protected runtime and dynamically loaded class definitions are not fully reconstructed.
+- The protected runtime and dynamically loaded class definitions are not fully reconstructed. In particular, `OpenVPNClient`, `SalamanderService`, `SocksDNSService`, and `XRayDNSService` are referenced by descriptors but are not defined in the inspected primary DEX class table.
 - No real server credentials or raw decrypted catalog records are included in this document.
 - This static analysis does not prove that any current APNA endpoint is online or accepts a connection.
 - CI success and a Windows artifact do not prove APNA compatibility. Real Windows handshake, routed traffic, DNS/IPv4/IPv6 and disconnect tests remain mandatory.
