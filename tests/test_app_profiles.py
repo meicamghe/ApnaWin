@@ -473,3 +473,28 @@ def test_connect_button_requires_live_controller_and_imported_xray_config(tmp_pa
     assert window.connect_button.isEnabled() is True
     assert window.disconnect_button.isEnabled() is False
     window.close()
+
+
+
+def test_close_requested_during_connect_disconnects_after_worker_finishes(
+    tmp_path, qapp
+):
+    from apnawin.domain.state import ConnectionState
+
+    class Controller:
+        state = ConnectionState.CONNECTED
+
+    window = MainWindow(
+        profiles_path=tmp_path / "profiles.json",
+        connection_controller=Controller(),
+    )
+    requested = []
+    window._close_after_disconnect = True
+    window._disconnect_tunnel = lambda: requested.append("disconnect")
+
+    window._connection_worker_finished()
+
+    assert requested == ["disconnect"]
+    assert window._close_after_disconnect is True
+    window._connection_timer.stop()
+    window.close()
