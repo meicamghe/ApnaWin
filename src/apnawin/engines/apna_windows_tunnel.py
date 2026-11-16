@@ -16,10 +16,7 @@ from apnawin.engines.apna_tunnel_session import (
     ApnaTunnelSession,
     ApnaTunnelSessionConfig,
 )
-from apnawin.engines.apna_xray_config import (
-    ApnaXrayTunConfig,
-    build_apna_xray_tun_config,
-)
+from apnawin.engines.apna_xray_config import build_apna_xray_tun_config
 
 
 class ApnaWindowsTunnelError(RuntimeError):
@@ -36,9 +33,11 @@ class ApnaWindowsTunnelEngine:
         config_store,
         xray_engine,
         session_factory: Callable[..., ApnaTunnelSession] = ApnaTunnelSession,
-        tun_config_provider: Callable[
-            [ConnectionProfile, ApnaTunnelSessionConfig], ApnaXrayTunConfig
+        tun_dns_servers_provider: Callable[
+            [ConnectionProfile, ApnaTunnelSessionConfig], tuple[str, ...]
         ] | None = None,
+        tun_adapter_name: str = "ApnaWin",
+        tun_mtu: int = 1500,
         platform_name: str | None = None,
     ) -> None:
         if not callable(session_config_provider):
@@ -49,13 +48,19 @@ class ApnaWindowsTunnelEngine:
             raise TypeError("xray_engine is required")
         if not callable(session_factory):
             raise TypeError("session_factory must be callable")
-        if tun_config_provider is not None and not callable(tun_config_provider):
-            raise TypeError("tun_config_provider must be callable")
+        if tun_dns_servers_provider is not None and not callable(tun_dns_servers_provider):
+            raise TypeError("tun_dns_servers_provider must be callable")
+        if not isinstance(tun_adapter_name, str) or not tun_adapter_name:
+            raise ValueError("tun_adapter_name is required")
+        if isinstance(tun_mtu, bool) or not isinstance(tun_mtu, int):
+            raise TypeError("tun_mtu must be an integer")
         self._session_config_provider = session_config_provider
         self._config_store = config_store
         self._xray_engine = xray_engine
         self._session_factory = session_factory
-        self._tun_config_provider = tun_config_provider
+        self._tun_dns_servers_provider = tun_dns_servers_provider
+        self._tun_adapter_name = tun_adapter_name
+        self._tun_mtu = tun_mtu
         self._platform_name = os.name if platform_name is None else platform_name
         self._state = ConnectionState.DISCONNECTED
         self._profile: ConnectionProfile | None = None
@@ -109,22 +114,19 @@ class ApnaWindowsTunnelEngine:
             raise RuntimeError(f"Cannot validate APNA profile while state is {self._state.value}")
         self._session_config = self._load_session_config(profile)
 
-    def _make_tun_config(
+    def _make_dns_servers(
         self,
         profile: ConnectionProfile,
         session_config: ApnaTunnelSessionConfig,
-    ) -> ApnaXrayTunConfig:
-        if self._tun_config_provider is not None:
-            tun = self._tun_config_provider(profile, session_config)
-            if not isinstance(tun, ApnaXrayTunConfig):
-                raise TypeError("tun_config_provider must return ApnaXrayTunConfig")
-            return tun
-        dns = (
-            (session_config.dns_resolver,)
-            if session_config.dns_resolver is not None
-            else ("1.1.1.1",)
-        )
-        return ApnaXrayTunConfig(dns_servers=dns)
+    ) -> tuple[str, ...]:
+        if self._tun_dns_servers_provider is not None:
+            dns = self._tun_dns_servers_provider(profile, session_config)
+            if not isinstance(dns, tuple):
+                raise TypeError("tun_dns_servers_provider must return a tuple of IP literals")
+            return dns
+        if session_config.dns_resolver is not None:
+            return (session_config.dns_resolver,)
+        return ("1.1.1.1", "2606:4700:4700::1111")
 
     def connect(self, profile: ConnectionProfile) -> None:
         if self._state not in {ConnectionState.DISCONNECTED}:
@@ -140,8 +142,13 @@ class ApnaWindowsTunnelEngine:
             session = self._session_factory(session_config)
             self._session = session
             socks_address = session.connect()
-            tun_config = self._make_tun_config(profile, session_config)
-            config_bytes = build_apna_xray_tun_config(socks_address, tun=tun_config)
+            dns_servers = self._make_dns_servers(profile, session_config)
+            config_bytes = build_apna_xray_tun_config(
+                socks_address,
+                dns_servers=dns_servers,
+                adapter_name=self._tun_adapter_name,
+                mtu=self._tun_mtu,
+            )
 
             internal_name = f"__apnawin_apna_{uuid.uuid4().hex}"
             self._config_store.save(internal_name, config_bytes)
