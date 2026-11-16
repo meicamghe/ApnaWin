@@ -233,3 +233,54 @@ def test_udp_associate_roundtrips_through_ssh_socks_and_udpgw() -> None:
         udp_server.server_close()
         ssh_thread.join(timeout=1)
         udp_thread.join(timeout=1)
+
+
+class _EchoHandler(socketserver.BaseRequestHandler):
+    def handle(self) -> None:
+        while True:
+            data = self.request.recv(4096)
+            if not data:
+                return
+            self.request.sendall(data)
+
+
+class _EchoServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+    block_on_close = False
+
+
+def test_tcp_connect_is_forwarded_through_ssh_socks() -> None:
+    echo_server = _EchoServer(("127.0.0.1", 0), _EchoHandler)
+    echo_thread = threading.Thread(target=echo_server.serve_forever, daemon=True)
+    echo_thread.start()
+    ssh_server = _FakeSshSocksServer(("127.0.0.1", 0), echo_server.server_address)
+    ssh_thread = threading.Thread(target=ssh_server.serve_forever, daemon=True)
+    ssh_thread.start()
+    gateway = Socks5Gateway(
+        Socks5GatewayConfig(
+            ssh_proxy_host="127.0.0.1",
+            ssh_proxy_port=ssh_server.server_address[1],
+        )
+    ).start()
+    client = socket.create_connection(gateway.address, timeout=2)
+    client.settimeout(2)
+    try:
+        client.sendall(b"\x05\x01\x00")
+        assert _recv_exact(client, 2) == b"\x05\x00"
+        request = b"\x05\x01\x00\x03" + bytes((len(b"echo.example.test"),))
+        request += b"echo.example.test" + struct.pack("!H", 443)
+        client.sendall(request)
+        response = _recv_exact(client, 10)
+        assert response[:3] == b"\x05\x00\x00"
+        client.sendall(b"hello-through-ssh")
+        assert _recv_exact(client, len(b"hello-through-ssh")) == b"hello-through-ssh"
+    finally:
+        client.close()
+        gateway.close()
+        ssh_server.shutdown()
+        ssh_server.server_close()
+        echo_server.shutdown()
+        echo_server.server_close()
+        ssh_thread.join(timeout=1)
+        echo_thread.join(timeout=1)
