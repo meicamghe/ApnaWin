@@ -14,6 +14,7 @@ from apnawin.engines.apna_tunnel_session import (
 )
 from apnawin.engines.apna_xray_config import build_apna_xray_tun_config
 from apnawin.engines.apna_udp_dns_probe import probe_udp_dns
+from apnawin.services.windows_tunnel_egress import probe_tun_egress
 from apnawin.services.xray_tunnel_supervisor import XrayTunnelSupervisor
 from apnawin.storage.xray_config_store import XrayConfigStore
 
@@ -39,6 +40,7 @@ class ApnaTunnelEngine:
         session_factory: Callable[..., ApnaTunnelSession] = ApnaTunnelSession,
         config_builder: Callable[..., bytes] = build_apna_xray_tun_config,
         udp_dns_probe: Callable[[tuple[str, ...]], object] = probe_udp_dns,
+        tcp_egress_probe: Callable[[], object] = probe_tun_egress,
         platform_name: str | None = None,
     ) -> None:
         if not callable(session_config_loader):
@@ -55,8 +57,12 @@ class ApnaTunnelEngine:
             not callable(session_factory)
             or not callable(config_builder)
             or not callable(udp_dns_probe)
+            or not callable(tcp_egress_probe)
         ):
-            raise TypeError("session_factory, config_builder and udp_dns_probe must be callable")
+            raise TypeError(
+                "session_factory, config_builder, udp_dns_probe and "
+                "tcp_egress_probe must be callable"
+            )
 
         self._session_config_loader = session_config_loader
         self._config_store = config_store
@@ -64,6 +70,7 @@ class ApnaTunnelEngine:
         self._session_factory = session_factory
         self._config_builder = config_builder
         self._udp_dns_probe = udp_dns_probe
+        self._tcp_egress_probe = tcp_egress_probe
         self._platform_name = os.name if platform_name is None else platform_name
         self._session: ApnaTunnelSession | None = None
         self._profile: ConnectionProfile | None = None
@@ -172,6 +179,7 @@ class ApnaTunnelEngine:
             if self._xray_supervisor.poll() is not None:
                 raise ApnaTunnelEngineError("Xray helper exited before tunnel readiness")
             self._udp_dns_probe(dns_servers)
+            self._tcp_egress_probe()
             self._state = ConnectionState.CONNECTED
         except Exception as exc:
             cleanup_errors = []
