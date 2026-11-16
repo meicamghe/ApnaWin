@@ -31,6 +31,7 @@ def _config():
             sni="proxy.example.test",
             cf_host="front.example.test",
             brand="ApnaWin",
+            user_agent="ApnaWin-Test/1.0",
         ),
         udpgw_host="udpgw.example.test",
         udpgw_port=7300,
@@ -58,6 +59,7 @@ def test_round_trip_encrypted_profile_and_config_loader(tmp_path):
     assert loaded.payload.payload == _config().payload.payload
     assert loaded.payload.cf_host == "front.example.test"
     assert loaded.payload.brand == "ApnaWin"
+    assert loaded.payload.user_agent == "ApnaWin-Test/1.0"
     assert loaded.udpgw_host == "udpgw.example.test"
     assert loaded.transparent_dns is True
 
