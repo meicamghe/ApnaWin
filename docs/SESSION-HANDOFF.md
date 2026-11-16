@@ -3,8 +3,41 @@
 **Active repository:** `meicamghe/ApnaWin`  
 **Active branch:** `vpn/dual-stack-egress-readiness`  
 **Active PR:** [#6](https://github.com/meicamghe/ApnaWin/pull/6), open Draft, not merged.  
-**Current HEAD:** `02939514b6b1a37fd6017bdd44db6c6b6e0da874`  
-**Current validation:** GitHub Actions [43873455186](https://github.com/meicamghe/ApnaWin/actions/runs/43873455186) is running; Ruff has passed. Do not reuse results from older heads as validation for this HEAD.
+**Last observed HEAD before this handoff update:** `09e6eae65415dc681de11b54380da94bdf19e7a0`  
+**Validation:** workflow [43888020499](https://github.com/meicamghe/ApnaWin/actions/runs/43888020499) was running at the time of inspection; do not assume it validates later commits.
+
+## User acceptance target
+
+A real Windows 10/11 connection to APNA TUNNEL LITE (`com.apnatunnel.lite`) with SSH host-key verification, successful authentication, and routed TCP/UDP/DNS traffic. Unit tests, mocked sockets, package builds and catalog decoding are not proof of provider connectivity. Do not call the build ready until this passes.
+
+## Current implementation inventory
+
+- Catalog: bounded Base64/modified-XXTEA decoder and APK asset reader; discovery-only live updater source. The supplied APK's actual `assets/janur.json` decodes to Version 580, 44 free servers and 623 payloads. No credentials were printed or added to fixtures.
+- Profile import: Windows UI imports an APNA APK, lists supported SSH-category server/payload pairs, probes SSH host keys without authentication, and stores selected credentials/settings under current-user DPAPI. The UI dispatches `APNA_SSH` profiles to `ApnaTunnelEngine`.
+- SSH: payload compiler, direct/TLS/HTTP payload socket connector, Paramiko authentication with known-hosts or explicit SHA-256 pin, and loopback-only SOCKS5 TCP forwarding.
+- UDP: BadVPN-compatible PacketProto/UDPGW codec, flow-ID/LRU manager, SSH-carried UDPGW stream, and loopback SOCKS5 UDP ASSOCIATE gateway.
+- TUN: `ApnaTunnelEngine` starts the SSH/UDPGW session, generates a strict dual-stack Xray TUN config whose only outbound is the loopback SOCKS5 gateway, starts the elevated Xray/Wintun supervisor, and performs UDP DNS egress probing before reporting connected.
+- Native research: pinned BadVPN Windows x64 build workflow has passed in prior run [43887319339](https://github.com/meicamghe/ApnaWin/actions/runs/43887319339). This build uses TAP-Windows and is not wired into the product; Xray/Wintun remains the product TUN path.
+- Payload compatibility: APNA primary DEX confirms ordered placeholder substitution, ISO-8859-1, `[instant_split]`, `[delay_split]`, and exactly 1000 ms delay. The related Android injector accepts HTTP 200 and does not reject 101 Upgrade; mapper now allows both for Upgrade payloads while requiring 200 for ordinary HTTP payloads.
+
+## Verified APK and reverse-engineering boundary
+
+- Base APK SHA-256: `b1f650b168665b0728b1be0e25a0c722cd77ec873e1a1c7e2711a78aa1012a6d`.
+- No ELF/.so entry is embedded in base.apk; an ABI split/native-library extraction is still needed.
+- `assets/.bxdtcxfzx.dex` is a LIAPP stub: declared DEX file size 428 bytes, one `com.liapp` loader class, with 98,907 appended protected bytes. `assets/LIAPP.ini` identifies LIAPP 5.1.1.190. The protected `SalamanderService` implementation is not recoverable from the ordinary visible DEX inventory without the LIAPP runtime/decryption path.
+- Actual embedded catalog snapshot has four SSH-compatible categories: `ocsws` (8 servers/469 payloads), `ocscf` (2/118), `ocsnormal` (2/1), `ocshttp` (4/1). Its server records in those categories contain `server_port=1194`, `ssl_port=443`, `server_udp_port=53`; these are snapshot values only.
+- The runtime mapping of all catalog fields and exact protected service behavior is not fully verified. The profile mapper is a working hypothesis constrained to observed catalog fields; do not treat every method/category as provider-certified.
+
+## Actual connectivity status and next gates
+
+No real APNA SSH authentication, UDPGW session, or Windows application traffic has yet been demonstrated. The current container cannot resolve the embedded APNA hostnames (temporary DNS resolver failure), so it cannot perform live endpoint checks from this environment.
+
+1. Obtain a usable live network path for DNS/TCP checks against a selected embedded APNA SSH endpoint; then run the host-key probe and compare the fingerprint with an independent provider source.
+2. Attempt real SSH authentication using the APK-provided public catalog credentials only through the encrypted local profile flow; capture redacted handshake/auth result.
+3. Verify the UDPGW stream on the selected server/port and DNS query/response over that stream.
+4. Run the Windows x64 packaged app on a clean Windows 10/11 machine; verify Xray/Wintun TUN, IPv4/IPv6 TCP, UDP, DNS, disconnect and crash cleanup.
+5. Keep APNA Connect disabled or fail closed wherever endpoint identity, credentials, UDPGW or TUN readiness is not validated. Never infer success from a green test suite.
+
 
 ## User acceptance target
 
