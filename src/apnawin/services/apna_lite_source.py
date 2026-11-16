@@ -56,13 +56,30 @@ class ApnaLiteCatalogSource:
         )
         try:
             with self._opener.open(request, timeout=self.timeout_seconds) as response:
+                if response.status != 200:
+                    raise ValueError("APNA Lite catalog HTTP status is invalid")
+                encoding = response.headers.get("Content-Encoding", "identity").strip().lower()
+                if encoding not in ("", "identity"):
+                    raise ValueError("APNA Lite catalog content encoding is unsupported")
+                declared = response.headers.get("Content-Length")
+                if declared is not None:
+                    try:
+                        declared_length = int(declared)
+                    except (TypeError, ValueError) as exc:
+                        raise ValueError("APNA Lite catalog content length is invalid") from exc
+                    if declared_length < 0 or declared_length > MAX_INPUT_BYTES:
+                        raise ValueError("APNA Lite catalog response size is invalid")
                 raw = response.read(MAX_INPUT_BYTES + 1)
-        except HTTPError:
-            # Never expose response bodies or server-supplied error text.
-            raise
+        except HTTPError as exc:
+            # Preserve only the numeric status; never expose response bodies or server text.
+            raise ValueError(
+                f"APNA Lite catalog HTTP request failed (status {exc.code})"
+            ) from None
 
         if not raw or len(raw) > MAX_INPUT_BYTES:
             raise ValueError("APNA Lite catalog response size is invalid")
+        if declared is not None and len(raw) != declared_length:
+            raise ValueError("APNA Lite catalog response is truncated")
         return decode_apna_lite_catalog(raw)
 
     def fetch_summary(self) -> dict[str, int | str]:
