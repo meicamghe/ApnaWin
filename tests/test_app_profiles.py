@@ -497,4 +497,35 @@ def test_close_requested_during_connect_disconnects_after_worker_finishes(
     assert requested == ["disconnect"]
     assert window._close_after_disconnect is True
     window._connection_timer.stop()
-    window.close()
+
+
+
+def test_failed_disconnect_does_not_retry_forever_on_window_close(
+    tmp_path, qapp
+):
+    from apnawin.domain.state import ConnectionState
+
+    class Controller:
+        state = ConnectionState.ERROR
+
+    class FinishedWorker:
+        action = "disconnect"
+
+        def deleteLater(self):
+            pass
+
+    window = MainWindow(
+        profiles_path=tmp_path / "profiles.json",
+        connection_controller=Controller(),
+    )
+    attempts = []
+    window._connection_worker = FinishedWorker()
+    window._close_after_disconnect = True
+    window._disconnect_tunnel = lambda: attempts.append("disconnect")
+
+    window._connection_worker_finished()
+
+    assert attempts == []
+    assert window._close_after_disconnect is False
+    assert window._connection_worker is None
+    window._connection_timer.stop()

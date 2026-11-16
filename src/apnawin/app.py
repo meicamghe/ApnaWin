@@ -288,16 +288,21 @@ class MainWindow(QMainWindow):
             worker.deleteLater()
         self._update_connection_controls()
         if self._close_after_disconnect:
-            if (
-                self.connection_controller is None
-                or self.connection_controller.state is ConnectionState.DISCONNECTED
-            ):
+            state = (
+                self.connection_controller.state
+                if self.connection_controller is not None
+                else ConnectionState.DISCONNECTED
+            )
+            if state is ConnectionState.DISCONNECTED:
                 self._close_after_disconnect = False
                 self.close()
+            elif getattr(worker, "action", None) == "disconnect":
+                # Do not spin in an automatic retry loop if cleanup itself
+                # failed. Keep the window open and let the user retry manually.
+                self._close_after_disconnect = False
             else:
                 # A close request may arrive while Connect is still running.
-                # Once that worker completes, always stop the newly-started
-                # tunnel before allowing the window to close.
+                # Once that worker completes, stop the newly-started tunnel.
                 self._disconnect_tunnel()
 
     def _poll_connection(self):
