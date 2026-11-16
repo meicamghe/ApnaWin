@@ -67,6 +67,17 @@ This closely matches the APNA primary-DEX evidence: startClienteSSH, startForwar
 
 **Still unproven for APNA:** the exact settings source, whether all APNA SSH categories use this path, the local listener address/port, service implementation identity, credential selection, and whether the APK's protected service diverges from this public framework.
 
+## 2A. SSH connection and proxy-handshake branches in the related source
+
+The related TunnelManagerThread reads SSH server/port, username, password, optional key path and local SOCKS port from its settings, connects with 10-second connect and 20-second read timeouts, authenticates, creates a dynamic local SOCKS forwarder, then starts the TUN service.
+
+Its addProxy method distinguishes two SSH transport modes:
+
+- SSH direct: if a custom payload exists, connect to the SSH server endpoint itself, write the expanded payload and use Dropbear mode, which returns the socket without waiting for an HTTP proxy response. With no payload, connect directly.
+- SSH proxy: connect to a separate proxy host/port, write the expanded payload (or a default CONNECT request), then parse the HTTP response before allowing SSH to continue. The source accepts the library's SSH_FXP_EXTENDED success status and rejects other response codes.
+
+The authentication routine attempts password authentication and then a configured public key; keyboard-interactive support is present only as commented-out code in this revision. The source's connect/read timeouts and the distinction between direct payload injection and HTTP-proxy response validation are useful compatibility hypotheses. APNA's own mode constants and exact config-to-branch mapping still need verification.
+
 ## 3. Custom payload grammar found in the related source
 
 The public TunnelUtils.formatCustomPayload(hostname, port, payload) expands these tokens:
@@ -95,7 +106,7 @@ The same source recognizes:
 
 The public HttpProxyCustom connects to a configured proxy host/port, expands the payload using the SSH target host/port, writes it as ISO-8859-1 bytes, and flushes. In its non-Dropbear path it reads the proxy's HTTP response before allowing the SSH transport to continue. The Dropbear path returns the socket after writing the payload. These details are valuable hypotheses for test design, not yet APNA-confirmed behavior.
 
-The APNA DEX independently confirms the formatter/injector method names, the five core token strings [ssh], [crlf], [cr], [lf], [lfcr], and ISO-8859-1 output writes. The expanded token set and one-second delay behavior need to be confirmed against APNA's actual method bytecode or controlled runtime traces before implementing them as APNA compatibility requirements.
+The APNA DEX string table independently contains [host], [host_port], [port], [protocol], [ssh], [crlf], [cr], [lf], [lfcr], [delay_split], [instant_split], and a rotate-expression pattern. It does not contain the sibling's [method], [ua], [split], or [random=...] tokens in the inspected primary DEX. In particular, APNA uses [instant_split] where this sibling source uses [split]; do not silently substitute one for the other. The immediate-write semantics of [instant_split], the exact one-second timing of [delay_split], and the rotate implementation should be confirmed against APNA method bytecode before implementing them as compatibility requirements.
 
 ## 3B. Exact uProxy JNI package match and missing native split
 
@@ -139,6 +150,13 @@ The related sockshttp source contains the same mUdpgwServerAddress/mUdpgwTranspa
 - --dnsgw when a separate local DNS relay is configured.
 
 This is a much stronger match than a generic TUN/SOCKS resemblance. It supports the following interpretation of the APNA fields: mUdpResolver is the UDP gateway endpoint and mUdpDnsRelay controls transparent DNS forwarding through that gateway. The separate mDnsForward/mDnsResolver path can start a local Pdnsd resolver and pass its address as --dnsgw. Exact APNA constructor argument order and runtime values still need verification against the protected implementation.
+
+The related TunnelManagerThread computes mUdpDnsRelay as (dnsForward && udpResolver == null) || (!dnsForward && udpResolver != null), which is the logical XOR of DNS-forward mode and whether a UDPGW endpoint is configured. Tun2Socks only appends --udpgw-transparent-dns when a UDPGW endpoint exists. In this sibling implementation, that means:
+- DNS forward enabled: use the separate Pdnsd/--dnsgw path; do not enable transparent DNS on UDPGW.
+- DNS forward disabled with UDPGW configured: enable transparent DNS through UDPGW.
+- No UDPGW configured: the transparent-DNS boolean has no effect because no UDPGW option is emitted.
+
+This is a useful candidate DNS-routing matrix for APNA because the field names and call sequence match, but the exact boolean expression must still be confirmed in APNA's protected/runtime code.
 
 The BadVPN implementation shows that UDPGW is **not** SOCKS5 UDP ASSOCIATE. SocksUdpGwClient establishes a SOCKS stream to the configured remote UDPGW endpoint and attaches UdpGwClient to that stream. UdpGwClient uses PacketProto framing and a custom UDPGW record: a 3-byte header (flags plus 16-bit connection ID), followed by an IPv4 or IPv6 remote-address/port structure and the UDP payload. Flags identify keepalive, rebind, DNS and IPv6 records. The server maintains per-client UDP connections and sends received datagrams back over the framed stream.
 
