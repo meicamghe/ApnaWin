@@ -781,6 +781,78 @@ class MainWindow(QMainWindow):
             self._refresh_profiles(len(updated) - 1)
             self.status_label.setText(f"Imported {len(imported)} profile(s).")
 
+    def _import_apna_apk(self) -> None:
+        """Import an embedded APNA Lite catalog and encrypt the selected SSH profile."""
+        if not self.profile_storage_writable or os.name != "nt":
+            return
+        filename, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Import APNA Tunnel Lite APK",
+            "",
+            "Android APK files (*.apk);;All files (*)",
+        )
+        if not filename:
+            return
+        try:
+            catalog = decode_apna_lite_apk_catalog(Path(filename))
+            servers = list_apna_lite_ssh_servers(catalog)
+        except (OSError, TypeError, ValueError) as exc:
+            QMessageBox.warning(
+                self,
+                "APNA APK import failed",
+                f"The selected APK catalog could not be read. ({type(exc).__name__}: {exc})",
+            )
+            return
+        if not servers:
+            QMessageBox.information(
+                self,
+                "No supported APNA servers",
+                "The embedded catalog contains no server entries supported by the current SSH engine.",
+            )
+            return
+
+        dialog = ApnaCatalogImportDialog(catalog, servers, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            mapped = dialog.selected_profile()
+            if any(
+                item.name.casefold() == mapped.profile.name.casefold()
+                for item in self.profiles
+            ):
+                raise ValueError(
+                    "A profile with this server/payload name already exists. "
+                    "Choose another APNA server or payload."
+                )
+            self.apna_profile_store.save(mapped.profile, mapped.session_config)
+        except (OSError, TypeError, ValueError) as exc:
+            QMessageBox.warning(
+                self,
+                "APNA profile import failed",
+                f"The selected APNA profile was not stored. ({type(exc).__name__}: {exc})",
+            )
+            return
+
+        updated = [*self.profiles, mapped.profile]
+        if self._save_profiles(updated):
+            self._refresh_profiles(len(updated) - 1)
+            self.status_label.setText(
+                f"Imported APNA SSH profile '{mapped.profile.name}'. "
+                "Credentials and payload settings are encrypted for this Windows user."
+            )
+            if not mapped.session_config.ssh.host_key_sha256:
+                self.status_label.setText(
+                    self.status_label.text()
+                    + " Verify the SSH host key using the probe button or a trusted known_hosts file."
+                )
+        else:
+            try:
+                self.apna_profile_store.remove(mapped.profile.name)
+            except (OSError, ValueError):
+                self.status_label.setText(
+                    "Profile metadata save failed and encrypted APNA settings could not be rolled back."
+                )
+
     def _import_xray_config(self) -> None:
         """Import a full-tunnel Xray JSON config and encrypt it with current-user DPAPI."""
         if not self.profile_storage_writable:
