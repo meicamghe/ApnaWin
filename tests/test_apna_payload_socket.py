@@ -205,7 +205,7 @@ def test_tls_http_proxy_uses_proxy_sni_and_expands_cf_and_brand() -> None:
     received = []
     def server(server_socket):
         received.append(server_socket.recv(4096))
-        server_socket.sendall(b"HTTP/1.1 101 Switching Protocols\\r\\n\\r\\n")
+        server_socket.sendall(b"HTTP/1.1 101 Switching Protocols\r\n\r\n")
         server_socket.close()
     client, worker = _socket_pair_factory(server)
     seen = {}
@@ -234,5 +234,5 @@ def test_tls_http_proxy_uses_proxy_sni_and_expands_cf_and_brand() -> None:
     connected.close()
     worker.join(timeout=1)
     assert received == [
-        b"GET / HTTP/1.1\\r\\nHost: front.example.test\\r\\nX-Brand: ApnaWin\\r\\n\\r\\n"
+        b"GET / HTTP/1.1\r\nHost: front.example.test\r\nX-Brand: ApnaWin\r\n\r\n"
     ]
