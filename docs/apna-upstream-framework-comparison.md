@@ -67,6 +67,17 @@ This closely matches the APNA primary-DEX evidence: startClienteSSH, startForwar
 
 **Still unproven for APNA:** the exact settings source, whether all APNA SSH categories use this path, the local listener address/port, service implementation identity, credential selection, and whether the APK's protected service diverges from this public framework.
 
+## 2D. Windows UDPGW integration: TAP-Windows is not Wintun
+
+The inspected BadVPN revision does have Windows-specific socket backends and an MSVC build path, but its TUN/TAP device abstraction matters:
+
+- `tuntap/BTap.c` selects `BADVPN_USE_WINAPI` on Windows and uses `tapwin32-funcs.c`, `CreateFile`, and `TAP_IOCTL_CONFIG_TUN` to open/configure a TAP-Windows-style adapter.
+- `BTap_InitWithFD` is explicitly documented as unsupported on Windows. The Android app's supplied TUN file descriptor therefore cannot be passed into this implementation on Windows.
+- The BadVPN `INSTALL-WINDOWS` guide documents an MSVC build. Its `tun2socks` target can be built separately, but the documented device path is TAP-Windows, not the Wintun adapter already used by ApnaWin.
+- The wire-protocol codec is now implemented independently in `src/apnawin/engines/udpgw_protocol.py`: PacketProto's 16-bit little-endian frame length, the 3-byte UDPGW flags/connection-ID header, IPv4/IPv6 destination encoding, network-order destination port, DNS/REBIND/IPv6 flags, keepalive frames, and incremental stream decoding. Unit tests cover fragmentation, coalesced frames, IPv4/IPv6, keepalive and malformed inputs.
+
+**Architecture decision under evaluation:** retain the existing Xray/Wintun TUN owner and supply it a local SOCKS5 endpoint that supports both TCP CONNECT (delegated through the SSH dynamic-forwarding endpoint) and UDP ASSOCIATE (translated to UDPGW frames over an SSH-carried TCP stream). This avoids installing a second TAP driver. The UDPGW codec is only the wire-format layer; the SOCKS5 gateway, flow-ID lifecycle, keepalives, DNS policy and real end-to-end tests are still outstanding.
+
 ## 2C. Payload formatter and SSH-over-proxy transport details
 
 The same SecondVPN source snapshot also exposes a fuller transport sequence:
