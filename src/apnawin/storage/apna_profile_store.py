@@ -73,6 +73,7 @@ def _serialize_config(config: ApnaTunnelSessionConfig) -> bytes:
             "sni": payload.sni,
             "cf_host": payload.cf_host,
             "brand": payload.brand,
+            "user_agent": payload.user_agent,
             "protocol": payload.protocol,
             "dropbear_no_response": payload.dropbear_no_response,
             "validate_http_response": payload.validate_http_response,
@@ -123,7 +124,7 @@ def _deserialize_config(raw: bytes) -> ApnaTunnelSessionConfig:
     }
     payload_expected = {
         "mode", "connect_host", "connect_port", "target_host", "target_port",
-        "payload", "sni", "cf_host", "brand", "protocol", "dropbear_no_response",
+        "payload", "sni", "cf_host", "brand", "user_agent", "protocol", "dropbear_no_response",
         "validate_http_response", "expected_http_statuses", "connect_timeout",
         "read_timeout", "max_response_header_bytes",
     }
@@ -154,6 +155,7 @@ def _deserialize_config(raw: bytes) -> ApnaTunnelSessionConfig:
             sni=payload_raw["sni"],
             cf_host=payload_raw["cf_host"],
             brand=payload_raw["brand"],
+            user_agent=payload_raw["user_agent"],
             protocol=payload_raw["protocol"],
             dropbear_no_response=payload_raw["dropbear_no_response"],
             validate_http_response=payload_raw["validate_http_response"],
