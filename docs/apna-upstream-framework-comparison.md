@@ -12,6 +12,18 @@
 - Decoder implementation: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM/blob/b66fd18dce1a51d932a32776696ca4a190a3eaac/decoders/Python/apps/APNA_Tunnel_Lite/APNA_Tunnel_Lite.py
 - External integration report: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM/blob/b66fd18dce1a51d932a32776696ca4a190a3eaac/analysis/platform/supplied-integrations/2026-11-14/ANALYSIS.md
 
+### Additional sibling service implementation
+
+- Repository: https://github.com/justinaxie911/SpeedLiteVpn
+- Inspected commit: 4833190b14f9b8b21b366c4cc5314787a13d440c
+- [SocksDNSService.java](https://github.com/justinaxie911/SpeedLiteVpn/blob/4833190b14f9b8b21b366c4cc5314787a13d440c/app/src/main/java/com/jvinjector/jenrri/service/SocksDNSService.java)
+- [TunnelManagerThread.java](https://github.com/justinaxie911/SpeedLiteVpn/blob/4833190b14f9b8b21b366c4cc5314787a13d440c/app/src/main/java/com/jvinjector/jenrri/tunnel/TunnelManagerThread.java)
+- [UDPTunnel.java](https://github.com/justinaxie911/SpeedLiteVpn/blob/4833190b14f9b8b21b366c4cc5314787a13d440c/app/src/main/java/com/jvinjector/jenrri/tunnel/UDPTunnel.java)
+- [V2Tunnel.java](https://github.com/justinaxie911/SpeedLiteVpn/blob/4833190b14f9b8b21b366c4cc5314787a13d440c/app/src/main/java/com/jvinjector/jenrri/tunnel/V2Tunnel.java)
+- [DNSTunnelThread.java](https://github.com/justinaxie911/SpeedLiteVpn/blob/4833190b14f9b8b21b366c4cc5314787a13d440c/app/src/main/java/com/jvinjector/jenrri/tunnel/DNSTunnelThread.java)
+
+This repository also uses a different Java package and app identity. Its same-named SocksDNSService is a comparative lead only; it is not evidence that its bytecode is the implementation referenced by APNA.
+
 ### Related SSH/TUN framework source
 
 A public source repository contains the same uncommon method names seen in the APNA primary DEX, including startClienteSSH, startForwarder, formatCustomPayload, injectSplitPayload, and the TunnelVpnSettings SOCKS/DNS fields:
@@ -80,7 +92,24 @@ The related public TunnelManagerThread.verifyServerHostKey implementation return
 
 The related Tunnel.java source carries a GPL-3.0-or-later notice. Other files and bundled dependencies may have separate terms. This research does not authorize copying or porting code. Before any source reuse, perform a file-by-file license and dependency audit and decide whether the project's distribution model is compatible. For now, only independently implement behavior supported by APNA evidence and use the public code as a comparison reference.
 
-The public repository's service is named SocksHttpService; it is not evidence that APNA's referenced SalamanderService, XRayDNSService, or SocksDNSService have the same implementation. No exact public implementation for those APNA service descriptors was found in this search.
+The first comparison repository names its service SocksHttpService. The second repository contains a same-named SocksDNSService class, but under a different package and application identity. In that second source, SocksDNSService is a service wrapper: it starts a DNSTunnelThread for its SlowDNS setting and also starts TunnelManagerThread. That manager selects separate UDP, V2Ray, or SSH paths according to its own settings. This demonstrates why the service name alone cannot establish APNA's engine mapping. No matching public implementation for APNA's SalamanderService or XRayDNSService descriptors was found. APNA's own service class definitions remain absent from the inspected primary DEX.
+
+
+## 4A. What the sibling SocksDNSService source adds
+
+In the inspected SpeedLiteVpn source, SocksDNSService.onStartCommand starts a worker that:
+
+1. Reads its own tunnel-type preference.
+2. Starts DNSTunnelThread when that preference is SlowDNS.
+3. Starts TunnelManagerThread for the main connection lifecycle.
+
+That sibling TunnelManagerThread branches among three distinct modes: UDP starts UDPTunnel, V2Ray starts V2Tunnel with a stored JSON config, and the default branch starts the SSH client. The separate DNSTunnelThread launches a native libdns process with a DNS server, public-key value, nameserver and a local 127.0.0.1:2222 endpoint.
+
+The sibling UDPTunnel builds a local SOCKS5 listener configuration at 127.0.0.1:1080 and launches a native client binary with a JSON configuration. Its sample configuration includes an insecure TLS setting and a repository-specific certificate. Those values and that binary are specific to the sibling project and must not be copied or treated as APNA protocol data. The V2Tunnel path launches a separate V2Ray service and supplies a stored JSON config.
+
+This gives us concrete comparison questions for the APNA DEX: does its protected TunnelManagerThread branch on equivalent mode constants; does its UDP path create a local SOCKS listener; does XRayDNSService accept a JSON config; and does SalamanderService own SSH, DNS-over-SSH, or another forwarder? None of these answers is established by the sibling repository alone. APNA's server/payload mapping must still be traced from APNA call sites or runtime observations.
+
+The SpeedLiteVpn repository's own license page describes a mixture of components and inherited SSH Tunnel/Trilead code; it does not provide a single clear license grant for every project-authored file. Together with the different project identity, this is a research reference only, not a source-code reuse authorization.
 
 ## 5. Catalog downloader: discrepancies and freshness
 
