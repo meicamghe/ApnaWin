@@ -1,9 +1,9 @@
 """APNA-style SSH payload expansion and segmented stream writes.
 
-The APNA primary DEX exposes the formatter/injector method names and token
-strings implemented here. The one-second delay is a configurable default
-corroborated by closely related public framework sources; it is not yet
-confirmed from APNA's protected method bytecode.
+The APNA primary DEX exposes the formatter/injector call graph, split tokens,
+ISO-8859-1 writes, and an exact 1000 ms delay constant. Hidden formatter keys
+are cross-checked against a closely related implementation with the same
+method signature and replacement structure.
 """
 from __future__ import annotations
 
@@ -89,8 +89,9 @@ def render_apna_payload(
 ) -> tuple[PayloadChunk, ...]:
     """Expand framework-family payload tokens into ordered ISO-8859-1 chunks.
 
-    The token set and processing order are corroborated by a closely related
-    Android implementation; APNA protected bytecode still needs direct checking.
+    APNA DEX confirms the formatter signature, replacement loop, rotation call,
+    split methods, ISO-8859-1 encoding, and 1000 ms delay. Hidden token names
+    are mapped using the structurally matching public framework implementation.
     """
     if not isinstance(template, str):
         raise TypeError("Payload template must be text")
@@ -135,7 +136,7 @@ def render_apna_payload(
     for token, value in substitutions.items():
         expanded = expanded.replace(token, value)
 
-    # APNA DEX exposes rotate processing after placeholder replacement.
+    # APNA DEX calls parseRotate after its ordered placeholder replacement loop.
     expanded = rotation.expand(expanded) if rotation is not None else _replace_rotate_first(expanded)
 
     if _DELAY_SPLIT not in expanded and _INSTANT_SPLIT not in expanded:
