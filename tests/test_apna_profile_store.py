@@ -109,3 +109,13 @@ def test_store_rejects_symlink(tmp_path):
     )
     with pytest.raises(ApnaProfileStoreError, match="symbolic link"):
         linked_store.load(_profile())
+
+
+
+def test_store_has_config_tracks_encrypted_profile_presence(tmp_path):
+    store = _store(tmp_path)
+    assert not store.has_config("APNA work")
+    store.save(_profile(), _config())
+    assert store.has_config("apna WORK")
+    store.remove("APNA work")
+    assert not store.has_config("APNA work")
