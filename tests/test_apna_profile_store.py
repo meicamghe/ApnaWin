@@ -29,6 +29,8 @@ def _config():
             target_port=443,
             payload="CONNECT [host_port] [protocol][crlf][crlf]",
             sni="proxy.example.test",
+            cf_host="front.example.test",
+            brand="ApnaWin",
         ),
         udpgw_host="udpgw.example.test",
         udpgw_port=7300,
@@ -54,6 +56,8 @@ def test_round_trip_encrypted_profile_and_config_loader(tmp_path):
     assert loaded.ssh.password == "do-not-log"
     assert loaded.ssh.host_key_sha256 == _config().ssh.host_key_sha256
     assert loaded.payload.payload == _config().payload.payload
+    assert loaded.payload.cf_host == "front.example.test"
+    assert loaded.payload.brand == "ApnaWin"
     assert loaded.udpgw_host == "udpgw.example.test"
     assert loaded.transparent_dns is True
 
