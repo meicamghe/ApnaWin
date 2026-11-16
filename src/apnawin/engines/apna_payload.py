@@ -1,9 +1,10 @@
 """APNA-style SSH payload expansion and segmented stream writes.
 
 The APNA primary DEX exposes the formatter/injector call graph, split tokens,
-ISO-8859-1 writes, and an exact 1000 ms delay constant. Hidden formatter keys
-are cross-checked against a closely related implementation with the same
-method signature and replacement structure.
+ISO-8859-1 writes, and a delay-split path. The 1000 ms default is derived from
+a closely related public implementation, remains configurable, and is not
+claimed as an APNA v51 runtime default until protected bytecode confirms it.
+Hidden formatter keys are cross-checked against the related implementation.
 """
 from __future__ import annotations
 
@@ -89,11 +90,11 @@ def render_apna_payload(
     rotation: PayloadRotation | None = None,
     delay_split_ms: int = 1000,
 ) -> tuple[PayloadChunk, ...]:
-    """Expand framework-family payload tokens into ordered ISO-8859-1 chunks.
+    """Expand observed tokens into ordered ISO-8859-1 chunks.
 
     APNA DEX confirms the formatter signature, replacement loop, rotation call,
-    split methods, ISO-8859-1 encoding, and 1000 ms delay. Hidden token names
-    are mapped using the structurally matching public framework implementation.
+    split methods and ISO-8859-1 encoding. The default delay is sibling-derived
+    and configurable; it is not an asserted APNA v51 constant.
     """
     if not isinstance(template, str):
         raise TypeError("Payload template must be text")
