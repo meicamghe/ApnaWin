@@ -47,10 +47,10 @@ Forced termination bypasses Xray's Go cleanup path. Route/address/DNS and adapte
 
 ## Remaining release gates
 
-- Wire the desktop Connect/Disconnect UI to `XrayTunnelSupervisor` only after the native Windows test matrix passes.
+- The desktop Connect/Disconnect UI is already wired to `XrayTunnelSupervisor`; Connect is enabled only when the protected helper and an encrypted imported XRAY TUN profile are available. This is a local-readiness gate, not APNA-provider or leak-safety acceptance.
 - Test on clean Windows 10 and Windows 11 x64 systems with the actual packaged Wintun runtime.
 - Verify DNS query behavior and DNS leak paths, IPv4/IPv6 leak behavior, WFP policy under route changes, and provider-specific application traffic.
 - Verify graceful disconnect, helper crash, desktop crash, forced Xray termination, sleep/resume and reboot recovery; no stale routes, DNS settings or ApnaWin-owned adapters may remain.
 - Obtain and validate an authorized APNA configuration/catalog/authentication source. No APNA endpoint, credentials or API schema is inferred by this project.
 
-**Connect remains disabled.** The helper's local route/DNS and external TLS readiness gates are implemented, but the desktop UI and clean-machine end-to-end/leak/crash acceptance are not complete.
+**Connection readiness is implemented, but release acceptance is incomplete.** The Windows UI can start the helper when its installation and encrypted XRAY TUN profile prerequisites are met. A successful readiness event verifies local adapter/routes/DNS plus an IPv4 TLS egress smoke test; it does not prove APNA-specific traffic, IPv6 egress, DNS/IPv4/IPv6 leak resistance, or forced-termination/reboot recovery. Do not label the build leak-free or APNA-compatible until those native Windows acceptance tests pass.
