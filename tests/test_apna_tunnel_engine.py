@@ -11,7 +11,6 @@ from apnawin.engines.apna_xray_config import build_apna_xray_tun_config
 from apnawin.engines.apna_tunnel_engine import ApnaTunnelEngine, ApnaTunnelEngineError
 from apnawin.engines.apna_ssh_session import ApnaSshConfig
 from apnawin.engines.apna_payload_socket import PayloadSocketConfig, PayloadSocketMode
-from apnawin.storage.xray_config_store import XrayConfigStore
 
 
 def test_builder_creates_strict_dual_stack_tun_with_local_socks_outbound():
@@ -78,10 +77,11 @@ class _FakeConfigStore:
 
 
 class _FakeSupervisor:
-    def __init__(self, events, *, fail_start=False, fail_stop=False):
+    def __init__(self, events, *, fail_start=False, fail_stop=False, exit_after_start=False):
         self.events = events
         self.fail_start = fail_start
         self.fail_stop = fail_stop
+        self.exit_after_start = exit_after_start
         self.running = False
         self.started_profile = None
 
@@ -93,6 +93,8 @@ class _FakeSupervisor:
         self.running = True
 
     def poll(self):
+        if self.exit_after_start:
+            return 1
         return None if self.running else 1
 
     def stop(self):
@@ -121,10 +123,11 @@ def _session_config():
     )
 
 
-def _engine(events, *, fail_xray_start=False, fail_xray_stop=False, fail_session_disconnect=False):
+def _engine(events, *, fail_xray_start=False, fail_xray_stop=False, fail_session_disconnect=False, exit_after_start=False):
     store = _FakeConfigStore(events)
     supervisor = _FakeSupervisor(
-        events, fail_start=fail_xray_start, fail_stop=fail_xray_stop
+        events, fail_start=fail_xray_start, fail_stop=fail_xray_stop,
+        exit_after_start=exit_after_start,
     )
     sessions = []
     def make_session(config):
@@ -206,7 +209,7 @@ def test_engine_start_failure_cleans_up_session_and_config():
 def test_engine_retains_ssh_when_xray_cleanup_fails():
     events = []
     engine, _store, _supervisor, sessions = _engine(
-        events, fail_xray_start=True, fail_xray_stop=True
+        events, fail_xray_stop=True, exit_after_start=True
     )
     with pytest.raises(ApnaTunnelEngineError, match="cleanup also failed"):
         engine.connect(_profile())
