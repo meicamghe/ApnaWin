@@ -50,7 +50,7 @@ def _encrypted_catalog() -> bytes:
     }
     plaintext = json.dumps(document, separators=(",", ":")).encode()
     values = _words(plaintext) + [len(plaintext)]
-    key = _words(_CATALOG_KEY.ljust(16, b"\\0"))
+    key = _words(_CATALOG_KEY.ljust(16, bytes([0])))
     last = len(values) - 1
     rounds = 6 + 52 // len(values)
     total = 0
