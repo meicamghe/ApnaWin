@@ -7,12 +7,24 @@ This note records externally published reverse-engineering findings for the exac
 - Display name: APNA TUNNEL LITE
 - Package: `com.apnatunnel.lite`
 - APK metadata reported by the analysis: versionCode 51, versionName `APNA`
-- External analysis repository: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDMDM
-- Decoder source: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDMDM/blob/main/decoders/Python/apps/APNA_Tunnel_Lite/APNA_Tunnel_Lite.py
-- Decoder notes: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDMDM/blob/main/decoders/Python/apps/APNA_Tunnel_Lite/README.md
-- External analysis report: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDMDM/blob/main/analysis/platform/supplied-integrations/2026-11-14/ANALYSIS.md
+- External analysis repository: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM
+- Decoder source: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDMDM/blob/main/decoders/Python/apps/APNA_Tunnel_Lite/APNA_Tunnel_Lite.py
+- Decoder notes: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDMDM/blob/main/decoders/Python/apps/APNA_Tunnel_Lite/README.md
+- External analysis report: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDNDMDM/blob/main/analysis/platform/supplied-integrations/2026-11-14/ANALYSIS.md
 
 These are third-party reverse-engineering claims, not official provider documentation. They are leads to validate against the APK already held in the project Library and against fresh responses. The external repository's own result report explicitly distinguishes structural integration tests from authenticated/live provider connection tests.
+
+## Local APK observations (2026-11-16)
+
+The existing Library APK was materialized and inspected without executing it:
+
+- APK SHA-256: `b1f650b168665b0728b1be0e25a0c722cd77ec873e1a1c7e2711a78aa1012a6d`
+- `assets/janur.json`: 366,636 bytes; SHA-256 `1e69333f038cba74fb559c6a791ec5d29c2f3ad69f29adefc6eb58f36c3a472d`
+- The archive contains `classes.dex` and `assets/.bxdtcxfzx.dex` (99,335 bytes).
+- The primary DEX contains an `OpenVPNClient` type/string reference, but that descriptor is not defined among the primary DEX class definitions.
+- The small secondary DEX asset exposes only a minimal LIAPP-related class stub in its DEX string/class tables; it does not expose the protected OpenVPN implementation or the catalog key as readable strings.
+
+These observations are structural only. They do not reveal the embedded catalog plaintext or prove which connection path the app selects at runtime.
 
 ## Evidence reported by the external analysis
 
