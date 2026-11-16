@@ -5,7 +5,7 @@ import base64
 import pytest
 
 from apnawin.engines.apna_payload_socket import PayloadSocketMode
-from apnawin.services.apna_lite_catalog import ApnaLiteCredentials, _encrypt_xxtea
+from apnawin.services.apna_lite_catalog import _encrypt_xxtea
 from apnawin.services.apna_lite_profile_mapper import (
     ApnaLiteProfileError,
     build_apna_lite_ssh_profile,
