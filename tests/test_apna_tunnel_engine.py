@@ -129,7 +129,7 @@ def _session_config():
     )
 
 
-def _engine(events, *, fail_xray_start=False, fail_xray_stop=False, fail_session_disconnect=False, exit_after_start=False):
+def _engine(events, *, fail_xray_start=False, fail_xray_stop=False, fail_session_disconnect=False, exit_after_start=False, fail_tcp_egress=False):
     store = _FakeConfigStore(events)
     supervisor = _FakeSupervisor(
         events, fail_start=fail_xray_start, fail_stop=fail_xray_stop,
@@ -142,12 +142,18 @@ def _engine(events, *, fail_xray_start=False, fail_xray_stop=False, fail_session
         )
         sessions.append(session)
         return session
+    def probe_tcp_egress():
+        events.append("tcp-tls-egress-probe")
+        if fail_tcp_egress:
+            raise OSError("IPv6 TLS egress timed out")
+
     engine = ApnaTunnelEngine(
         lambda profile: _session_config(),
         store,  # type: ignore[arg-type]
         supervisor,  # type: ignore[arg-type]
         session_factory=make_session,
         udp_dns_probe=lambda servers: events.append("udp-dns-probe"),
+        tcp_egress_probe=probe_tcp_egress,
         platform_name="nt",
     )
     return engine, store, supervisor, sessions
@@ -158,7 +164,7 @@ def test_engine_starts_ssh_then_encrypted_xray_tun_and_reports_connected():
     engine, store, supervisor, _sessions = _engine(events)
     engine.connect(_profile())
     assert engine.state is ConnectionState.CONNECTED
-    assert events == ["session-connect", "config-save", "xray-start", "udp-dns-probe"]
+    assert events == ["session-connect", "config-save", "xray-start", "udp-dns-probe", "tcp-tls-egress-probe"]
     assert store.saved
     assert supervisor.started_profile.transport is Transport.XRAY
     assert supervisor.started_profile.endpoint_port == 12345
@@ -189,6 +195,7 @@ def test_engine_wires_ipv4_and_ipv6_dns_resolvers_into_tun_and_probe():
         session_factory=lambda config: _FakeSession(config, events=events),
         config_builder=build_config,
         udp_dns_probe=probe_dns,
+        tcp_egress_probe=lambda: events.append("tcp-tls-egress-probe"),
         platform_name="nt",
     )
 
@@ -196,9 +203,29 @@ def test_engine_wires_ipv4_and_ipv6_dns_resolvers_into_tun_and_probe():
 
     expected = ("1.1.1.1", "2606:4700:4700::1111")
     assert captured == {"config_dns": expected, "probe_dns": expected}
+    assert events[-1] == "tcp-tls-egress-probe"
     assert engine.state is ConnectionState.CONNECTED
     engine.disconnect()
 
+
+
+def test_engine_rolls_back_when_dual_stack_tls_egress_probe_fails():
+    events = []
+    engine, store, _supervisor, _sessions = _engine(events, fail_tcp_egress=True)
+    with pytest.raises(ApnaTunnelEngineError, match="startup failed"):
+        engine.connect(_profile())
+    assert events == [
+        "session-connect",
+        "config-save",
+        "xray-start",
+        "udp-dns-probe",
+        "tcp-tls-egress-probe",
+        "xray-stop",
+        "session-disconnect",
+        "config-remove",
+    ]
+    assert engine.state is ConnectionState.DISCONNECTED
+    assert not store.saved
 
 def test_engine_rejects_wrong_transport():
     engine, _store, _supervisor, _sessions = _engine([])
