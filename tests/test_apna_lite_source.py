@@ -105,6 +105,15 @@ def test_rejects_empty_or_oversized_response() -> None:
         source.fetch_document()
 
 
-def test_rejects_non_positive_timeout() -> None:
+def test_rejects_oversized_response() -> None:
+    from apnawin.services.apna_lite_catalog import MAX_INPUT_BYTES
+
+    source = ApnaLiteCatalogSource(opener=_Opener(b"A" * (MAX_INPUT_BYTES + 1)))
+    with pytest.raises(ValueError, match="size"):
+        source.fetch_document()
+
+
+@pytest.mark.parametrize("timeout", [0, float("inf"), float("nan"), True])
+def test_rejects_invalid_timeout(timeout: float) -> None:
     with pytest.raises(ValueError, match="timeout"):
-        ApnaLiteCatalogSource(timeout_seconds=0)
+        ApnaLiteCatalogSource(timeout_seconds=timeout)
