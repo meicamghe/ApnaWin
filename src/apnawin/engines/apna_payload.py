@@ -50,19 +50,15 @@ class PayloadRotation:
             self._indices.clear()
             self._last_payload = payload
 
-        occurrence = 0
-
-        def replace(match: re.Match[str]) -> str:
-            nonlocal occurrence
-            values = match.group(1).split(";")
-            if not values or any(not value for value in values):
-                raise PayloadFormatError("Rotate expressions must contain non-empty values")
+        for occurrence, match in enumerate(_ROTATE.finditer(payload)):
+            values = _java_split(match.group(1), ";")
+            if not values:
+                continue
             selected = (self._indices.get(occurrence, -1) + 1) % len(values)
             self._indices[occurrence] = selected
-            occurrence += 1
-            return values[selected]
-
-        return _ROTATE.sub(replace, payload)
+            # Android uses String.replace, replacing every identical expression.
+            payload = payload.replace(match.group(0), values[selected])
+        return payload
 
 
 def _validate_endpoint(host: str, port: int, protocol: str) -> None:
@@ -85,11 +81,9 @@ def render_apna_payload(
     *,
     host: str,
     port: int,
+    method: str = "CONNECT",
     protocol: str = "HTTP/1.0",
-    user_agent: str = (
-        "Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/44.0.2403.130 Safari/537.36"
-    ),
+    user_agent: str | None = None,
     rotation: PayloadRotation | None = None,
     delay_split_ms: int = 1000,
 ) -> tuple[PayloadChunk, ...]:
@@ -103,32 +97,39 @@ def render_apna_payload(
     if len(template) > _MAX_TEMPLATE_CHARS:
         raise PayloadFormatError("Payload template exceeds the size limit")
     _validate_endpoint(host, port, protocol)
-    for name, value, limit in (
-        ("user_agent", user_agent, 1024),
-    ):
-        if not isinstance(value, str) or not value or len(value) > limit:
-            raise PayloadFormatError(f"{name} is invalid")
-        if any(ord(char) < 0x20 or ord(char) > 0x7E for char in value):
-            raise PayloadFormatError(f"{name} contains control or non-ASCII characters")
+    if not isinstance(method, str) or not method or len(method) > 32:
+        raise PayloadFormatError("Payload method token is invalid")
+    if any(ord(char) < 0x21 or ord(char) > 0x7E for char in method):
+        raise PayloadFormatError("Payload method contains whitespace or control characters")
+    if user_agent is None:
+        user_agent = (
+            "Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/44.0.2403.130 Safari/537.36"
+        )
+    if not isinstance(user_agent, str) or len(user_agent) > 1024:
+        raise PayloadFormatError("user_agent is invalid")
+    if any(ord(char) < 0x20 or ord(char) > 0x7E for char in user_agent):
+        raise PayloadFormatError("user_agent contains control or non-ASCII characters")
     if isinstance(delay_split_ms, bool) or not isinstance(delay_split_ms, int):
         raise TypeError("Split delay must be an integer number of milliseconds")
     if not 0 <= delay_split_ms <= 10_000:
         raise PayloadFormatError("Split delay must be between 0 and 10000 milliseconds")
 
+    # Preserve the insertion order recovered from formatCustomPayload.
     substitutions = {
+        "[method]": method,
         "[host]": host,
-        "[ip]": host,
-        "[host_port]": f"{host}:{port}",
         "[port]": str(port),
+        "[host_port]": f"{host}:{port}",
         "[protocol]": protocol,
         "[ssh]": f"{host}:{port}",
-        "[ua]": user_agent,
         "[crlf]": "\r\n",
         "[cr]": "\r",
         "[lf]": "\n",
         "[lfcr]": "\n\r",
         r"\n": "\n",
         r"\r": "\r",
+        "[ua]": user_agent,
     }
     expanded = template
     for token, value in substitutions.items():
@@ -141,9 +142,9 @@ def render_apna_payload(
         return (_chunk(expanded, 0),)
 
     chunks: list[PayloadChunk] = []
-    delay_parts = expanded.split(_DELAY_SPLIT)
+    delay_parts = _java_split(expanded, _DELAY_SPLIT)
     for delay_index, delay_part in enumerate(delay_parts):
-        instant_parts = delay_part.split(_INSTANT_SPLIT)
+        instant_parts = _java_split(delay_part, _INSTANT_SPLIT)
         for instant_index, part in enumerate(instant_parts):
             is_last_in_delay_part = instant_index == len(instant_parts) - 1
             has_following_delay_part = delay_index < len(delay_parts) - 1
@@ -152,9 +153,16 @@ def render_apna_payload(
     return tuple(chunks)
 
 
+def _java_split(value: str, delimiter: str) -> list[str]:
+    """Match Java String.split(regex) trailing-empty removal for literal tokens."""
+    parts = value.split(delimiter)
+    while parts and parts[-1] == "":
+        parts.pop()
+    return parts
+
+
 def _replace_rotate_first(payload: str) -> str:
-    rotation = PayloadRotation()
-    return rotation.expand(payload)
+    return PayloadRotation().expand(payload)
 
 
 def _chunk(text: str, delay_after_ms: int) -> PayloadChunk:
