@@ -108,6 +108,7 @@ def test_local_socks5_connect_is_forwarded_over_authenticated_ssh_channel() -> N
             self.sent = bytearray()
             self.reply = bytearray(b"remote-reply")
             self.closed = False
+            self.closed_event = threading.Event()
 
         def recv(self, size):
             if self.reply:
@@ -124,6 +125,7 @@ def test_local_socks5_connect_is_forwarded_over_authenticated_ssh_channel() -> N
 
         def close(self):
             self.closed = True
+            self.closed_event.set()
 
     class FakeTransport:
         def is_active(self):
@@ -172,7 +174,7 @@ def test_local_socks5_connect_is_forwarded_over_authenticated_ssh_channel() -> N
         local.sendall(b"\x05\x01\x00\x03\x0bexample.com\x01\xbb")
         assert local.recv(10) == b"\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00"
         assert local.recv(12) == b"remote-reply"
-        assert channels and channels[0].closed
+        assert channels and channels[0].closed_event.wait(2)
     finally:
         local.close()
         session.close()
