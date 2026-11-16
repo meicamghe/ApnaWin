@@ -68,7 +68,7 @@ def test_maps_plain_http_websocket_to_ssh_and_udpgw():
     assert mapped.session_config.payload.target_host == "ssh-a.example.test"
     assert mapped.session_config.payload.target_port == 1194
     assert mapped.session_config.payload.cf_host == "front-a.example.test"
-    assert mapped.session_config.payload.expected_http_statuses == (101,)
+    assert mapped.session_config.payload.expected_http_statuses == (200, 101)
     assert mapped.session_config.udpgw_host == "ssh-a.example.test"
     assert mapped.session_config.udpgw_port == 53
 
@@ -178,3 +178,19 @@ def test_catalog_choice_helpers_filter_out_non_ssh_protocols():
     assert len(payloads) == 1
     assert payloads[0]["method"] == "http"
     assert list_apna_lite_ssh_payloads(catalog, "ocsudp") == []
+
+
+
+def test_websocket_payload_accepts_both_http_connect_and_upgrade_success():
+    mapped = build_apna_lite_ssh_profile(
+        _catalog(), _server(), _payload(), host_selector=_first
+    )
+    assert mapped.session_config.payload.expected_http_statuses == (200, 101)
+
+
+def test_non_websocket_http_payload_requires_connect_success_only():
+    payload = _payload(template="CONNECT [host_port] [protocol][crlf][crlf]")
+    mapped = build_apna_lite_ssh_profile(
+        _catalog(), _server(), payload, host_selector=_first
+    )
+    assert mapped.session_config.payload.expected_http_statuses == (200,)
