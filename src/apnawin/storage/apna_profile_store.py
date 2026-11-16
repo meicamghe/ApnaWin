@@ -304,3 +304,16 @@ class ApnaProfileStore:
         """Return whether an encrypted APNA configuration exists for a profile."""
         key = _profile_key(profile_name)
         return key in self._read()
+
+    def rename(self, old_profile: ConnectionProfile, new_profile: ConnectionProfile) -> None:
+        """Move an encrypted APNA config to a renamed profile without exposing secrets."""
+        if (
+            not isinstance(old_profile, ConnectionProfile)
+            or not isinstance(new_profile, ConnectionProfile)
+            or old_profile.transport is not Transport.APNA_SSH
+            or new_profile.transport is not Transport.APNA_SSH
+        ):
+            raise TypeError("old_profile and new_profile must be APNA_SSH profiles")
+        config = self.load(old_profile)
+        self.save(new_profile, config)
+        self.remove(old_profile.name)
