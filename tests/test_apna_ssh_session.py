@@ -251,3 +251,20 @@ def test_ssh_config_validates_openssh_sha256_fingerprint():
             "ssh.example.test", 22, "user", password="secret",
             host_key_sha256="not-a-fingerprint",
         )
+
+
+@pytest.mark.parametrize("field", ["connect_timeout", "auth_timeout", "banner_timeout"])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), 0, -1, True])
+def test_ssh_config_rejects_non_finite_or_non_positive_timeouts(field, value):
+    with pytest.raises(ValueError, match="finite and positive"):
+        ApnaSshConfig("ssh.example.test", 22, "user", password="secret", **{field: value})
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), 0, -1, True])
+def test_ssh_session_rejects_invalid_channel_timeout(value):
+    with pytest.raises(ValueError, match="channel_timeout must be finite and positive"):
+        ApnaSshSession(
+            ApnaSshConfig("ssh.example.test", 22, "user", password="secret"),
+            _payload_config(),
+            channel_timeout=value,
+        )
