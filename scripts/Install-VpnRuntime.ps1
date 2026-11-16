@@ -117,7 +117,13 @@ try {
             signer = $signature.SignerCertificate.Subject
         }
     }
-    $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $engine "runtime-manifest.json") -Encoding utf8
+    $manifestJson = $manifest | ConvertTo-Json -Depth 5
+    $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+    [System.IO.File]::WriteAllText(
+        (Join-Path $engine "runtime-manifest.json"),
+        $manifestJson,
+        $utf8NoBom
+    )
     Write-Output "Verified Xray $XrayVersion and Wintun $WintunVersion in $engine"
 }
 finally {

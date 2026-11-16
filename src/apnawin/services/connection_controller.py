@@ -82,6 +82,23 @@ class ConnectionController:
 
             self._state = ConnectionState.CONNECTED
 
+    def refresh(self) -> ConnectionState:
+        """Synchronize controller state with engines that expose live supervision."""
+        with self._lock:
+            refresh_engine = getattr(self._engine, "refresh", None)
+            if self._state is ConnectionState.CONNECTED and callable(refresh_engine):
+                try:
+                    observed = refresh_engine()
+                except Exception:
+                    self._state = ConnectionState.ERROR
+                    raise
+                if not isinstance(observed, ConnectionState):
+                    raise TypeError("Engine refresh() must return a ConnectionState")
+                self._state = observed
+                if observed is ConnectionState.DISCONNECTED:
+                    self._profile = None
+            return self._state
+
     def disconnect(self) -> None:
         with self._lock:
             if self._state is ConnectionState.DISCONNECTED:

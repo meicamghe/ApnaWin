@@ -1,16 +1,20 @@
 # Session handoff
 
-## Current repository state
+## Current repository state — 2026-11-16
 
-The native Windows application shell, profile management, Xray process runner, Windows Job Object supervision, remote catalog schema/cache, refresh coordinator, bounded HTTPS transport and privacy-conscious APK inventory are implemented. Android APK inspection is static metadata analysis only; native Android `.so` files are not treated as Windows DLLs.
+The current Windows x64 branch is `vpn/integrated-tun-readiness-runtime`, HEAD `76503f2d927eefbf75500c50e0282747513bf68a`. Pull request [#4](https://github.com/meicamghe/ApnaWin/pull/4) is open and mergeable.
 
-The Connect button remains intentionally disabled because a verified Windows tunnel/TUN integration and authorized end-to-end server configuration are not available.
+The desktop Connect flow is wired to the fixed-path elevated Xray helper. Connect is enabled only for a validated encrypted XRAY TUN profile when the helper is installed under Program Files. The helper verifies the packaged Xray/Wintun hashes, validates the strict dual-stack TUN config, waits for the adapter, effective IPv4/IPv6 default routes and configured DNS, then requires an independent certificate-validated IPv4 TLS egress probe. Adapter/routes/DNS are monitored while connected; repeated unhealthy samples trigger Xray shutdown.
 
-## Latest CI verification
+**This is local tunnel-readiness integration, not release acceptance.** It does not establish APNA-provider compatibility, IPv6 application egress, DNS/IPv4/IPv6 leak resistance under failure, or cleanup after forced termination/reboot. Xray's WFP filters are process-owned; ApnaWin has no independent persistent kill switch. The journal/plan/transaction modules remain experimental injected-adapter infrastructure and are not in the production route/DNS path.
 
-Workflow [43714910902](https://github.com/meicamghe/ApnaWin/actions/runs/43714910902) passed on commit `b1012d9d7725247f2409fff6fe6cf6b7c39ac756`: 619 tests passed (one warning from a duplicate ZIP-entry fixture); Windows x64 PyInstaller folder build, packaged executable smoke test and portable artifact upload all succeeded. Artifact ID: `14161764950`.
+An authorized APNA Xray configuration/catalog/authentication source is still unavailable. Do not invent endpoints, credentials or protocol details. Do not claim a working APNA connection until a real authorized profile is tested on clean Windows 10/11 systems.
 
-CI validates configured tests and packaging, not live VPN connectivity.
+## Latest CI and portable artifact
+
+Workflow [43819919964](https://github.com/meicamghe/ApnaWin/actions/runs/43819919964) (run 358) passed all 6 jobs on HEAD `76503f2d927eefbf75500c50e0282747513bf68a`: 903 passed, 1 skipped in the full unit/integration suite; VPN readiness/egress, installer/runtime security, Ruff, Windows x64 packaging and final artifact publication all succeeded.
+
+Published artifact: `ApnaWin-Windows-x64`, artifact ID `14204335649`, 76,806,229 bytes, SHA-256 `1b48b8b45a3faf57ef33fc9f0ae2c3ef498e26c3c1f210ff1b9f921f6ea0d513`. The ZIP contains the desktop executable, elevated helper, Xray, Wintun, runtime manifest, licenses and installer script. CI validates configured tests and packaging; it does not execute a real APNA tunnel or prove leak resistance.
 
 ## Windows network transaction
 
@@ -104,3 +108,18 @@ Added XrayTunnelSupervisor as the desktop-side lifecycle abstraction: XRAY-only,
 ## Latest verified Windows build (2026-11-15)
 
 CI run 43724914682 completed successfully: 848 tests passed, one skipped, and the Windows build, elevated helper build, pinned Xray/Wintun runtime installation, packaged-app smoke test and artifact upload all succeeded. Artifact ApnaWin-Windows-x64: ID 14165469958, 75,925,661 bytes, not expired. Commit 6410a2cf5b0b651dd48519bcdca299f246e64143 includes the desktop-side XrayTunnelSupervisor wrapper. The latest commit adds read-only adapter/route/DNS diagnostics. Connect remains disabled; no APNA endpoint/auth format has been established, and live route/DNS/WFP/e2e acceptance is still pending.
+
+## Integrated Windows VPN readiness work — awaiting CI
+
+A consolidated pull request (#4) now combines the active connection workstreams: strict TUN config import and proxy-only outbound policy; fixed-path UAC helper and Xray supervisor; runtime-manifest SHA-256 verification for Xray/Wintun; adapter ownership preflight; effective IPv4/IPv6 default-route metric checks; exact DNS readiness; independent external TLS egress probe; periodic adapter/route/DNS health monitoring; graceful shutdown on startup timeout or repeated health loss. The current PR head is tracked in GitHub pull request #4. Windows CI for the integrated branch is pending/queued; do not report it as passed until the run completes.
+
+The separate Python Wintun packet engine and route/DNS transaction path are not used: Xray native TUN owns those operations. The desktop Connect UI remains disabled until clean Windows 10/11 tests prove provider-specific traffic, DNS and IPv4/IPv6 leak behavior, WFP behavior, normal disconnect, helper/desktop crash and reboot cleanup. APNA's actual remote catalog/authentication schema and an authorized APNA Xray config remain unverified; do not fabricate them.
+
+
+## Current integrated desktop connection state — 2026-11-16
+
+- The main window now creates the production XrayTunnelEngine and ConnectionController on Windows only when the fixed elevated helper exists under Program Files. Connect is enabled only for an XRAY profile with a validated encrypted config; non-Windows and incomplete installations remain disabled.
+- Connect/Disconnect run in a Qt worker thread. The helper withholds its ready event until runtime hashes, TUN adapter, effective IPv4/IPv6 default routes, configured DNS and an independent certificate-validated TLS egress probe pass. The helper watches desktop/stop events and supervises Xray in a Job Object.
+- While connected, the helper rechecks adapter/routes/DNS every two seconds. This update adds periodic independent TLS egress checks every 15 seconds; three consecutive failed egress checks request graceful shutdown.
+- CI run 43812584700 (run 350) passed all five parallel validation tracks and published the portable artifact. This is component/CI validation, not a live APNA provider acceptance test.
+- APNA server catalog endpoint, authentication, response schema and an authorized APNA Xray config remain unverified. Do not claim APNA compatibility or fabricate endpoints. Live tests must still cover provider-specific traffic, DNS and IPv4/IPv6 leaks, WFP behavior, clean disconnect, helper/desktop crash and reboot cleanup.
