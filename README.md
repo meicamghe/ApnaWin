@@ -4,7 +4,7 @@ A native Windows 10/11 desktop client project inspired by the workflow of APNA T
 
 ## Current status
 
-**M2 profile workflow and M2a/M2b engine-process foundations are implemented; M2c remote-configuration discovery is documented but awaits APK/runtime evidence.** The repository includes:
+**M2 profile workflow and M2a/M2b engine-process foundations are implemented; M2c APNA catalog discovery is implemented in a discovery-only path, while runtime semantics and provider connection remain in progress.** The repository includes:
 - A native PySide6 desktop application.
 - Add, edit, select and remove connection profiles.
 - Strict local JSON persistence for non-secret profile metadata, with unique same-directory atomic temp files, flush/fsync, duplicate-key/schema validation and duplicate-name rejection.
@@ -16,10 +16,11 @@ A native Windows 10/11 desktop client project inspired by the workflow of APNA T
 - Windows Job Object process-tree containment for the Xray runner.
 - Windows GitHub Actions tests and a PyInstaller build job that publishes a portable Windows x64 application-folder artifact (14-day retention).
 - A pinned runtime packaging step for Xray-core v26.11.9 and Wintun 0.14.1, with archive hash, PE architecture, Authenticode and version checks.
+- An APNA TUNNEL LITE embedded-catalog decoder with bounded parsing, duplicate-key rejection and safe metadata summaries; a discovery-only HTTPS source uses the reported Android request headers, finite timeout, redirect rejection and bounded reads. Synthetic decoder and mocked transport tests cover this path. It is not connected to the UI, normalized catalog cache or tunnel engine.
 
 The desktop UI is wired to the connection controller and fixed-path UAC/Xray supervisor. Connect is enabled only for a selected XRAY profile with an imported, validated, DPAPI-protected full-tunnel config and an installed protected helper/runtime. The helper verifies Xray/Wintun hashes, waits for stable effective IPv4/IPv6 default routes and configured DNS, then requires a certificate-validated external TLS egress probe before signaling ready. While connected it monitors adapter/routes/DNS and periodically rechecks independent TLS egress; repeated health failures trigger graceful Xray shutdown. CI verifies the application build and these component-level behaviors, but it does not execute an authorized live APNA server session. Clean Windows 10/11 acceptance for provider-specific traffic, DNS/IPv4/IPv6 leak behavior, WFP under failure, disconnect and crash/reboot cleanup remains outstanding. The portable artifact is not a signed installer or a verified APNA VPN client. No APNA TUNNEL server compatibility is claimed.
 
-The Android app may refresh its server catalog and connection parameters remotely. This is a first-class requirement for the Windows product. Third-party reverse-engineering research has identified a candidate APNA Lite catalog endpoint, request headers, and a modified-XXTEA format. The decoder's literal key has now successfully decoded the supplied APK asset to valid JSON with the independently reported version and record counts. The protected OpenVPN implementation and server/payload selection contract remain under investigation. See [remote configuration discovery](docs/remote-configuration.md) and [APNA Tunnel Lite upstream evidence](docs/apna-tunnel-lite-upstream-evidence.md). No provider credentials or raw catalog data will be committed.
+The Android app may refresh its server catalog and connection parameters remotely. This is a first-class requirement for the Windows product. Third-party reverse-engineering research has identified a candidate APNA Lite catalog endpoint, request headers, and a modified-XXTEA format. The decoder's literal key has now successfully decoded the supplied APK asset to valid JSON with the independently reported version and record counts. The protected OpenVPN implementation and server/payload selection contract remain under investigation. See [remote configuration discovery](docs/remote-configuration.md), [APNA Tunnel Lite upstream evidence](docs/apna-tunnel-lite-upstream-evidence.md), and the [APNA Lite integration plan](docs/apna-lite-integration-plan.md). No provider credentials or raw catalog data will be committed.
 
 ## Run from source
 
