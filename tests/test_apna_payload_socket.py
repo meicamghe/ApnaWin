@@ -29,9 +29,8 @@ def test_http_proxy_payload_is_sent_and_success_response_is_consumed(monkeypatch
         server_socket.close()
 
     client, worker = _socket_pair_factory(server)
-    monkeypatch.setattr(
-        "apnawin.engines.apna_payload_socket.socket.create_connection",
-        lambda address, timeout: client,
+    connector = ApnaPayloadSocketConnector(
+        socket_factory=lambda address, timeout: client
     )
     config = PayloadSocketConfig(
         mode=PayloadSocketMode.HTTP_PROXY,
@@ -41,7 +40,7 @@ def test_http_proxy_payload_is_sent_and_success_response_is_consumed(monkeypatch
         target_port=443,
         payload="CONNECT [host_port] [protocol][crlf][crlf]",
     )
-    connected = ApnaPayloadSocketConnector().connect(config)
+    connected = connector.connect(config)
     assert connected is client
     connected.close()
     worker.join(timeout=1)
@@ -55,9 +54,8 @@ def test_http_proxy_rejection_fails_closed_and_closes_socket(monkeypatch) -> Non
         server_socket.close()
 
     client, worker = _socket_pair_factory(server)
-    monkeypatch.setattr(
-        "apnawin.engines.apna_payload_socket.socket.create_connection",
-        lambda address, timeout: client,
+    connector = ApnaPayloadSocketConnector(
+        socket_factory=lambda address, timeout: client
     )
     config = PayloadSocketConfig(
         mode=PayloadSocketMode.HTTP_PROXY,
@@ -68,7 +66,7 @@ def test_http_proxy_rejection_fails_closed_and_closes_socket(monkeypatch) -> Non
         payload="CONNECT [host_port] [protocol][crlf][crlf]",
     )
     with pytest.raises(PayloadTransportError, match="HTTP 407"):
-        ApnaPayloadSocketConnector().connect(config)
+        connector.connect(config)
     worker.join(timeout=1)
     assert client.fileno() == -1
 
@@ -81,9 +79,8 @@ def test_dropbear_mode_returns_after_payload_without_waiting_for_http(monkeypatc
         server_socket.close()
 
     client, worker = _socket_pair_factory(server)
-    monkeypatch.setattr(
-        "apnawin.engines.apna_payload_socket.socket.create_connection",
-        lambda address, timeout: client,
+    connector = ApnaPayloadSocketConnector(
+        socket_factory=lambda address, timeout: client
     )
     config = PayloadSocketConfig(
         mode=PayloadSocketMode.HTTP_PROXY,
@@ -94,7 +91,7 @@ def test_dropbear_mode_returns_after_payload_without_waiting_for_http(monkeypatc
         payload="CUSTOM [host_port][crlf]",
         dropbear_no_response=True,
     )
-    connected = ApnaPayloadSocketConnector().connect(config)
+    connected = connector.connect(config)
     assert connected is client
     connected.close()
     worker.join(timeout=1)
@@ -103,9 +100,8 @@ def test_dropbear_mode_returns_after_payload_without_waiting_for_http(monkeypatc
 
 def test_direct_mode_does_not_inject_payload(monkeypatch) -> None:
     client, server = socket.socketpair()
-    monkeypatch.setattr(
-        "apnawin.engines.apna_payload_socket.socket.create_connection",
-        lambda address, timeout: client,
+    connector = ApnaPayloadSocketConnector(
+        socket_factory=lambda address, timeout: client
     )
     config = PayloadSocketConfig(
         mode=PayloadSocketMode.DIRECT,
@@ -115,7 +111,7 @@ def test_direct_mode_does_not_inject_payload(monkeypatch) -> None:
         target_port=22,
         payload="must not be sent",
     )
-    connected = ApnaPayloadSocketConnector().connect(config)
+    connected = connector.connect(config)
     server.settimeout(0.05)
     with pytest.raises(TimeoutError):
         server.recv(1)
