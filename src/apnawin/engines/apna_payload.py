@@ -84,6 +84,8 @@ def render_apna_payload(
     method: str = "CONNECT",
     protocol: str = "HTTP/1.0",
     user_agent: str | None = None,
+    cf_host: str | None = None,
+    brand: str | None = None,
     rotation: PayloadRotation | None = None,
     delay_split_ms: int = 1000,
 ) -> tuple[PayloadChunk, ...]:
@@ -116,6 +118,20 @@ def render_apna_payload(
     if not 0 <= delay_split_ms <= 10_000:
         raise PayloadFormatError("Split delay must be between 0 and 10000 milliseconds")
 
+    # The catalog layer supplies [cf] and [brand] before the DEX formatter.
+    expanded = template
+    if cf_host is not None:
+        _validate_endpoint(cf_host, 1, protocol)
+        expanded = expanded.replace("[cf]", cf_host)
+    if brand is not None:
+        if (
+            not isinstance(brand, str)
+            or len(brand) > 128
+            or any(ord(char) < 0x20 or ord(char) > 0x7E for char in brand)
+        ):
+            raise PayloadFormatError("brand contains invalid characters")
+        expanded = expanded.replace("[brand]", brand)
+
     # Preserve the insertion order recovered from formatCustomPayload.
     substitutions = {
         "[method]": method,
@@ -132,7 +148,6 @@ def render_apna_payload(
         r"\r": "\r",
         "[ua]": user_agent,
     }
-    expanded = template
     for token, value in substitutions.items():
         expanded = expanded.replace(token, value)
 
