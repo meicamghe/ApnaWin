@@ -4,7 +4,7 @@ import socket
 import pytest
 
 from apnawin.engines.apna_payload_socket import PayloadSocketConfig, PayloadSocketMode
-from apnawin.engines.apna_ssh_session import ApnaSshConfig, ApnaSshSession
+from apnawin.engines.apna_ssh_session import ApnaSshConfig, ApnaSshError, ApnaSshSession
 
 
 def _payload_config() -> PayloadSocketConfig:
