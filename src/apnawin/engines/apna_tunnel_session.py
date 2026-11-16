@@ -109,6 +109,19 @@ class ApnaTunnelSession:
         return self._connected
 
     @property
+    def is_healthy(self) -> bool:
+        """Check the authenticated SSH transport and its local SOCKS5 listener."""
+        if not self._connected or self._ssh_session is None or self._gateway is None:
+            return False
+        try:
+            return bool(
+                self._ssh_session.is_authenticated
+                and self._gateway.is_running
+            )
+        except Exception:
+            return False
+
+    @property
     def local_socks_address(self) -> tuple[str, int] | None:
         if not self._connected or self._gateway is None:
             return None
