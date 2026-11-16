@@ -13,6 +13,7 @@ from apnawin.engines.apna_tunnel_session import (
     ApnaTunnelSessionConfig,
 )
 from apnawin.engines.apna_xray_config import build_apna_xray_tun_config
+from apnawin.engines.apna_udp_dns_probe import probe_udp_dns
 from apnawin.services.xray_tunnel_supervisor import XrayTunnelSupervisor
 from apnawin.storage.xray_config_store import XrayConfigStore
 
@@ -37,6 +38,7 @@ class ApnaTunnelEngine:
         *,
         session_factory: Callable[..., ApnaTunnelSession] = ApnaTunnelSession,
         config_builder: Callable[..., bytes] = build_apna_xray_tun_config,
+        udp_dns_probe: Callable[[tuple[str, ...]], object] = probe_udp_dns,
         platform_name: str | None = None,
     ) -> None:
         if not callable(session_config_loader):
@@ -49,14 +51,19 @@ class ApnaTunnelEngine:
             raise TypeError("config_store must provide save() and remove() operations")
         if xray_supervisor is None:
             raise TypeError("xray_supervisor is required")
-        if not callable(session_factory) or not callable(config_builder):
-            raise TypeError("session_factory and config_builder must be callable")
+        if (
+            not callable(session_factory)
+            or not callable(config_builder)
+            or not callable(udp_dns_probe)
+        ):
+            raise TypeError("session_factory, config_builder and udp_dns_probe must be callable")
 
         self._session_config_loader = session_config_loader
         self._config_store = config_store
         self._xray_supervisor = xray_supervisor
         self._session_factory = session_factory
         self._config_builder = config_builder
+        self._udp_dns_probe = udp_dns_probe
         self._platform_name = os.name if platform_name is None else platform_name
         self._session: ApnaTunnelSession | None = None
         self._profile: ConnectionProfile | None = None
@@ -164,6 +171,7 @@ class ApnaTunnelEngine:
             self._xray_started = True
             if self._xray_supervisor.poll() is not None:
                 raise ApnaTunnelEngineError("Xray helper exited before tunnel readiness")
+            self._udp_dns_probe(dns_servers)
             self._state = ConnectionState.CONNECTED
         except Exception as exc:
             cleanup_errors = []
