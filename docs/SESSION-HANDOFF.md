@@ -14,7 +14,7 @@ An authorized APNA Xray configuration/catalog/authentication source is still una
 
 Workflow [43819919964](https://github.com/meicamghe/ApnaWin/actions/runs/43819919964) (run 358) passed all 6 jobs on HEAD `76503f2d927eefbf75500c50e0282747513bf68a`: 903 passed, 1 skipped in the full unit/integration suite; VPN readiness/egress, installer/runtime security, Ruff, Windows x64 packaging and final artifact publication all succeeded.
 
-Published artifact: `ApnaWin-Windows-x64`, artifact ID `14204335649`, 76,806,229 bytes, SHA-256 `1b48b8b45a3faf57ef33fc9f0ae2c3ef498e26c3f210ff1b9f921f6ea0d513`. The ZIP contains the desktop executable, elevated helper, Xray, Wintun, runtime manifest, licenses and installer script. CI validates configured tests and packaging; it does not execute a real APNA tunnel or prove leak resistance.
+Published artifact: `ApnaWin-Windows-x64`, artifact ID `14204335649`, 76,806,229 bytes, SHA-256 `1b48b8b45a3faf57ef33fc9f0ae2c3ef498e26c3c1f210ff1b9f921f6ea0d513`. The ZIP contains the desktop executable, elevated helper, Xray, Wintun, runtime manifest, licenses and installer script. CI validates configured tests and packaging; it does not execute a real APNA tunnel or prove leak resistance.
 
 ## Windows network transaction
 
