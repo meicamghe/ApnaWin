@@ -97,6 +97,27 @@ The public HttpProxyCustom connects to a configured proxy host/port, expands the
 
 The APNA DEX independently confirms the formatter/injector method names, the five core token strings [ssh], [crlf], [cr], [lf], [lfcr], and ISO-8859-1 output writes. The expanded token set and one-second delay behavior need to be confirmed against APNA's actual method bytecode or controlled runtime traces before implementing them as APNA compatibility requirements.
 
+## 3B. Exact uProxy JNI package match and missing native split
+
+The APNA primary DEX references the exact Java class descriptor org/uproxy/tun2socks/Tun2SocksJni and the library names libtun2socks and libtun2socks.so. A public repository, UWNetworksLab/cordova-plugin-tun2socks, contains that exact package/class:
+
+- [Tun2SocksJni.java](https://github.com/UWNetworksLab/cordova-plugin-tun2socks/blob/9b686fb3bad6792142425931799b8f7690a932eb/android/java/org/uproxy/tun2socks/Tun2SocksJni.java)
+- [Tunnel.java](https://github.com/UWNetworksLab/cordova-plugin-tun2socks/blob/9b686fb3bad6792142425931799b8f7690a932eb/android/java/org/uproxy/tun2socks/Tunnel.java)
+- [JNI/native bridge](https://github.com/UWNetworksLab/cordova-plugin-tun2socks/blob/9b686fb3bad6792142425931799b8f7690a932eb/android/jni/tun2socks/tun2socks.c)
+- [Plugin manifest and declared license](https://github.com/UWNetworksLab/cordova-plugin-tun2socks/blob/9b686fb3bad6792142425931799b8f7690a932eb/plugin.xml)
+
+The public JNI method signature is:
+
+`runTun2Socks(fd, mtu, vpnIpAddress, vpnNetMask, socksServerAddress, udpRelayAddress, dnsResolverAddress, transparentDNS)`
+
+Its source comment explicitly describes TCP being routed through the SOCKS proxy and UDP being sent to a separate UDPGW server. The native JNI bridge maps those arguments to the native SOCKS address, UDP relay address, DNS resolver address and transparent-DNS setting. The public Tunnel wrapper passes the TUN descriptor, interface MTU/address/netmask and those endpoints to the native method.
+
+The exact class/package match plus the APNA DEX's UDPGW fields is strong evidence that APNA uses this uProxy/BadVPN-derived native TUN bridge or a close fork. It does not identify the precise native commit or prove the APNA argument values.
+
+**Important APK packaging gap:** the supplied file is named base.apk. A full ZIP scan of its 1,479 entries found no .so entry and no entry beginning with the ELF magic bytes. The DEX nevertheless references libtun2socks.so. This does not prove the installed app lacks the library: Android App Bundle delivery can put ABI-specific native libraries in a separate split APK (for example, an arm64-v8a split), or the protected app may extract/load it by another mechanism. The native implementation therefore cannot be audited from the supplied base.apk alone. A complete installed-package pull, including every split APK, is needed to recover the exact binary and version.
+
+The Cordova plugin is an Android/JNI integration and is not itself a Windows runtime. Its plugin manifest declares Apache 2.0, while individual Java/native source files carry Psiphon/BadVPN notices. Audit the exact file-level notices and transitive dependencies before reuse. For ApnaWin, the Windows side must implement an equivalent TUN-to-SOCKS plus UDPGW bridge with Windows-native TUN/Wintun handling; the Android JNI binary cannot simply be loaded on Windows.
+
 ## 3A. UDP gateway path — strong framework match, APNA endpoint still unknown
 
 The APNA primary DEX string table contains all of the following exact identifiers:
