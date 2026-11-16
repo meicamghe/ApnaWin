@@ -118,8 +118,9 @@ def _session_config():
             target_host="ssh.example.test",
             target_port=443,
         ),
-        udpgw_host=None,
-        udpgw_port=None,
+        udpgw_host="udpgw.example.test",
+        udpgw_port=7300,
+        transparent_dns=True,
     )
 
 
@@ -141,6 +142,8 @@ def _engine(events, *, fail_xray_start=False, fail_xray_stop=False, fail_session
         store,  # type: ignore[arg-type]
         supervisor,  # type: ignore[arg-type]
         session_factory=make_session,
+        udp_dns_probe=lambda servers: events.append("udp-dns-probe"),
+        platform_name="nt",
     )
     return engine, store, supervisor, sessions
 
@@ -179,14 +182,17 @@ def test_engine_rejects_secure_loader_endpoint_mismatch():
             target_host="other.example.test",
             target_port=443,
         ),
-        udpgw_host=None,
-        udpgw_port=None,
+        udpgw_host="udpgw.example.test",
+        udpgw_port=7300,
+        transparent_dns=True,
     )
     engine = ApnaTunnelEngine(
         lambda profile: bad_config,
         _FakeConfigStore(events),  # type: ignore[arg-type]
         _FakeSupervisor(events),  # type: ignore[arg-type]
         session_factory=lambda config: pytest.fail("session must not start"),
+        platform_name="nt",
+        udp_dns_probe=lambda servers: None,
     )
     with pytest.raises(ValueError, match="does not match"):
         engine.connect(_profile())
