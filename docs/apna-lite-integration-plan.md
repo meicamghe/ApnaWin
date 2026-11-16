@@ -15,7 +15,7 @@ The project uses two inputs:
    - APNA README: `decoders/Python/apps/APNA_Tunnel_Lite/README.md`
    - Report: `analysis/platform/supplied-integrations/2026-11-14/ANALYSIS.md`
 
-See [upstream protocol evidence](apna-tunnel-lite-upstream-evidence.md) for the detailed observations and limitations.
+See [upstream protocol evidence](apna-tunnel-lite-upstream-evidence.md) and [Android runtime static analysis](apna-lite-android-runtime-analysis.md) for the detailed observations and limitations.
 
 ## 2. Current implementation
 
@@ -66,9 +66,13 @@ The sample includes payload methods `http`, `ssl`, `udp`, `direct`. Category nam
 ### B. Android behavior reconstruction
 
 - [x] Identify exact package and app version from the supplied APK.
-- [x] Identify candidate `OpenVPNClient` reference and LIAPP-protected secondary asset.
+- [x] Identify the `OpenVPNClient` descriptor reference and LIAPP-protected asset; confirm the descriptor alone does not establish OpenVPN protocol use.
+- [x] Trace the primary DEX-defined Android TUN stack: `VpnService`, `TunnelVpnManager`, `Tun2Socks`, `libtun2socks.so`, SSH manager and DNS helpers.
+- [x] Identify custom-payload formatter and CR/LF/SSH placeholder token references.
 - [x] Record server and payload fields, methods, categories and ambiguous values.
 - [ ] Trace server/payload category matching and selection/fallback rules.
+- [ ] Recover the Android SSH + payload-injection contract and local forwarding topology.
+- [ ] Recover the Xray helper and UDP gateway contracts separately.
 - [ ] Determine how semicolon-delimited server hosts are selected.
 - [ ] Determine the meaning and substitutions for `Pulled`, `sslws`, `sausage`, `query`, `dothost`, and `custom_cert`.
 - [ ] Recover each category's runtime engine and exact launch contract.
