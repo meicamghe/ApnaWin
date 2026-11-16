@@ -67,6 +67,22 @@ This closely matches the APNA primary-DEX evidence: startClienteSSH, startForwar
 
 **Still unproven for APNA:** the exact settings source, whether all APNA SSH categories use this path, the local listener address/port, service implementation identity, credential selection, and whether the APK's protected service diverges from this public framework.
 
+## 2C. Payload formatter and SSH-over-proxy transport details
+
+The same SecondVPN source snapshot also exposes a fuller transport sequence:
+
+- `TunnelUtils.formatCustomPayload(hostname, port, payload)` fills `[method]` as `CONNECT`; `[host]` and `[ip]` as the target hostname; `[host_port]`, `[ssh]`, and `[vpn]` as host:port; `[protocol]` as `HTTP/1.0`; `[port]`; `[ua]`; CR/LF tokens and escaped `\\n` / `\\r`. It then applies `parseRotate`, `parseRandom`, and repeated line-ending macros such as `[cr*3]`, `[lf*2]`, `[crlf*2]`, and `[lfcr*2]`.
+- `[rotate=...]` advances round-robin per occurrence and resets when the substituted payload template changes. `[random=...]` chooses one semicolon-separated value for that formatting call.
+- `HttpProxyCustom.openConnection` opens a TCP connection to the configured proxy, writes the formatted payload with split/flush handling, and normally reads an HTTP status line before handing the resulting stream to the SSH client. A Dropbear mode skips response parsing and immediately returns the socket.
+- The SSH manager attaches that socket as the SSH library's proxy transport, calls SSH connect with a 10-second connect timeout and 20-second read timeout, tries password authentication and then a configured public key, requires completed authentication, opens a local dynamic SOCKS forwarder, and only then starts the Android TUN/tun2socks service.
+- HTTPS modes are separate: one path establishes TLS to the configured host/SNI before injecting payload; another can place an SSL tunnel proxy in the SSH transport. The source's SSLPayloadTunnelProxy uses the platform trust manager in its active code path; its adjacent unused trust-all array must not be copied.
+
+This is detailed sibling-framework evidence, not yet proof of APNA's exact protected mode-selection logic. The implementation now has two deliberately separate pieces:
+- `apna_payload.py` compiles payload tokens and split boundaries.
+- `apna_payload_socket.py` opens a direct TCP, HTTP-payload, or TLS-before-payload stream and validates HTTP 200 responses by default. Its Dropbear option skips that response wait. It fails closed on non-200 status and bounds the response header; unlike the sibling's permissive non-200 branch, it does not pass rejected proxy responses to SSH.
+
+Neither component is yet an authenticated SSH client or a TUN data plane. No APNA server profile has been authenticated with these modules.
+
 ## 2B. Independent confirmation of the exact APNA split tokens
 
 A second public implementation contains the exact method pair `formatCustomPayload` / `injectSplitPayload` and, importantly, an `injectSimpleSplit` branch that explicitly recognizes `[instant_split]`:
