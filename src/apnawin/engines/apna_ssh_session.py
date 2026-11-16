@@ -181,9 +181,13 @@ def _relay_tcp(client: socket.socket, channel) -> None:
 
     worker = threading.Thread(target=channel_to_client, daemon=True)
     worker.start()
+    client.settimeout(0.5)
     try:
         while not finished.is_set():
-            data = client.recv(32768)
+            try:
+                data = client.recv(32768)
+            except socket.timeout:
+                continue
             if not data:
                 break
             channel.sendall(data)
