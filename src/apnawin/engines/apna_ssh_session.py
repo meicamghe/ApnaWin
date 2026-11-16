@@ -9,6 +9,7 @@ import base64
 import hashlib
 import hmac
 import ipaddress
+import math
 import re
 import socket
 import socketserver
@@ -100,8 +101,13 @@ class ApnaSshConfig:
             raise ValueError("local_port must be between 0 and 65535")
         for name in ("connect_timeout", "auth_timeout", "banner_timeout"):
             value = getattr(self, name)
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
-                raise ValueError(f"{name} must be positive")
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value <= 0
+            ):
+                raise ValueError(f"{name} must be finite and positive")
 
 
 class _SocksHandler(socketserver.BaseRequestHandler):
@@ -245,6 +251,13 @@ class ApnaSshSession:
     ) -> None:
         self.config = config
         self.payload_config = payload_config
+        if (
+            isinstance(channel_timeout, bool)
+            or not isinstance(channel_timeout, (int, float))
+            or not math.isfinite(channel_timeout)
+            or channel_timeout <= 0
+        ):
+            raise ValueError("channel_timeout must be finite and positive")
         self._connector = connector or ApnaPayloadSocketConnector()
         self._ssh_client_factory = ssh_client_factory
         self._channel_timeout = channel_timeout
