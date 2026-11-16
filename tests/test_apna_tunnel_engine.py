@@ -246,3 +246,57 @@ def test_engine_refresh_marks_unexpected_helper_exit_as_error():
     engine.connect(_profile())
     supervisor.running = False
     assert engine.refresh() is ConnectionState.ERROR
+
+
+def test_engine_rejects_missing_udpgw_before_starting_any_network_resources():
+    events = []
+    store = _FakeConfigStore(events)
+    supervisor = _FakeSupervisor(events)
+    base = _session_config()
+    no_udp = ApnaTunnelSessionConfig(
+        ssh=base.ssh,
+        payload=base.payload,
+        udpgw_host=None,
+        udpgw_port=None,
+    )
+    engine = ApnaTunnelEngine(
+        lambda profile: no_udp,
+        store,  # type: ignore[arg-type]
+        supervisor,  # type: ignore[arg-type]
+        platform_name="nt",
+    )
+    with pytest.raises(ValueError, match="requires a configured UDPGW"):
+        engine.validate_profile(_profile())
+    assert events == []
+
+
+def test_engine_rolls_back_if_post_tun_udp_dns_probe_fails():
+    events = []
+    store = _FakeConfigStore(events)
+    supervisor = _FakeSupervisor(events)
+
+    def fail_udp_probe(servers):
+        events.append("udp-dns-probe")
+        raise OSError("DNS over UDP timed out")
+
+    engine = ApnaTunnelEngine(
+        lambda profile: _session_config(),
+        store,  # type: ignore[arg-type]
+        supervisor,  # type: ignore[arg-type]
+        session_factory=lambda config: _FakeSession(config, events=events),
+        udp_dns_probe=fail_udp_probe,
+        platform_name="nt",
+    )
+    with pytest.raises(ApnaTunnelEngineError, match="startup failed"):
+        engine.connect(_profile())
+    assert events == [
+        "session-connect",
+        "config-save",
+        "xray-start",
+        "udp-dns-probe",
+        "xray-stop",
+        "session-disconnect",
+        "config-remove",
+    ]
+    assert engine.state is ConnectionState.DISCONNECTED
+    assert not store.saved
