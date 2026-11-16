@@ -38,7 +38,7 @@ The following call relationships and Android API references are present in DEX c
 4. The service calls `VpnService.Builder.establish()` and retains the resulting `ParcelFileDescriptor`.
 5. The `Tun2Socks` worker launches `libtun2socks.so` from the app's private data directory.
 6. The worker passes the TUN file descriptor to the native process using an Android local socket and `setFileDescriptorsForSend`.
-7. The tunnel stop path terminates Tun2Socks, joins its worker, stops DNS support and closes the TUN descriptor.
+7. The `Tunnel.startTunneling` method accepts a SOCKS server string, a DNS resolver string array, boolean settings and additional routing parameters. `TunnelVpnSettings` contains explicit fields for `mSocksServer`, `mDnsResolver`, `mUdpResolver`, `mUdpDnsRelay`, `mDnsForward`, `mExcludeIps`, `mFilterApps`, `mEnableFilterApps`, `mFilterBypassMode`, `bypass`, and `mTetheringSubnet`. This confirms the TUN layer is configured to hand traffic to a local SOCKS endpoint and has separate DNS/UDP relay controls. The tunnel stop path terminates Tun2Socks, joins its worker, stops DNS support and closes the TUN descriptor.
 
 This is a conventional Android userspace VPN architecture: Android creates the TUN interface, and a userspace forwarding engine moves packets between that interface and one or more proxy transports. The Windows port must reproduce the forwarding/proxy semantics, not the Android `VpnService` API itself.
 
@@ -68,11 +68,14 @@ The payload-writing routines use `ISO-8859-1` byte conversion and write/flush to
 
 ## 5. Multiple forwarding modes are present, but their mapping is not yet proven
 
-The primary DEX references service helpers named:
+The primary DEX defines the following explicit static helper methods on `TunnelManagerHelper`, each taking an Android `Context`:
 
 - `startSsh` / `stopSsh`
 - `startXRay` / `stopXRay`
 - `startSocksHttp` / `stopSocksHttp`
+- `restartSocksHttp`
+
+The start methods create an `Intent` and invoke `Context.startService`; stop methods send broadcasts. This confirms three distinct service launch/stop paths exist. The exact service component names are resolved through obfuscated/indirect helper code and must still be mapped.
 
 It also defines `SalamanderService`, `SocksDNSService`, and `XRayDNSService`. The presence of these symbols shows that more than one service/forwarding path exists. It does not yet prove which APNA `category` or `method` selects which service.
 
@@ -94,10 +97,12 @@ The Android TUN layer and Windows Wintun layer solve the packet-capture/route pr
 
 ### Track A — payload and SSH
 
-- [ ] Recover the method signatures and all call sites for `startClienteSSH`, `startForwarder`, `formatCustomPayload`, `injectSplitPayload` and `injectSimpleSplit`.
+- [x] Recover method signatures for `startClienteSSH`, `startForwarder(int)`, `formatCustomPayload(String, int, String)`, `injectSplitPayload(String, OutputStream)` and `injectSimpleSplit(String, OutputStream)`.
+- [ ] Recover all call sites and trace the arguments that populate those methods.
 - [ ] Trace how the selected server record and payload record populate the SSH client and forwarder settings.
 - [ ] Determine the exact `[ssh]` placeholder substitution and CR/LF token behavior.
 - [ ] Identify the SSH library/service implementation and its authentication/host-key policy.
+- [x] Confirm the Android TUN settings explicitly carry a SOCKS server endpoint and separate DNS/UDP relay settings.
 - [ ] Determine local SOCKS/HTTP listener ports and which listener receives TUN traffic.
 
 ### Track B — Xray and UDP
