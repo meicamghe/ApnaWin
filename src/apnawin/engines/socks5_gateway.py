@@ -7,6 +7,7 @@ opened through that same SSH endpoint. The listener is restricted to loopback.
 from __future__ import annotations
 
 import ipaddress
+import math
 import select
 import socket
 import socketserver
@@ -18,8 +19,10 @@ from dataclasses import dataclass
 from apnawin.engines.udpgw_flows import UdpGwFlowTable
 from apnawin.engines.udpgw_stream import (
     Socks5ConnectConfig,
+    Socks5ProtocolError,
     UdpGwStreamClient,
     UdpGwTransportError,
+    open_socks5_connect,
 )
 
 
@@ -55,8 +58,8 @@ class Socks5GatewayConfig:
             listen_ip = ipaddress.ip_address(self.listen_host)
         except ValueError as exc:
             raise ValueError("listen_host must be a loopback IP address") from exc
-        if not listen_ip.is_loopback:
-            raise ValueError("SOCKS5 gateway may only bind to loopback")
+        if not listen_ip.is_loopback or listen_ip.version != 4:
+            raise ValueError("SOCKS5 gateway may only bind to an IPv4 loopback address")
         for name in ("ssh_proxy_port",):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 65535:
@@ -89,8 +92,13 @@ class Socks5GatewayConfig:
             raise ValueError("max_udp_flows must be between 1 and 65535")
         for name in ("keepalive_interval", "udp_idle_timeout", "connect_timeout"):
             value = getattr(self, name)
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
-                raise ValueError(f"{name} must be positive")
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value <= 0
+            ):
+                raise ValueError(f"{name} must be positive and finite")
 
 
 def _recv_exact(sock: socket.socket, size: int) -> bytes:
@@ -266,12 +274,7 @@ class Socks5Gateway:
         target_host: str,
         target_port: int,
     ) -> None:
-        upstream = None
         try:
-            upstream = UdpGwStreamClient  # keep transport imports explicit at module scope
-            del upstream
-            from apnawin.engines.udpgw_stream import open_socks5_connect
-
             upstream_socket = open_socks5_connect(
                 Socks5ConnectConfig(
                     proxy_host=self.config.ssh_proxy_host,
@@ -281,7 +284,7 @@ class Socks5Gateway:
                     timeout=self.config.connect_timeout,
                 )
             )
-        except (OSError, Socks5GatewayError, UdpGwTransportError, Exception):
+        except (OSError, Socks5ProtocolError, UdpGwTransportError):
             client.sendall(_socks5_reply(5))
             return
 
@@ -312,6 +315,7 @@ class Socks5Gateway:
 
         relay = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         stream = None
+        replied = False
         try:
             relay.bind((self.config.listen_host, 0))
             stream = UdpGwStreamClient(
@@ -325,12 +329,14 @@ class Socks5Gateway:
             ).connect()
             relay_host, relay_port = relay.getsockname()
             control.sendall(_socks5_reply(0, str(relay_host), int(relay_port)))
+            replied = True
             self._run_udp_relay(control, relay, stream, peer_ip)
         except (OSError, UdpGwTransportError, Socks5GatewayError):
-            try:
-                control.sendall(_socks5_reply(1))
-            except OSError:
-                pass
+            if not replied:
+                try:
+                    control.sendall(_socks5_reply(1))
+                except OSError:
+                    pass
         finally:
             relay.close()
             if stream is not None:
@@ -344,7 +350,7 @@ class Socks5Gateway:
         peer_ip: str,
     ) -> None:
         flows = UdpGwFlowTable(max_connections=self.config.max_udp_flows)
-        client_endpoint: tuple[str, int] | None = None
+        allowed_endpoint: tuple[str, int] | None = None
         last_activity = time.monotonic()
         last_keepalive = last_activity
 
@@ -367,7 +373,7 @@ class Socks5Gateway:
 
             if relay in readable:
                 raw, source = relay.recvfrom(65535)
-                if source[0] != peer_ip or (client_endpoint is not None and source != client_endpoint):
+                if source[0] != peer_ip or (allowed_endpoint is not None and source != allowed_endpoint):
                     continue
                 try:
                     target_host, target_port, payload = parse_socks5_udp_datagram(raw)
@@ -386,19 +392,20 @@ class Socks5Gateway:
                         is_dns=self.config.transparent_dns and target_port == 53,
                         rebind=lease.rebind,
                     )
-                    client_endpoint = source
+                    allowed_endpoint = source
                     last_activity = now
-                except (ValueError, UdpGwTransportError):
+                except (ValueError, Socks5GatewayError, UdpGwTransportError):
                     continue
 
             if stream.socket in readable:
                 try:
                     packet = stream.receive_packet(timeout=0.05)
-                    self._send_udp_response(packet, flows, relay)
-                    last_activity = now
+                    if self._send_udp_response(packet, flows, relay):
+                        last_activity = now
                     while stream.pending_packets:
                         packet = stream.receive_packet(timeout=0.05)
-                        self._send_udp_response(packet, flows, relay)
+                        if self._send_udp_response(packet, flows, relay):
+                            last_activity = now
                 except socket.timeout:
                     pass
                 except UdpGwTransportError:
@@ -425,17 +432,18 @@ class Socks5Gateway:
         packet,
         flows: UdpGwFlowTable,
         relay: socket.socket,
-    ) -> None:
+    ) -> bool:
         if packet.is_keepalive or packet.address is None or packet.port is None:
-            return
+            return False
         flow = flows.lookup(packet.connection_id)
         if flow is None:
-            return
+            return False
         destination = (str(flow[0]), flow[1])
         relay.sendto(
             encode_socks5_udp_datagram(str(packet.address), packet.port, packet.data),
             destination,
         )
+        return True
 
     def __enter__(self) -> Socks5Gateway:
         return self.start()
