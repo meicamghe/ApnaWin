@@ -64,7 +64,7 @@ The reconnect worker closes and restarts the SSH client when network availabilit
 - `[lf]`
 - `[lfcr]`
 
-The payload-writing routines use `ISO-8859-1` byte conversion and write/flush to an output stream. This strongly indicates that payload strings are transformed into bytes and injected into a socket stream as part of the proxy handshake. The exact full grammar, substitution order, TLS/WS behavior, and how catalog fields feed this formatter still need tracing.
+The payload-writing routines use `ISO-8859-1` byte conversion and write/flush to an output stream. This strongly indicates that payload strings are transformed into bytes and injected into a socket stream as part of the proxy handshake. The exact full grammar, substitution order, TLS/WS behavior, and how catalog fields feed this formatter still need tracing. The `startSsh` helper explicitly launches `SalamanderService`, while `startXRay` launches `XRayDNSService`; this ties the app's visible SSH and XRay control paths to separate Android services.
 
 ## 5. Multiple forwarding modes are present, but their mapping is not yet proven
 
@@ -75,7 +75,7 @@ The primary DEX defines the following explicit static helper methods on `TunnelM
 - `startSocksHttp` / `stopSocksHttp`
 - `restartSocksHttp`
 
-The start methods create an `Intent` and invoke `Context.startService`; stop methods send broadcasts. This confirms three distinct service launch/stop paths exist. The exact service component names are resolved through obfuscated/indirect helper code and must still be mapped.
+The start methods create an explicit service `Intent` and invoke `Context.startService`; the DEX type references map them directly: `startSsh` starts `SalamanderService`, `startXRay` starts `XRayDNSService`, and `startSocksHttp` starts `SocksDNSService`. The stop methods send broadcasts. These are confirmed service destinations, although the full internal behavior of the protected services is not yet reconstructed.
 
 It also defines `SalamanderService`, `SocksDNSService`, and `XRayDNSService`. The presence of these symbols shows that more than one service/forwarding path exists. It does not yet prove which APNA `category` or `method` selects which service.
 
@@ -104,6 +104,7 @@ The Android TUN layer and Windows Wintun layer solve the packet-capture/route pr
 - [ ] Identify the SSH library/service implementation and its authentication/host-key policy.
 - [x] Confirm the Android TUN settings explicitly carry a SOCKS server endpoint and separate DNS/UDP relay settings.
 - [ ] Determine local SOCKS/HTTP listener ports and which listener receives TUN traffic.
+- [x] Map explicit service launch targets: SSH → `SalamanderService`, XRay → `XRayDNSService`, SOCKS/HTTP → `SocksDNSService`.
 
 ### Track B — Xray and UDP
 
