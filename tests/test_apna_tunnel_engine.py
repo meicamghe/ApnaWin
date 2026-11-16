@@ -51,6 +51,11 @@ class _FakeSession:
         self.config = config
         self.events = events
         self.fail_disconnect = fail_disconnect
+        self.healthy = True
+
+    @property
+    def is_healthy(self):
+        return self.healthy
 
     def connect(self):
         self.events.append("session-connect")
@@ -300,3 +305,14 @@ def test_engine_rolls_back_if_post_tun_udp_dns_probe_fails():
     ]
     assert engine.state is ConnectionState.DISCONNECTED
     assert not store.saved
+
+
+def test_engine_refresh_marks_lost_apna_ssh_session_as_error():
+    events = []
+    engine, _store, _supervisor, sessions = _engine(events)
+    engine.connect(_profile())
+    sessions[0].healthy = False
+    assert engine.refresh() is ConnectionState.ERROR
+    assert "APNA SSH" in engine.last_error
+    engine.disconnect()
+    assert engine.state is ConnectionState.DISCONNECTED
