@@ -20,26 +20,22 @@ jobs:
     name: Code quality (Ruff)
     runs-on: windows-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
       - name: Install lint dependency
         run: python -m pip install "ruff>=0.6"
-      - name: Check source and tests
-        run: python -m ruff check src tests
+      - name: Check critical correctness rules
+        run: python -m ruff check --select E4,E7,E9,F src tests
 
   test:
     name: Unit and integration tests
     runs-on: windows-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
@@ -52,10 +48,8 @@ jobs:
     name: Installer and runtime security tests
     runs-on: windows-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
@@ -70,10 +64,8 @@ jobs:
     name: Windows x64 packaging
     runs-on: windows-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
