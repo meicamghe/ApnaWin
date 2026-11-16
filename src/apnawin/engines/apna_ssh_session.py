@@ -1,0 +1,326 @@
+"""Authenticated SSH session with a loopback-only SOCKS5 TCP forwarder.
+
+This is a lower transport component. It does not create a TUN interface or
+carry UDP; UDPGW is a separate protocol path.
+"""
+from __future__ import annotations
+
+import ipaddress
+import select
+import socket
+import socketserver
+import threading
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable
+
+import paramiko
+
+from apnawin.engines.apna_payload_socket import (
+    ApnaPayloadSocketConnector,
+    PayloadSocketConfig,
+)
+
+
+class ApnaSshError(ConnectionError):
+    """SSH authentication, host-key verification, or forwarding failed."""
+
+
+@dataclass(frozen=True, slots=True)
+class ApnaSshConfig:
+    ssh_host: str
+    ssh_port: int
+    username: str
+    password: str | None = field(default=None, repr=False)
+    key_filename: str | None = None
+    known_hosts_files: tuple[str, ...] = ()
+    local_host: str = "127.0.0.1"
+    local_port: int = 0
+    connect_timeout: float = 10.0
+    auth_timeout: float = 15.0
+    banner_timeout: float = 15.0
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.ssh_host, str) or not self.ssh_host or len(self.ssh_host) > 253:
+            raise ValueError("ssh_host is invalid")
+        try:
+            ipaddress.ip_address(self.ssh_host)
+        except ValueError:
+            if any(c.isspace() or ord(c) < 0x21 or ord(c) > 0x7E for c in self.ssh_host):
+                raise ValueError("ssh_host must be an IP address or ASCII DNS name")
+        if isinstance(self.ssh_port, bool) or not isinstance(self.ssh_port, int):
+            raise TypeError("ssh_port must be an integer")
+        if not 1 <= self.ssh_port <= 65535:
+            raise ValueError("ssh_port must be between 1 and 65535")
+        if not isinstance(self.username, str) or not self.username or len(self.username) > 256:
+            raise ValueError("username is invalid")
+        if self.password is not None and not isinstance(self.password, str):
+            raise TypeError("password must be text or None")
+        if not self.password and not self.key_filename:
+            raise ValueError("SSH password or private-key file is required")
+        if self.key_filename is not None and not isinstance(self.key_filename, str):
+            raise TypeError("key_filename must be text or None")
+        if not isinstance(self.known_hosts_files, tuple):
+            raise TypeError("known_hosts_files must be a tuple")
+        if any(not isinstance(path, str) or not path for path in self.known_hosts_files):
+            raise ValueError("known_hosts_files contains an invalid path")
+        try:
+            local = ipaddress.ip_address(self.local_host)
+        except ValueError as exc:
+            raise ValueError("local_host must be a loopback IP literal") from exc
+        if not local.is_loopback:
+            raise ValueError("SOCKS listener must bind to a loopback address")
+        if isinstance(self.local_port, bool) or not isinstance(self.local_port, int):
+            raise TypeError("local_port must be an integer")
+        if not 0 <= self.local_port <= 65535:
+            raise ValueError("local_port must be between 0 and 65535")
+        for name in ("connect_timeout", "auth_timeout", "banner_timeout"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+                raise ValueError(f"{name} must be positive")
+
+
+class _SocksHandler(socketserver.BaseRequestHandler):
+    def handle(self) -> None:
+        session: ApnaSshSession = self.server.session
+        client = self.request
+        channel = None
+        try:
+            version, method_count = _recv_exact(client, 2)
+            if version != 5 or method_count == 0:
+                return
+            methods = _recv_exact(client, method_count)
+            if 0 not in methods:
+                client.sendall(b"\x05\xff")
+                return
+            client.sendall(b"\x05\x00")
+
+            version, command, reserved, address_type = _recv_exact(client, 4)
+            if version != 5 or reserved != 0:
+                _socks_reply(client, 1)
+                return
+            if command != 1:
+                _socks_reply(client, 7)
+                return
+            if address_type == 1:
+                host = socket.inet_ntop(socket.AF_INET, _recv_exact(client, 4))
+            elif address_type == 4:
+                host = socket.inet_ntop(socket.AF_INET6, _recv_exact(client, 16))
+            elif address_type == 3:
+                length = _recv_exact(client, 1)[0]
+                try:
+                    host = _recv_exact(client, length).decode("idna")
+                except UnicodeError:
+                    _socks_reply(client, 8)
+                    return
+            else:
+                _socks_reply(client, 8)
+                return
+            port = int.from_bytes(_recv_exact(client, 2), "big")
+            if not host or port == 0:
+                _socks_reply(client, 8)
+                return
+
+            transport = session._ssh_client.get_transport()
+            if transport is None or not transport.is_active() or not transport.is_authenticated():
+                _socks_reply(client, 1)
+                return
+            channel = transport.open_channel(
+                "direct-tcpip",
+                (host, port),
+                client.getsockname(),
+                timeout=session._channel_timeout,
+            )
+            if channel is None:
+                _socks_reply(client, 1)
+                return
+            _socks_reply(client, 0)
+            _relay_tcp(client, channel)
+        except (OSError, EOFError, paramiko.SSHException):
+            try:
+                _socks_reply(client, 1)
+            except OSError:
+                pass
+        finally:
+            if channel is not None:
+                channel.close()
+
+
+def _recv_exact(sock: socket.socket, size: int) -> bytes:
+    result = bytearray()
+    while len(result) < size:
+        chunk = sock.recv(size - len(result))
+        if not chunk:
+            raise EOFError("SOCKS client closed during handshake")
+        result.extend(chunk)
+    return bytes(result)
+
+
+def _socks_reply(sock: socket.socket, code: int) -> None:
+    # The bound address is intentionally the loopback endpoint, not the remote.
+    sock.sendall(b"\x05" + bytes((code, 0, 1)) + b"\x00\x00\x00\x00\x00\x00")
+
+
+def _relay_tcp(client: socket.socket, channel) -> None:
+    finished = threading.Event()
+
+    def channel_to_client() -> None:
+        try:
+            while not finished.is_set():
+                data = channel.recv(32768)
+                if not data:
+                    break
+                client.sendall(data)
+        except (OSError, EOFError):
+            pass
+        finally:
+            finished.set()
+            try:
+                client.shutdown(socket.SHUT_WR)
+            except OSError:
+                pass
+
+    worker = threading.Thread(target=channel_to_client, daemon=True)
+    worker.start()
+    try:
+        while not finished.is_set():
+            data = client.recv(32768)
+            if not data:
+                break
+            channel.sendall(data)
+    finally:
+        try:
+            channel.shutdown_write()
+        except (OSError, EOFError):
+            pass
+        finished.set()
+        worker.join(timeout=2)
+
+
+class _ThreadingSocksServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+    block_on_close = False
+
+
+class ApnaSshSession:
+    """Own an authenticated SSH transport and a loopback SOCKS5 TCP endpoint."""
+
+    def __init__(
+        self,
+        config: ApnaSshConfig,
+        payload_config: PayloadSocketConfig,
+        *,
+        connector: ApnaPayloadSocketConnector | None = None,
+        ssh_client_factory: Callable[[], paramiko.SSHClient] = paramiko.SSHClient,
+        channel_timeout: float = 10.0,
+    ) -> None:
+        self.config = config
+        self.payload_config = payload_config
+        self._connector = connector or ApnaPayloadSocketConnector()
+        self._ssh_client_factory = ssh_client_factory
+        self._channel_timeout = channel_timeout
+        self._ssh_client: paramiko.SSHClient | None = None
+        self._payload_socket: socket.socket | None = None
+        self._server: _ThreadingSocksServer | None = None
+        self._server_thread: threading.Thread | None = None
+        self._closed = False
+
+    @property
+    def socks_address(self) -> tuple[str, int] | None:
+        if self._server is None:
+            return None
+        host, port = self._server.server_address[:2]
+        return str(host), int(port)
+
+    @property
+    def is_authenticated(self) -> bool:
+        if self._ssh_client is None:
+            return False
+        transport = self._ssh_client.get_transport()
+        return bool(transport and transport.is_active() and transport.is_authenticated())
+
+    def connect(self) -> tuple[str, int]:
+        if self._ssh_client is not None or self._server is not None:
+            raise ApnaSshError("SSH session is already initialized")
+        if (
+            self.payload_config.target_host != self.config.ssh_host
+            or self.payload_config.target_port != self.config.ssh_port
+        ):
+            raise ValueError("Payload target must match the SSH host and port")
+        client = self._ssh_client_factory()
+        sock = None
+        try:
+            client.load_system_host_keys()
+            for known_hosts in self.config.known_hosts_files:
+                client.load_host_keys(str(Path(known_hosts)))
+            client.set_missing_host_key_policy(paramiko.RejectPolicy())
+            sock = self._connector.connect(self.payload_config)
+            client.connect(
+                hostname=self.config.ssh_host,
+                port=self.config.ssh_port,
+                username=self.config.username,
+                password=self.config.password,
+                key_filename=self.config.key_filename,
+                sock=sock,
+                timeout=self.config.connect_timeout,
+                auth_timeout=self.config.auth_timeout,
+                banner_timeout=self.config.banner_timeout,
+                allow_agent=False,
+                look_for_keys=False,
+            )
+            transport = client.get_transport()
+            if transport is None or not transport.is_active() or not transport.is_authenticated():
+                raise ApnaSshError("SSH authentication did not complete")
+            self._ssh_client = client
+            self._payload_socket = sock
+            server = _ThreadingSocksServer(
+                (self.config.local_host, self.config.local_port),
+                _SocksHandler,
+            )
+            server.session = self
+            self._server = server
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            self._server_thread = thread
+            return self.socks_address
+        except Exception as exc:
+            client.close()
+            if sock is not None:
+                try:
+                    sock.close()
+                except OSError:
+                    pass
+            if isinstance(exc, (ApnaSshError, ValueError, TypeError)):
+                raise
+            raise ApnaSshError(
+                "SSH transport or authentication failed; host-key verification is enforced"
+            ) from exc
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        if self._server is not None:
+            self._server.shutdown()
+            self._server.server_close()
+            if self._server_thread is not None:
+                self._server_thread.join(timeout=2)
+            self._server = None
+            self._server_thread = None
+        if self._ssh_client is not None:
+            self._ssh_client.close()
+            self._ssh_client = None
+        if self._payload_socket is not None:
+            try:
+                self._payload_socket.close()
+            except OSError:
+                pass
+            self._payload_socket = None
+
+    def __enter__(self) -> ApnaSshSession:
+        self.connect()
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        self.close()
