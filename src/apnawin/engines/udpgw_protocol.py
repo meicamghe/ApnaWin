@@ -146,11 +146,6 @@ class PacketProtoDecoder:
 
     def feed(self, data: bytes | bytearray | memoryview) -> tuple[bytes, ...]:
         incoming = bytes(data)
-        if len(self._buffer) + len(incoming) > self._max_payload_bytes + 2:
-            # Complete frames are consumed below; this guard only rejects a
-            # single incomplete frame that has grown beyond the configured cap.
-            if len(self._buffer) < 2:
-                raise UdpGwProtocolError("PacketProto receive buffer exceeds its limit")
         self._buffer.extend(incoming)
         frames: list[bytes] = []
         while len(self._buffer) >= 2:
