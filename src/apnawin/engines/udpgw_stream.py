@@ -238,6 +238,8 @@ class UdpGwStreamClient:
         while not self._pending:
             try:
                 chunk = sock.recv(64 * 1024)
+            except socket.timeout:
+                raise
             except OSError as exc:
                 raise UdpGwTransportError("Could not receive UDPGW stream data") from exc
             if not chunk:
