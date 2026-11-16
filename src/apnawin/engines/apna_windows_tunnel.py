@@ -65,6 +65,7 @@ class ApnaWindowsTunnelEngine:
         self._state = ConnectionState.DISCONNECTED
         self._profile: ConnectionProfile | None = None
         self._session_config: ApnaTunnelSessionConfig | None = None
+        self._validated_profile: ConnectionProfile | None = None
         self._session: ApnaTunnelSession | None = None
         self._xray_profile: ConnectionProfile | None = None
         self._config_name: str | None = None
@@ -113,6 +114,7 @@ class ApnaWindowsTunnelEngine:
         if self._state not in {ConnectionState.DISCONNECTED, ConnectionState.ERROR}:
             raise RuntimeError(f"Cannot validate APNA profile while state is {self._state.value}")
         self._session_config = self._load_session_config(profile)
+        self._validated_profile = profile
 
     def _make_dns_servers(
         self,
@@ -131,14 +133,21 @@ class ApnaWindowsTunnelEngine:
     def connect(self, profile: ConnectionProfile) -> None:
         if self._state not in {ConnectionState.DISCONNECTED}:
             raise RuntimeError(f"Cannot start APNA tunnel while state is {self._state.value}")
+        if not isinstance(profile, ConnectionProfile):
+            raise TypeError("profile must be a ConnectionProfile")
+        if self._session_config is None or self._validated_profile != profile:
+            self.validate_profile(profile)
         self._state = ConnectionState.CONNECTING
         self._profile = profile
         self.last_error = None
         session = None
         xray_started = False
         try:
-            session_config = self._session_config or self._load_session_config(profile)
+            session_config = self._session_config
+            if session_config is None:
+                raise RuntimeError("APNA profile validation did not produce session settings")
             self._session_config = None
+            self._validated_profile = None
             session = self._session_factory(session_config)
             self._session = session
             socks_address = session.connect()
@@ -253,5 +262,6 @@ class ApnaWindowsTunnelEngine:
 
         self._profile = None
         self._session_config = None
+        self._validated_profile = None
         self._state = ConnectionState.DISCONNECTED
         self.last_error = None
