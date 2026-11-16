@@ -176,24 +176,31 @@ class ApnaTunnelSession:
             raise ApnaTunnelSessionError(f"APNA transport startup failed: {exc}") from exc
 
     def disconnect(self) -> None:
-        errors = []
-        gateway, self._gateway = self._gateway, None
-        ssh_session, self._ssh_session = self._ssh_session, None
-        self._connected = False
+        # Retain the owner of any resource whose close operation failed so the
+        # caller can retry cleanup instead of silently losing the handle.
+        gateway = self._gateway
         if gateway is not None:
             try:
                 gateway.close()
             except Exception as exc:
-                errors.append(exc)
+                self._connected = False
+                raise ApnaTunnelSessionError(
+                    f"APNA SOCKS5 gateway cleanup failed; SSH ownership is retained: {exc}"
+                ) from exc
+            self._gateway = None
+
+        ssh_session = self._ssh_session
         if ssh_session is not None:
             try:
                 ssh_session.close()
             except Exception as exc:
-                errors.append(exc)
-        if errors:
-            raise ApnaTunnelSessionError(
-                "APNA transport cleanup failed: " + "; ".join(str(item) for item in errors)
-            )
+                self._connected = False
+                raise ApnaTunnelSessionError(
+                    f"APNA SSH cleanup failed; SSH ownership is retained: {exc}"
+                ) from exc
+            self._ssh_session = None
+
+        self._connected = False
 
     def __enter__(self) -> ApnaTunnelSession:
         self.connect()
