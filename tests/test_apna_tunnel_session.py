@@ -41,6 +41,11 @@ class _FakeSshSession:
         self.events = events
         self.address = address
         self.fail = fail
+        self.authenticated = True
+
+    @property
+    def is_authenticated(self):
+        return self.authenticated
 
     def connect(self):
         self.events.append("ssh-connect")
@@ -58,12 +63,18 @@ class _FakeGateway:
         self.events = events
         self.fail = fail
         self._address = ("127.0.0.1", 12000)
+        self.running = False
 
     def start(self):
         self.events.append("gateway-start")
         if self.fail:
             raise OSError("gateway bind failed")
+        self.running = True
         return self
+
+    @property
+    def is_running(self):
+        return self.running
 
     @property
     def address(self):
@@ -71,6 +82,7 @@ class _FakeGateway:
 
     def close(self):
         self.events.append("gateway-close")
+        self.running = False
 
 
 def test_connect_preflights_udpgw_and_starts_gateway_after_ssh():
@@ -230,3 +242,37 @@ def test_startup_cleanup_failure_retains_gateway_and_ssh_for_retry():
 def test_config_rejects_non_finite_or_non_positive_timeouts(field, value):
     with pytest.raises(ValueError, match="finite positive"):
         _config(**{field: value})
+
+
+def test_health_tracks_authenticated_ssh_and_gateway_listener():
+    events = []
+    ssh_sessions = []
+    gateways = []
+
+    def make_ssh(*args):
+        session = _FakeSshSession(*args, events=events)
+        ssh_sessions.append(session)
+        return session
+
+    def make_gateway(config):
+        gateway = _FakeGateway(config, events=events)
+        gateways.append(gateway)
+        return gateway
+
+    session = ApnaTunnelSession(
+        _config(udpgw_host=None, udpgw_port=None),
+        ssh_session_factory=make_ssh,
+        gateway_factory=make_gateway,
+    )
+    session.connect()
+    assert session.is_connected
+    assert session.is_healthy
+
+    ssh_sessions[0].authenticated = False
+    assert not session.is_healthy
+    ssh_sessions[0].authenticated = True
+    gateways[0].running = False
+    assert not session.is_healthy
+
+    session.disconnect()
+    assert not session.is_healthy
