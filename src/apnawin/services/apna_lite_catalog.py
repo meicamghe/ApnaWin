@@ -100,6 +100,40 @@ def _mx(total: int, y: int, z: int, index: int, e: int, key: list[int]) -> int:
     ) & MASK
 
 
+
+def _encrypt_xxtea(plaintext: bytes) -> bytes:
+    """Encrypt bytes using the catalog's XXTEA envelope (test/format utility).
+
+    The format is unauthenticated; this helper exists to construct synthetic
+    fixtures and must not be treated as a security mechanism.
+    """
+    if not isinstance(plaintext, bytes):
+        raise TypeError("plaintext must be bytes")
+    if not plaintext or len(plaintext) > MAX_INPUT_BYTES:
+        raise ApnaLiteCatalogError("Plaintext catalog size is invalid")
+    padded = plaintext.ljust((len(plaintext) + 3) // 4 * 4, b"\\0")
+    values = _words(padded)
+    values.append(len(plaintext))
+    key = _words(_CATALOG_KEY.ljust(16, b"\\0"))
+    if len(values) < 2 or len(key) != 4:
+        raise ApnaLiteCatalogError("Invalid plaintext catalog")
+    rounds = 6 + 52 // len(values)
+    total = 0
+    z = values[-1]
+    for _ in range(rounds):
+        total = (total + DELTA) & MASK
+        e = (total >> 2) & 3
+        for index in range(len(values) - 1):
+            y = values[index + 1]
+            values[index] = (values[index] + _mx(total, y, z, index, e, key)) & MASK
+            z = values[index]
+        y = values[0]
+        last = len(values) - 1
+        values[last] = (values[last] + _mx(total, y, z, last, e, key)) & MASK
+        z = values[last]
+    return struct.pack("<" + "I" * len(values), *values)
+
+
 def _decrypt_xxtea(ciphertext: bytes) -> bytes:
     if len(ciphertext) < 8 or len(ciphertext) % 4:
         raise ApnaLiteCatalogError("Invalid encrypted catalog length")
