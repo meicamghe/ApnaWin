@@ -71,7 +71,9 @@ The sample includes payload methods `http`, `ssl`, `udp`, `direct`. Category nam
 - [x] Trace the primary DEX-defined Android TUN stack: `VpnService`, `TunnelVpnManager`, `Tun2Socks`, `libtun2socks.so`, SSH manager and DNS helpers.
 - [x] Confirm the TUN settings pass traffic to a configured SOCKS endpoint and expose separate DNS/UDP relay controls.
 - [x] Confirm separate service launch paths for SSH, XRay and SOCKS/HTTP forwarders.
-- [x] Identify custom-payload formatter and CR/LF/SSH placeholder token references; the primary DEX exposes `[instant_split]` and `[delay_split]`, not the sibling source's `[split]` token.
+- [x] Identify custom-payload formatter and CR/LF/SSH placeholder token references; the primary DEX exposes `[instant_split]` and `[delay_split]`.
+- [x] Add an isolated APNA payload compiler for host/port/protocol/SSH/line-ending tokens, ISO-8859-1 encoding, instant/delayed segment boundaries and `[rotate=...]`; tests cover chunk ordering, flushes, delays and rotation. The 1-second delay is a configurable sibling-source default, not yet confirmed from protected APNA bytecode.
+- [ ] Verify the remaining replacement order/defaults from APNA protected method bytecode and wire the compiler into a real SSH handshake engine.
 - [x] Record server and payload fields, methods, categories and ambiguous values.
 - [ ] Trace server/payload category matching and selection/fallback rules.
 - [ ] Recover the Android SSH + payload-injection contract and local forwarding topology.
