@@ -1,8 +1,22 @@
 # APNA TUNNEL LITE integration plan
 
-**Status:** discovery and embedded-catalog decoding are implemented; live provider refresh, runtime semantics and APNA tunnel connection are not yet release-ready.
+**Status (2026-11-16):** APNA profile import, live catalog retrieval, SSH/UDPGW session and Xray/Wintun TUN integration are implemented in code. No real APNA authentication or routed provider traffic has been verified; this is not release-ready.
 
 **Target application:** APNA TUNNEL LITE, Android package `com.apnatunnel.lite`.
+
+## Current implementation snapshot — 2026-11-16
+
+This snapshot supersedes any older checklist statements below that describe the APNA source as discovery-only or the SSH/TUN integration as unwired.
+
+- Windows UI: imports either the embedded APK catalog or the live updater catalog asynchronously. Live downloads use the observed `Dalvik/2.1.0` User-Agent, identity encoding, bounded retries, and HTTP Range resume for truncated responses. Only selected profile settings are persisted, encrypted with current-user DPAPI.
+- Catalog evidence: supplied APK = Version 580, 44 free servers, 623 payloads. An independent third-party report observed live Version 850, 50 free servers, 644 payloads on 2026-11-13; not official provider documentation.
+- Payload: primary DEX confirms ordered placeholder expansion, ISO-8859-1, Java split behavior and 1000 ms delayed split. HTTP Upgrade payloads accept 200 or 101 before SSH authentication.
+- SSH: direct/TLS/HTTP payload connector, Paramiko authentication, strict known-hosts or explicit SHA-256 pin, and loopback-only SOCKS5 TCP forwarding.
+- UDP: BadVPN-compatible PacketProto/UDPGW codec and flow tracking; UDPGW stream is carried through SSH direct-tcpip and exposed through SOCKS5 UDP ASSOCIATE.
+- TUN: `ApnaTunnelEngine` is wired to the UI and starts a strict dual-stack Xray native TUN using Wintun with the loopback SOCKS5 gateway as its only outbound. UDP DNS is probed before reporting connected.
+- Health: active APNA session refresh checks SSH authentication and local SOCKS5 listener health in addition to Xray helper health.
+- Validation: Windows CI run 43890182547 passed Ruff, VPN readiness/egress, security and packaging; its full suite had 1129 passed, 1 skipped and one outdated empty-response assertion. That assertion was fixed in the current branch; a fresh full validation is still required.
+- Blocker: no live APNA SSH authentication, UDPGW round-trip or Windows application traffic has been proven. The current container cannot resolve the APNA hostnames. A non-blocking live-catalog probe is included in Windows CI to check a different network vantage point without exposing credentials.
 
 ## 1. Evidence baseline
 
