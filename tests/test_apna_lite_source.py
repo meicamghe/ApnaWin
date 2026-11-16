@@ -15,8 +15,10 @@ from apnawin.services.apna_lite_source import (
 
 
 class _Response:
-    def __init__(self, body: bytes) -> None:
+    def __init__(self, body: bytes, *, status: int = 200, headers=None) -> None:
         self.body = body
+        self.status = status
+        self.headers = headers or {"Content-Length": str(len(body))}
 
     def __enter__(self):
         return self
@@ -29,15 +31,17 @@ class _Response:
 
 
 class _Opener:
-    def __init__(self, body: bytes) -> None:
+    def __init__(self, body: bytes, *, status: int = 200, headers=None) -> None:
         self.body = body
+        self.status = status
+        self.headers = headers
         self.request = None
         self.timeout = None
 
     def open(self, request, timeout: float):
         self.request = request
         self.timeout = timeout
-        return _Response(self.body)
+        return _Response(self.body, status=self.status, headers=self.headers)
 
 
 def _encrypted_catalog() -> bytes:
@@ -110,6 +114,40 @@ def test_rejects_oversized_response() -> None:
 
     source = ApnaLiteCatalogSource(opener=_Opener(b"A" * (MAX_INPUT_BYTES + 1)))
     with pytest.raises(ValueError, match="size"):
+        source.fetch_document()
+
+
+def test_rejects_partial_http_response() -> None:
+    source = ApnaLiteCatalogSource(
+        opener=_Opener(_encrypted_catalog(), status=206)
+    )
+    with pytest.raises(ValueError, match="status"):
+        source.fetch_document()
+
+
+def test_rejects_compressed_response_despite_identity_request() -> None:
+    source = ApnaLiteCatalogSource(
+        opener=_Opener(
+            _encrypted_catalog(),
+            headers={
+                "Content-Length": str(len(_encrypted_catalog())),
+                "Content-Encoding": "gzip",
+            },
+        )
+    )
+    with pytest.raises(ValueError, match="encoding"):
+        source.fetch_document()
+
+
+def test_rejects_truncated_content_length() -> None:
+    body = _encrypted_catalog()
+    source = ApnaLiteCatalogSource(
+        opener=_Opener(
+            body[:-1],
+            headers={"Content-Length": str(len(body))},
+        )
+    )
+    with pytest.raises(ValueError, match="truncated"):
         source.fetch_document()
 
 
