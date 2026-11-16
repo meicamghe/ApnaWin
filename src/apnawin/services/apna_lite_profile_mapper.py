@@ -82,6 +82,37 @@ def _catalog_bool(value: object, field: str) -> bool:
     raise ApnaLiteProfileError(f"{field} must be true or false")
 
 
+
+def list_apna_lite_ssh_servers(catalog: dict) -> list[dict]:
+    """Return only free-catalog server records supported by the SSH mapper."""
+    if not isinstance(catalog, dict):
+        raise TypeError("catalog must be a dictionary")
+    records = catalog.get("Free_servers")
+    if not isinstance(records, list):
+        raise ApnaLiteProfileError("APNA catalog has no free server list")
+    return [
+        record for record in records
+        if isinstance(record, dict) and record.get("category") in _SSH_CATEGORIES
+    ]
+
+
+def list_apna_lite_ssh_payloads(catalog: dict, category: str) -> list[dict]:
+    """Return SSH-compatible payloads for one exact catalog category."""
+    if not isinstance(catalog, dict):
+        raise TypeError("catalog must be a dictionary")
+    if category not in _SSH_CATEGORIES:
+        return []
+    records = catalog.get("Payloads")
+    if not isinstance(records, list):
+        raise ApnaLiteProfileError("APNA catalog has no payload list")
+    return [
+        record for record in records
+        if isinstance(record, dict)
+        and record.get("category") == category
+        and record.get("method") in _SUPPORTED_METHODS
+    ]
+
+
 def build_apna_lite_ssh_profile(
     catalog: dict,
     server_record: dict,
