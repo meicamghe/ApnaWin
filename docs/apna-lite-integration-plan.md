@@ -71,11 +71,11 @@ The sample includes payload methods `http`, `ssl`, `udp`, `direct`. Category nam
 - [x] Trace the primary DEX-defined Android TUN stack: `VpnService`, `TunnelVpnManager`, `Tun2Socks`, `libtun2socks.so`, SSH manager and DNS helpers.
 - [x] Confirm the TUN settings pass traffic to a configured SOCKS endpoint and expose separate DNS/UDP relay controls.
 - [x] Confirm separate service launch paths for SSH, XRay and SOCKS/HTTP forwarders.
-- [x] Identify custom-payload formatter and CR/LF/SSH placeholder token references.
+- [x] Identify custom-payload formatter and CR/LF/SSH placeholder token references; the primary DEX exposes `[instant_split]` and `[delay_split]`, not the sibling source's `[split]` token.
 - [x] Record server and payload fields, methods, categories and ambiguous values.
 - [ ] Trace server/payload category matching and selection/fallback rules.
 - [ ] Recover the Android SSH + payload-injection contract and local forwarding topology.
-- [ ] Recover the Xray helper and UDP gateway contracts separately; DEX evidence now points to a BadVPN-style UDPGW stream, distinct from the TCP SOCKS path.
+- [ ] Recover the Xray helper and UDP gateway contracts separately; DEX evidence now points to a BadVPN-style UDPGW stream, distinct from the TCP SOCKS path. The inspected BadVPN source compiles this UDPGW path out under `BADVPN_USE_WINAPI`, so Windows needs an explicit port or confirmed alternative.
 - [ ] Obtain every installed APNA split APK (especially the ABI-specific split) to recover and fingerprint the referenced libtun2socks.so; the supplied base.apk has no ELF/native-library entry.
 - [ ] Determine how semicolon-delimited server hosts are selected.
 - [ ] Determine the meaning and substitutions for `Pulled`, `sslws`, `sausage`, `query`, `dothost`, and `custom_cert`.
