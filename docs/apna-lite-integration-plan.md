@@ -56,6 +56,7 @@ The sample includes payload methods `http`, `ssl`, `udp`, `direct`. Category nam
 - [x] Implement bounded embedded catalog decoder.
 - [x] Add discovery-only HTTP source using the reported endpoint and request headers.
 - [x] Reject redirects and oversized responses; keep platform TLS certificate validation enabled.
+- [x] Require HTTP 200, identity content encoding, and matching bounded Content-Length; reject partial and truncated responses.
 - [x] Add mocked transport and synthetic decoder tests.
 - [ ] Verify the endpoint and headers against a fresh live response.
 - [ ] Compare live and embedded schemas using redacted field/type/count metadata only.
