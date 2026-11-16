@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import ipaddress
+import select
 import socket
+import socketserver
 import struct
+import threading
+import time
 
 import pytest
 
@@ -13,6 +17,7 @@ from apnawin.engines.socks5_gateway import (
     encode_socks5_udp_datagram,
     parse_socks5_udp_datagram,
 )
+from apnawin.engines.udpgw_protocol import decode_udpgw_payload, encode_datagram
 
 
 def test_parse_and_encode_socks5_ipv4_udp_datagram() -> None:
@@ -80,3 +85,151 @@ def test_gateway_refuses_udp_associate_without_udpgw_configuration() -> None:
     finally:
         client.close()
         gateway.close()
+
+
+def _recv_exact(sock: socket.socket, size: int) -> bytes:
+    result = bytearray()
+    while len(result) < size:
+        chunk = sock.recv(size - len(result))
+        if not chunk:
+            raise EOFError
+        result.extend(chunk)
+    return bytes(result)
+
+
+class _FakeUdpGwHandler(socketserver.BaseRequestHandler):
+    def handle(self) -> None:
+        while True:
+            try:
+                length = struct.unpack("<H", _recv_exact(self.request, 2))[0]
+                packet = decode_udpgw_payload(_recv_exact(self.request, length))
+            except (EOFError, OSError):
+                return
+            if packet.is_keepalive:
+                continue
+            self.server.received.append(packet)
+            self.request.sendall(
+                encode_datagram(
+                    connection_id=packet.connection_id,
+                    address=str(packet.address),
+                    port=packet.port,
+                    data=b"reply:" + packet.data,
+                )
+            )
+
+
+class _FakeUdpGwServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+    block_on_close = False
+
+    def __init__(self, address):
+        self.received = []
+        super().__init__(address, _FakeUdpGwHandler)
+
+
+class _FakeSshSocksHandler(socketserver.BaseRequestHandler):
+    def handle(self) -> None:
+        upstream = None
+        try:
+            greeting = _recv_exact(self.request, 3)
+            if greeting != b"\x05\x01\x00":
+                return
+            self.request.sendall(b"\x05\x00")
+            version, command, reserved, address_type = _recv_exact(self.request, 4)
+            if version != 5 or command != 1 or reserved != 0:
+                return
+            if address_type == 1:
+                _recv_exact(self.request, 4)
+            elif address_type == 4:
+                _recv_exact(self.request, 16)
+            elif address_type == 3:
+                _recv_exact(self.request, _recv_exact(self.request, 1)[0])
+            else:
+                return
+            _recv_exact(self.request, 2)
+            upstream = socket.create_connection(self.server.target_address, timeout=2)
+            self.request.sendall(b"\x05\x00\x00\x01\x7f\x00\x00\x01\x00\x00")
+            peers = (self.request, upstream)
+            while True:
+                readable, _, _ = select.select(peers, [], [], 1)
+                if not readable:
+                    continue
+                for source in readable:
+                    destination = upstream if source is self.request else self.request
+                    data = source.recv(64 * 1024)
+                    if not data:
+                        return
+                    destination.sendall(data)
+        except (EOFError, OSError):
+            return
+        finally:
+            if upstream is not None:
+                upstream.close()
+
+
+class _FakeSshSocksServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+    block_on_close = False
+
+    def __init__(self, address, target_address):
+        self.target_address = target_address
+        super().__init__(address, _FakeSshSocksHandler)
+
+
+def test_udp_associate_roundtrips_through_ssh_socks_and_udpgw() -> None:
+    udp_server = _FakeUdpGwServer(("127.0.0.1", 0))
+    udp_thread = threading.Thread(target=udp_server.serve_forever, daemon=True)
+    udp_thread.start()
+    ssh_server = _FakeSshSocksServer(("127.0.0.1", 0), udp_server.server_address)
+    ssh_thread = threading.Thread(target=ssh_server.serve_forever, daemon=True)
+    ssh_thread.start()
+    gateway = Socks5Gateway(
+        Socks5GatewayConfig(
+            ssh_proxy_host="127.0.0.1",
+            ssh_proxy_port=ssh_server.server_address[1],
+            udpgw_host="udpgw.example.test",
+            udpgw_port=7300,
+            transparent_dns=True,
+            dns_resolver="8.8.8.8",
+            keepalive_interval=5,
+            udp_idle_timeout=10,
+        )
+    ).start()
+    control = socket.create_connection(gateway.address, timeout=2)
+    udp_client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_client.settimeout(3)
+    try:
+        control.sendall(b"\x05\x01\x00")
+        assert _recv_exact(control, 2) == b"\x05\x00"
+        control.sendall(b"\x05\x03\x00\x01\x00\x00\x00\x00\x00\x00")
+        response = _recv_exact(control, 10)
+        assert response[:3] == b"\x05\x00\x00"
+        relay_host = str(ipaddress.IPv4Address(response[4:8]))
+        relay_port = struct.unpack("!H", response[8:10])[0]
+
+        domain_packet = b"\x00\x00\x00\x03" + bytes((len(b"dns.example"),))
+        domain_packet += b"dns.example" + struct.pack("!H", 53) + b"query"
+        udp_client.sendto(domain_packet, (relay_host, relay_port))
+        reply, _ = udp_client.recvfrom(4096)
+        assert parse_socks5_udp_datagram(reply) == ("8.8.8.8", 53, b"reply:query")
+
+        deadline = time.monotonic() + 2
+        while not udp_server.received and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert len(udp_server.received) == 1
+        sent = udp_server.received[0]
+        assert sent.is_dns
+        assert sent.address == ipaddress.ip_address("8.8.8.8")
+        assert sent.data == b"query"
+    finally:
+        udp_client.close()
+        control.close()
+        gateway.close()
+        ssh_server.shutdown()
+        ssh_server.server_close()
+        udp_server.shutdown()
+        udp_server.server_close()
+        ssh_thread.join(timeout=1)
+        udp_thread.join(timeout=1)
