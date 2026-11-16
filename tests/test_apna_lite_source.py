@@ -100,7 +100,6 @@ def test_safe_summary_does_not_expose_credentials_or_payloads() -> None:
 
 
 def test_rejects_empty_or_oversized_response() -> None:
-    assert pytest.raises(ValueError, match="size").__enter__
     source = ApnaLiteCatalogSource(opener=_Opener(b""))
     with pytest.raises(ValueError, match="size"):
         source.fetch_document()
