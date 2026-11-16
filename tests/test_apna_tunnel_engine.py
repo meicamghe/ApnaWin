@@ -168,6 +168,38 @@ def test_engine_starts_ssh_then_encrypted_xray_tun_and_reports_connected():
     assert not store.saved
 
 
+def test_engine_wires_ipv4_and_ipv6_dns_resolvers_into_tun_and_probe():
+    events = []
+    captured = {}
+
+    def build_config(address, *, dns_servers):
+        captured["config_dns"] = dns_servers
+        return b"{}"
+
+    def probe_dns(dns_servers):
+        captured["probe_dns"] = dns_servers
+        events.append("udp-dns-probe")
+
+    store = _FakeConfigStore(events)
+    supervisor = _FakeSupervisor(events)
+    engine = ApnaTunnelEngine(
+        lambda profile: _session_config(),
+        store,  # type: ignore[arg-type]
+        supervisor,  # type: ignore[arg-type]
+        session_factory=lambda config: _FakeSession(config, events=events),
+        config_builder=build_config,
+        udp_dns_probe=probe_dns,
+        platform_name="nt",
+    )
+
+    engine.connect(_profile())
+
+    expected = ("1.1.1.1", "2606:4700:4700::1111")
+    assert captured == {"config_dns": expected, "probe_dns": expected}
+    assert engine.state is ConnectionState.CONNECTED
+    engine.disconnect()
+
+
 def test_engine_rejects_wrong_transport():
     engine, _store, _supervisor, _sessions = _engine([])
     wrong = ConnectionProfile("wrong", Transport.XRAY, "ssh.example.test", 443)
