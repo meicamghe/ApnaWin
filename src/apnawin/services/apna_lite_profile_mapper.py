@@ -161,8 +161,8 @@ def build_apna_lite_ssh_profile(
     )
 
     if method == "direct":
-        if payload_text:
-            raise ApnaLiteProfileError("direct SSH catalog entries must not contain an HTTP payload")
+        if payload_text or payload_host_pool != ["Pulled"] or payload_port_raw != "Pulled":
+            raise ApnaLiteProfileError("direct SSH catalog entries must use the selected server endpoint without an HTTP payload")
         mode = PayloadSocketMode.DIRECT
         connect_host = server_host
         connect_port = server_port
