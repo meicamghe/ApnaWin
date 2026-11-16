@@ -177,3 +177,45 @@ def test_close_is_idempotent() -> None:
     )
     session.close()
     session.close()
+
+
+def test_open_direct_channel_requires_authenticated_ssh_and_validates_destination() -> None:
+    observed = {}
+
+    class FakeChannel:
+        pass
+
+    class FakeTransport:
+        def is_active(self):
+            return True
+
+        def is_authenticated(self):
+            return True
+
+        def open_channel(self, kind, destination, source, timeout):
+            observed.update(kind=kind, destination=destination, source=source, timeout=timeout)
+            return FakeChannel()
+
+    class FakeSshClient:
+        def get_transport(self):
+            return FakeTransport()
+
+    session = ApnaSshSession(
+        ApnaSshConfig("ssh.example.test", 22, "user", password="secret"),
+        _payload_config(),
+    )
+    with pytest.raises(ApnaSshError, match="not authenticated"):
+        session.open_direct_channel("gateway.example.test", 7300)
+    session._ssh_client = FakeSshClient()
+    channel = session.open_direct_channel("gateway.example.test", 7300)
+    assert isinstance(channel, FakeChannel)
+    assert observed == {
+        "kind": "direct-tcpip",
+        "destination": ("gateway.example.test", 7300),
+        "source": ("127.0.0.1", 0),
+        "timeout": 10.0,
+    }
+    with pytest.raises(ValueError, match="destination_host"):
+        session.open_direct_channel("bad host", 7300)
+    with pytest.raises(ValueError, match="valid port range"):
+        session.open_direct_channel("gateway.example.test", 0)
