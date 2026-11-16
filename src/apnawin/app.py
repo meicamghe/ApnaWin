@@ -1,6 +1,7 @@
 """Native desktop shell with supervised Windows Xray TUN connection support."""
 
 import os
+import secrets
 import sys
 from html import escape
 from pathlib import Path
@@ -8,6 +9,7 @@ from pathlib import Path
 from PySide6.QtCore import QStandardPaths, Qt, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -35,6 +37,16 @@ from apnawin.engines.xray_process import (
 from apnawin.storage.profile_store import load_profiles, save_profiles
 from apnawin.storage.xray_config_store import XrayConfigStore
 from apnawin.engines.xray_tunnel import XrayTunnelEngine
+from apnawin.engines.apna_host_key import scan_apna_ssh_host_key
+from apnawin.engines.apna_tunnel_engine import ApnaTunnelEngine
+from apnawin.engines.multi_transport import MultiTransportTunnelEngine
+from apnawin.services.apna_lite_catalog import decode_apna_lite_apk_catalog
+from apnawin.services.apna_lite_profile_mapper import (
+    build_apna_lite_ssh_profile,
+    list_apna_lite_ssh_payloads,
+    list_apna_lite_ssh_servers,
+)
+from apnawin.storage.apna_profile_store import ApnaProfileStore
 from apnawin.services.connection_controller import ConnectionController
 from apnawin.services.xray_tunnel_supervisor import XrayTunnelSupervisor
 
@@ -101,7 +113,154 @@ class ProfileDialog(QDialog):
         )
 
 
-class _ConnectionWorker(QThread):
+
+
+
+class ApnaCatalogImportDialog(QDialog):
+    """Select an SSH-compatible server/payload pair from an APNA Lite APK."""
+
+    def __init__(self, catalog: dict, servers: list[dict], parent=None) -> None:
+        super().__init__(parent)
+        self.catalog = catalog
+        self.servers = servers
+        self.payloads: list[dict] = []
+        self._host_selections: dict[tuple[str, ...], str] = {}
+        self.setWindowTitle("Import APNA Lite server profile")
+        self.setMinimumWidth(520)
+
+        self.server_combo = QComboBox()
+        for index, server in enumerate(servers):
+            name = str(server.get("server_name") or "APNA server")
+            category = str(server.get("category") or "")
+            self.server_combo.addItem(f"{name} — {category}", index)
+
+        self.payload_combo = QComboBox()
+        self.host_key_edit = QLineEdit()
+        self.host_key_edit.setPlaceholderText("SHA256:… (optional; recommended)")
+        self.brand_edit = QLineEdit()
+        self.brand_edit.setPlaceholderText("Only required by payloads containing [brand]")
+        self.user_agent_edit = QLineEdit()
+        self.user_agent_edit.setPlaceholderText("Optional override")
+        self.transparent_dns_check = QCheckBox("Use APNA UDP gateway for transparent DNS")
+        self.probe_button = QPushButton("Probe SSH host key (no authentication)")
+        self.probe_button.clicked.connect(self._probe_host_key)
+
+        form = QFormLayout()
+        form.addRow("Server", self.server_combo)
+        form.addRow("Payload", self.payload_combo)
+        form.addRow("SSH host-key SHA-256", self.host_key_edit)
+        form.addRow("Payload brand", self.brand_edit)
+        form.addRow("User-Agent", self.user_agent_edit)
+        form.addRow("", self.transparent_dns_check)
+
+        note = QLabel(
+            f"Embedded catalog version: {catalog.get('Version', 'unknown')}. "
+            "Credentials are extracted in memory and stored encrypted for this Windows user. "
+            "Profile exports do not include them."
+        )
+        note.setWordWrap(True)
+        warning = QLabel(
+            "A scanned host-key fingerprint is not independently authenticated. "
+            "Compare it with a provider-published fingerprint before trusting it."
+        )
+        warning.setWordWrap(True)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self._accept_if_valid)
+        buttons.rejected.connect(self.reject)
+        self._save_button = buttons.button(QDialogButtonBox.StandardButton.Save)
+
+        layout = QVBoxLayout(self)
+        layout.addLayout(form)
+        layout.addWidget(self.probe_button)
+        layout.addWidget(note)
+        layout.addWidget(warning)
+        layout.addWidget(buttons)
+
+        self.server_combo.currentIndexChanged.connect(self._update_payloads)
+        self.payload_combo.currentIndexChanged.connect(self._invalidate_mapping)
+        self._update_payloads()
+
+    def _invalidate_mapping(self, *_args) -> None:
+        self._host_selections.clear()
+
+    def _choose_host(self, pool: list[str]) -> str:
+        key = tuple(pool)
+        if key not in self._host_selections:
+            self._host_selections[key] = secrets.choice(pool)
+        return self._host_selections[key]
+
+    def _update_payloads(self, *_args) -> None:
+        self._host_selections.clear()
+        self.payload_combo.blockSignals(True)
+        self.payload_combo.clear()
+        server_index = self.server_combo.currentData()
+        if server_index is not None:
+            server = self.servers[int(server_index)]
+            self.payloads = list_apna_lite_ssh_payloads(
+                self.catalog, str(server.get("category", ""))
+            )
+            for index, payload in enumerate(self.payloads):
+                name = str(payload.get("friendly_name") or "APNA payload")
+                method = str(payload.get("method") or "")
+                secure = "TLS" if payload.get("sslws") in (True, "true") else "TCP"
+                self.payload_combo.addItem(f"{name} — {method.upper()} / {secure}", index)
+        else:
+            self.payloads = []
+        self.payload_combo.blockSignals(False)
+        self._save_button.setEnabled(bool(self.payloads))
+
+    def _build_profile(self):
+        server_index = self.server_combo.currentData()
+        payload_index = self.payload_combo.currentData()
+        if server_index is None or payload_index is None:
+            raise ValueError("Select an APNA server and a compatible payload")
+        return build_apna_lite_ssh_profile(
+            self.catalog,
+            self.servers[int(server_index)],
+            self.payloads[int(payload_index)],
+            host_selector=self._choose_host,
+            host_key_sha256=self.host_key_edit.text().strip() or None,
+            brand=self.brand_edit.text().strip() or None,
+            user_agent=self.user_agent_edit.text().strip() or None,
+            transparent_dns=self.transparent_dns_check.isChecked(),
+        )
+
+    def _probe_host_key(self) -> None:
+        try:
+            mapped = self._build_profile()
+            fingerprint = scan_apna_ssh_host_key(mapped.session_config)
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "SSH host-key probe failed",
+                f"The selected APNA endpoint did not complete an SSH key exchange.\n\n{exc}",
+            )
+            return
+        answer = QMessageBox.question(
+            self,
+            "Verify SSH host key",
+            "Fingerprint received from the selected APNA endpoint:\n\n"
+            f"{fingerprint}\n\n"
+            "Only trust it if it matches a fingerprint obtained independently from the provider. "
+            "Store this fingerprint for this profile?",
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self.host_key_edit.setText(fingerprint)
+
+    def _accept_if_valid(self) -> None:
+        try:
+            self._build_profile()
+        except (TypeError, ValueError) as exc:
+            QMessageBox.warning(self, "Invalid APNA selection", str(exc))
+            return
+        self.accept()
+
+    def selected_profile(self):
+        return self._build_profile()
+\n\nclass _ConnectionWorker(QThread):
     operation_finished = Signal(bool, str)
 
     def __init__(self, controller, action, profile=None):
