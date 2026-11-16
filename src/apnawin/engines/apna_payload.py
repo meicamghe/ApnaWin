@@ -38,16 +38,17 @@ class PayloadChunk:
 
 
 class PayloadRotation:
-    """Round-robin state for [rotate=a;b] expressions, scoped to one profile."""
+    """Round-robin [rotate=...] state matching the related Android framework."""
 
     def __init__(self) -> None:
-        self._template: str | None = None
+        self._last_payload: str | None = None
         self._indices: dict[int, int] = {}
 
-    def expand(self, template: str) -> str:
-        if template != self._template:
-            self._template = template
+    def expand(self, payload: str) -> str:
+        # The related formatter applies host/token substitutions before rotate.
+        if payload != self._last_payload:
             self._indices.clear()
+            self._last_payload = payload
 
         occurrence = 0
 
@@ -56,13 +57,36 @@ class PayloadRotation:
             values = match.group(1).split(";")
             if not values or any(not value for value in values):
                 raise PayloadFormatError("Rotate expressions must contain non-empty values")
-            previous = self._indices.get(occurrence, -1)
-            selected = (previous + 1) % len(values)
+            selected = (self._indices.get(occurrence, -1) + 1) % len(values)
             self._indices[occurrence] = selected
             occurrence += 1
             return values[selected]
 
-        return _ROTATE.sub(replace, template)
+        return _ROTATE.sub(replace, payload)
+
+
+class PayloadRandom:
+    """Injectable selector for [random=...] expressions, independently testable."""
+
+    def __init__(self, chooser: Callable[[int], int] | None = None) -> None:
+        import random
+
+        self._chooser = chooser or random.SystemRandom().randrange
+
+    def expand(self, payload: str) -> str:
+        def replace(match: re.Match[str]) -> str:
+            values = match.group(1).split(";")
+            if not values or any(not value for value in values):
+                raise PayloadFormatError("Random expressions must contain non-empty values")
+            selected = self._chooser(len(values))
+            if isinstance(selected, bool) or not isinstance(selected, int):
+                raise PayloadFormatError("Random selector returned an invalid index")
+            if not 0 <= selected < len(values):
+                raise PayloadFormatError("Random selector returned an out-of-range index")
+            return values[selected]
+
+        return re.sub(r"\\[random=(.*?)\\]", replace, payload)
+
 
 
 def _validate_endpoint(host: str, port: int, protocol: str) -> None:
@@ -86,41 +110,64 @@ def render_apna_payload(
     host: str,
     port: int,
     protocol: str = "HTTP/1.0",
+    method: str = "CONNECT",
+    user_agent: str = (
+        "Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/44.0.2403.130 Safari/537.36"
+    ),
     rotation: PayloadRotation | None = None,
+    randomizer: PayloadRandom | None = None,
     delay_split_ms: int = 1000,
 ) -> tuple[PayloadChunk, ...]:
-    """Expand APNA-observed tokens into ordered ISO-8859-1 stream chunks.
+    """Expand framework-family payload tokens into ordered ISO-8859-1 chunks.
 
-    [instant_split] creates an immediate write/flush boundary.
-    [delay_split] creates a write/flush boundary followed by delay_split_ms.
-    Unknown tokens are preserved verbatim rather than silently rewritten.
+    The token set and processing order are corroborated by a closely related
+    Android implementation; APNA protected bytecode still needs direct checking.
     """
     if not isinstance(template, str):
         raise TypeError("Payload template must be text")
     if len(template) > _MAX_TEMPLATE_CHARS:
         raise PayloadFormatError("Payload template exceeds the size limit")
     _validate_endpoint(host, port, protocol)
+    for name, value, limit in (
+        ("method", method, 32),
+        ("user_agent", user_agent, 1024),
+    ):
+        if not isinstance(value, str) or not value or len(value) > limit:
+            raise PayloadFormatError(f"{name} is invalid")
+        if any(ord(char) < 0x20 or ord(char) > 0x7E for char in value):
+            raise PayloadFormatError(f"{name} contains whitespace or control characters")
     if isinstance(delay_split_ms, bool) or not isinstance(delay_split_ms, int):
         raise TypeError("Split delay must be an integer number of milliseconds")
     if not 0 <= delay_split_ms <= 10_000:
         raise PayloadFormatError("Split delay must be between 0 and 10000 milliseconds")
 
-    expanded = rotation.expand(template) if rotation is not None else _ROTATE.sub(
-        lambda match: _first_rotate_value(match.group(1)), template
-    )
     substitutions = {
+        "[method]": method,
         "[host]": host,
+        "[ip]": host,
         "[host_port]": f"{host}:{port}",
         "[port]": str(port),
         "[protocol]": protocol,
         "[ssh]": f"{host}:{port}",
-        "[crlf]": "\r\n",
-        "[cr]": "\r",
-        "[lf]": "\n",
-        "[lfcr]": "\n\r",
+        "[vpn]": f"{host}:{port}",
+        "[ua]": user_agent,
+        "[crlf]": "\\r\\n",
+        "[cr]": "\\r",
+        "[lf]": "\\n",
+        "[lfcr]": "\\n\\r",
+        r"\\n": "\\n",
+        r"\\r": "\\r",
     }
+    expanded = template
     for token, value in substitutions.items():
         expanded = expanded.replace(token, value)
+
+    # This ordering mirrors the related framework's formatCustomPayload:
+    # rotate first, then random selection, then repeated line-ending macros.
+    expanded = rotation.expand(expanded) if rotation is not None else _replace_rotate_first(expanded)
+    expanded = (randomizer or PayloadRandom()).expand(expanded)
+    expanded = _expand_repeated_line_endings(expanded)
 
     if _DELAY_SPLIT not in expanded and _INSTANT_SPLIT not in expanded:
         return (_chunk(expanded, 0),)
@@ -135,6 +182,29 @@ def render_apna_payload(
             delay = delay_split_ms if is_last_in_delay_part and has_following_delay_part else 0
             chunks.append(_chunk(part, delay))
     return tuple(chunks)
+
+
+def _replace_rotate_first(payload: str) -> str:
+    rotation = PayloadRotation()
+    return rotation.expand(payload)
+
+
+def _expand_repeated_line_endings(payload: str) -> str:
+    replacements = (
+        (re.compile(r"\\[cr\\*(\\d+)\\]"), "\\r"),
+        (re.compile(r"\\[lf\\*(\\d+)\\]"), "\\n"),
+        (re.compile(r"\\[crlf\\*(\\d+)\\]"), "\\r\\n"),
+        (re.compile(r"\\[lfcr\\*(\\d+)\\]"), "\\n\\r"),
+    )
+    for pattern, ending in replacements:
+        def replace(match: re.Match[str]) -> str:
+            count = int(match.group(1))
+            if count > 4096:
+                raise PayloadFormatError("Repeated line-ending count exceeds the limit")
+            return ending * count
+
+        payload = pattern.sub(replace, payload)
+    return payload
 
 
 def _first_rotate_value(value: str) -> str:
