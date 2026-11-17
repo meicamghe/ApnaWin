@@ -543,7 +543,7 @@ def test_live_catalog_worker_returns_catalog_without_writing_plaintext(monkeypat
 
     class FakeSource:
         def __init__(self, **kwargs):
-            assert kwargs == {"timeout_seconds": 8.0, "retry_attempts": 2}
+            assert kwargs == {"timeout_seconds": 60.0, "retry_attempts": 3}
 
         def fetch_document(self):
             return {"Version": "synthetic", "Free_servers": [], "Payloads": []}
