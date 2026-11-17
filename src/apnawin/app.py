@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QPlainTextEdit,
     QProgressBar,
     QSpinBox,
     QVBoxLayout,
@@ -56,6 +57,38 @@ from apnawin.services.apna_lite_profile_mapper import (
 from apnawin.storage.apna_profile_store import ApnaProfileStore
 from apnawin.services.connection_controller import ConnectionController
 from apnawin.services.xray_tunnel_supervisor import XrayTunnelSupervisor
+
+
+
+def show_copyable_error(parent, title: str, message: str) -> None:
+    """Show diagnostic text in a selectable, copyable error window."""
+    dialog = QDialog(parent)
+    dialog.setWindowTitle(title)
+    dialog.setMinimumSize(720, 380)
+    text = QPlainTextEdit(dialog)
+    text.setObjectName("errorDetails")
+    text.setPlainText(str(message))
+    text.setReadOnly(True)
+    text.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+    text.setTextInteractionFlags(
+        Qt.TextInteractionFlag.TextSelectableByMouse
+        | Qt.TextInteractionFlag.TextSelectableByKeyboard
+    )
+    copy_button = QPushButton("Copy error")
+    copy_button.clicked.connect(
+        lambda: QApplication.clipboard().setText(text.toPlainText())
+    )
+    close_button = QPushButton("Close")
+    close_button.clicked.connect(dialog.accept)
+    buttons = QHBoxLayout()
+    buttons.addWidget(copy_button)
+    buttons.addStretch(1)
+    buttons.addWidget(close_button)
+    layout = QVBoxLayout(dialog)
+    layout.addWidget(QLabel("Select the text below or use Copy error:"))
+    layout.addWidget(text)
+    layout.addLayout(buttons)
+    dialog.exec()
 
 
 def profile_file_path() -> Path:
@@ -348,6 +381,10 @@ class MainWindow(QMainWindow):
             "Disconnected — no verified VPN connection."
         )
         self.status_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.status_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard
+        )
         self.catalog_progress_label = QLabel("")
         self.catalog_progress_label.setTextFormat(Qt.TextFormat.PlainText)
         self.catalog_progress_label.setWordWrap(True)
@@ -373,6 +410,9 @@ class MainWindow(QMainWindow):
         self.edit_button.clicked.connect(self._edit_profile)
         self.remove_button = QPushButton("Remove")
         self.remove_button.clicked.connect(self._remove_profile)
+        self.clear_all_button = QPushButton("Clear all servers")
+        self.clear_all_button.setToolTip("Remove every saved profile and its encrypted settings.")
+        self.clear_all_button.clicked.connect(self._clear_all_profiles)
         self.import_button = QPushButton("Import…")
         self.import_button.clicked.connect(self._import_profiles)
         self.export_button = QPushButton("Export…")
@@ -405,7 +445,7 @@ class MainWindow(QMainWindow):
         profile_actions_primary = QHBoxLayout()
         for button in (
             self.add_button, self.edit_button, self.remove_button,
-            self.import_button, self.export_button,
+            self.import_button, self.export_button, self.clear_all_button,
         ):
             profile_actions_primary.addWidget(button)
         profile_actions_primary.addStretch(1)
@@ -650,6 +690,7 @@ class MainWindow(QMainWindow):
         self.profile_list.blockSignals(False)
         self._show_selected_profile(self.profile_list.currentRow())
         self.export_button.setEnabled(bool(self.profiles))
+        self.clear_all_button.setEnabled(bool(self.profiles) and self.profile_storage_writable)
         self._update_connection_controls()
 
     def _show_selected_profile(self, row: int) -> None:
@@ -657,6 +698,7 @@ class MainWindow(QMainWindow):
         editable = selected and self.profile_storage_writable
         self.edit_button.setEnabled(editable)
         self.remove_button.setEnabled(editable)
+        self.clear_all_button.setEnabled(bool(self.profiles) and self.profile_storage_writable)
         self.import_apna_apk_button.setEnabled(
             self.profile_storage_writable and os.name == "nt"
         )
@@ -731,11 +773,11 @@ class MainWindow(QMainWindow):
             config = self.apna_profile_store.load(profile)
             fingerprint = scan_apna_ssh_host_key(config)
         except Exception as exc:
-            QMessageBox.warning(
+            show_copyable_error(
                 self,
                 "SSH host-key verification failed",
-                "The selected server did not complete an SSH key exchange. "
-                f"({type(exc).__name__}: {exc})",
+                "The selected server did not complete an SSH key exchange.\n\n"
+                f"{type(exc).__name__}: {exc}",
             )
             return
         answer = QMessageBox.question(
@@ -1108,9 +1150,32 @@ class MainWindow(QMainWindow):
         updated = [*self.profiles, *imported]
         if self._save_profiles(updated):
             self._refresh_profiles(len(updated) - 1)
+            tier_summary = []
+            tier_total = 0
+            ssh_total = 0
+            for section, label in (
+                ("Free_servers", "Free"),
+                ("Premium_servers", "Premium"),
+                ("Vip_servers", "VIP"),
+                ("Private_servers", "Private"),
+            ):
+                records = catalog.get(section, [])
+                if not isinstance(records, list):
+                    records = []
+                tier_total += len(records)
+                ssh_count = sum(
+                    1 for item in records
+                    if isinstance(item, dict)
+                    and item.get("category") in {"ocsws", "ocscf", "ocsnormal", "ocshttp"}
+                )
+                ssh_total += ssh_count
+                tier_summary.append(f"{label}: {len(records)} total / {ssh_count} SSH")
+            unsupported_total = max(0, tier_total - ssh_total)
             self.status_label.setText(
-                f"Imported {len(imported)} APNA SSH profile(s) across all catalog tiers from {source_label}. "
-                f"Skipped {skipped} unsupported, incomplete, or duplicate server(s). "
+                f"Imported {len(imported)} APNA SSH profile(s) from {source_label}. "
+                f"Catalog inventory: {', '.join(tier_summary)}. "
+                f"{unsupported_total} entries use categories not supported by the current SSH engine; "
+                f"{skipped} SSH entries were incomplete, duplicate, or could not be mapped. "
                 "Credentials and payload settings are encrypted for this Windows user."
             )
         else:
@@ -1188,6 +1253,43 @@ class MainWindow(QMainWindow):
         self.status_label.setText(
             f"Exported {len(self.profiles)} profile(s). Xray and APNA secrets/configs are not included."
         )
+
+    def _clear_all_profiles(self) -> None:
+        """Remove all profile metadata and matching encrypted settings after confirmation."""
+        if not self.profile_storage_writable or not self.profiles:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Clear all servers",
+            f"Remove all {len(self.profiles)} saved profiles and their encrypted settings?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        previous = list(self.profiles)
+        if not self._save_profiles([]):
+            return
+        cleanup_errors = []
+        for profile in previous:
+            for label, store in (
+                ("Xray", self.xray_config_store),
+                ("APNA", self.apna_profile_store),
+            ):
+                try:
+                    store.remove(profile.name)
+                except (OSError, TypeError, ValueError) as exc:
+                    cleanup_errors.append(f"{profile.name} / {label}: {type(exc).__name__}")
+        self._refresh_profiles()
+        if cleanup_errors:
+            show_copyable_error(
+                self,
+                "Some encrypted settings could not be cleared",
+                "The profile list was cleared, but these encrypted records may remain:\n"
+                + "\n".join(cleanup_errors),
+            )
+        else:
+            self.status_label.setText(f"Cleared all {len(previous)} saved profiles and their encrypted settings.")
 
     def _remove_profile(self) -> None:
         if not self.profile_storage_writable:

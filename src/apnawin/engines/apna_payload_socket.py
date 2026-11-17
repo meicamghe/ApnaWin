@@ -150,6 +150,19 @@ def _read_http_connect_response(
         raise PayloadTransportError("Proxy returned an invalid HTTP status line") from exc
     if status not in expected_statuses:
         expected = ", ".join(str(value) for value in expected_statuses)
+        if 300 <= status < 400:
+            location = ""
+            for line in bytes(response).decode("iso-8859-1").split("\r\n")[1:]:
+                if line.lower().startswith("location:"):
+                    location = line.split(":", 1)[1].strip()
+                    break
+            destination = f" Location: {location}." if location else ""
+            raise PayloadTransportError(
+                f"Proxy returned HTTP {status} redirect.{destination} "
+                "Redirects are not followed for SSH payloads because changing the "
+                "request target can alter the provider's SSH tunnel route. "
+                f"Expected one of: {expected}. Check the selected payload, host, port and path."
+            )
         raise PayloadTransportError(
             f"Proxy returned HTTP {status}; expected one of: {expected}"
         )

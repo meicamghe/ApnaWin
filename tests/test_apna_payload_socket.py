@@ -250,3 +250,34 @@ def test_payload_socket_config_rejects_non_finite_or_non_positive_timeouts(field
             target_port=22,
             **{field: value},
         )
+
+
+
+def test_http_redirect_is_reported_with_location_and_not_accepted():
+    def server(server_socket):
+        server_socket.recv(4096)
+        server_socket.sendall(
+            b"HTTP/1.1 301 Moved Permanently\r\n"
+            b"Location: https://front.example.test/new-path\r\n"
+            b"Content-Length: 0\r\n\r\n"
+        )
+        server_socket.close()
+
+    client, worker = _socket_pair_factory(server)
+    connector = ApnaPayloadSocketConnector(
+        socket_factory=lambda address, timeout: client
+    )
+    config = PayloadSocketConfig(
+        mode=PayloadSocketMode.HTTP_PROXY,
+        connect_host="proxy.example.test",
+        connect_port=8080,
+        target_host="ssh.example.test",
+        target_port=443,
+        payload="GET / HTTP/1.1[crlf]Host: [host][crlf][crlf]",
+    )
+    with pytest.raises(PayloadTransportError, match="HTTP 301 redirect") as error:
+        connector.connect(config)
+    assert "https://front.example.test/new-path" in str(error.value)
+    assert "not followed" in str(error.value)
+    worker.join(timeout=1)
+    assert client.fileno() == -1

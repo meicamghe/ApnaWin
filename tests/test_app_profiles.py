@@ -586,3 +586,53 @@ def test_window_has_larger_server_list_and_host_key_verification_action(tmp_path
     assert window.profile_list.minimumHeight() >= 280
     assert window.verify_apna_host_key_button.isEnabled() is False
     window.close()
+
+
+
+def test_clear_all_profiles_requires_confirmation_and_persists_empty_list(tmp_path, qapp, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    import apnawin.app as app_module
+
+    profiles = [
+        ConnectionProfile("One", Transport.SOCKS, "localhost", 1080),
+        ConnectionProfile("Two", Transport.XRAY, "vpn.example.test", 443),
+    ]
+    path = tmp_path / "profiles.json"
+    save_profiles(path, profiles)
+    monkeypatch.setattr(
+        app_module.QMessageBox, "question",
+        lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes,
+    )
+    window = MainWindow(profiles_path=path)
+    window._clear_all_profiles()
+    assert window.profiles == []
+    assert window.profile_list.count() == 0
+    assert load_profiles(path) == []
+    assert window.clear_all_button.isEnabled() is False
+    window.close()
+
+
+def test_clear_all_profiles_cancel_preserves_profiles(tmp_path, qapp, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    import apnawin.app as app_module
+
+    profile = ConnectionProfile("Keep", Transport.SOCKS, "localhost", 1080)
+    path = tmp_path / "profiles.json"
+    save_profiles(path, [profile])
+    monkeypatch.setattr(
+        app_module.QMessageBox, "question",
+        lambda *_args, **_kwargs: QMessageBox.StandardButton.No,
+    )
+    window = MainWindow(profiles_path=path)
+    window._clear_all_profiles()
+    assert window.profiles == [profile]
+    assert load_profiles(path) == [profile]
+    window.close()
+
+
+def test_status_error_text_is_selectable(tmp_path, qapp):
+    window = MainWindow(profiles_path=tmp_path / "profiles.json")
+    flags = window.status_label.textInteractionFlags()
+    assert flags & Qt.TextInteractionFlag.TextSelectableByMouse
+    assert flags & Qt.TextInteractionFlag.TextSelectableByKeyboard
+    window.close()
