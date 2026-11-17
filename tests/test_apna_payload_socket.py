@@ -306,7 +306,7 @@ def test_tls_direct_reports_underlying_tls_error_and_endpoint():
     )
     with pytest.raises(
         PayloadTransportError,
-        match=r"tls_direct.*front\\.example\\.test:443.*SNI amtun\\.example\\.test.*SSLError.*hostname mismatch",
+        match=r"tls_direct.*front.example.test:443.*SNI amtun.example.test.*SSLError.*hostname mismatch",
     ):
         connector.connect(config)
     assert client.fileno() == -1
