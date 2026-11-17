@@ -1038,7 +1038,7 @@ class MainWindow(QMainWindow):
                 self,
                 "Live APNA catalog failed",
                 "The latest APNA server catalog could not be downloaded or decoded. "
-                "No plaintext catalog was saved.\\n\\n" + detail,
+                "No plaintext catalog was saved.\n\n" + detail,
             )
             return
         self.catalog_progress_bar.setRange(0, 100)
