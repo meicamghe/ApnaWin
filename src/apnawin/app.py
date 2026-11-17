@@ -590,16 +590,7 @@ class MainWindow(QMainWindow):
                 and profile is not None
                 and profile.transport is Transport.XRAY
             )
-        if hasattr(self, "import_apna_file_action"):
-            self.import_apna_file_action.setEnabled(
-                self.profile_storage_writable and os.name == "nt"
-                and not (self._catalog_worker is not None and self._catalog_worker.isRunning())
-            )
-        if hasattr(self, "import_apna_live_action"):
-            self.import_apna_live_action.setEnabled(
-                self.profile_storage_writable and os.name == "nt"
-                and not (self._catalog_worker is not None and self._catalog_worker.isRunning())
-            )
+        self._update_catalog_import_actions()
 
     def _connect_selected_profile(self):
         if self.connection_controller is None or self._connection_worker is not None:
@@ -1018,6 +1009,17 @@ class MainWindow(QMainWindow):
             self._refresh_profiles(len(updated) - 1)
             self.status_label.setText(f"Imported {len(imported)} profile(s).")
 
+    def _update_catalog_import_actions(self) -> None:
+        """Keep every APNA import entry point in sync with the shared worker."""
+        busy = self._catalog_worker is not None and self._catalog_worker.isRunning()
+        enabled = self.profile_storage_writable and os.name == "nt" and not busy
+        for action_name in ("import_apna_file_action", "import_apna_live_action"):
+            action = getattr(self, action_name, None)
+            if action is not None:
+                action.setEnabled(enabled)
+        self.import_apna_apk_button.setEnabled(enabled)
+        self.import_apna_live_button.setEnabled(enabled)
+
     def _fetch_live_apna_catalog(self) -> None:
         """Fetch the latest APNA catalog asynchronously, keeping the UI responsive."""
         if not self.profile_storage_writable or os.name != "nt":
@@ -1026,6 +1028,7 @@ class MainWindow(QMainWindow):
             return
         worker = _ApnaCatalogFetchWorker(self)
         self._catalog_worker = worker
+        self._update_catalog_import_actions()
         worker.progress.connect(self._live_apna_catalog_progress)
         worker.finished.connect(self._live_apna_catalog_finished)
         self.import_apna_live_button.setEnabled(False)
@@ -1072,9 +1075,7 @@ class MainWindow(QMainWindow):
         catalog, error = worker.catalog, worker.error
         self._catalog_worker = None
         worker.deleteLater()
-        self.import_apna_live_button.setEnabled(
-            self.profile_storage_writable and os.name == "nt"
-        )
+        self._update_catalog_import_actions()
         if self._close_after_catalog_fetch:
             self._close_after_catalog_fetch = False
             self.close()
@@ -1115,6 +1116,7 @@ class MainWindow(QMainWindow):
             return
         worker = _ApnaCatalogFileWorker(filename, self)
         self._catalog_worker = worker
+        self._update_catalog_import_actions()
         worker.finished.connect(self._apna_file_import_finished)
         self.import_apna_apk_button.setEnabled(False)
         self.catalog_progress_label.setText("در حال خواندن و رمزگشایی فایل سرورها…")
@@ -1133,9 +1135,7 @@ class MainWindow(QMainWindow):
         source_label = worker.source_label
         self._catalog_worker = None
         worker.deleteLater()
-        self.import_apna_apk_button.setEnabled(
-            self.profile_storage_writable and os.name == "nt"
-        )
+        self._update_catalog_import_actions()
         if error is not None or not isinstance(catalog, dict):
             detail = error or "The selected file was empty or invalid."
             self.catalog_progress_label.setText("رمزگشایی فایل ناموفق بود؛ فایل اصلی تغییر نکرد.")
