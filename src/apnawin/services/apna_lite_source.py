@@ -103,10 +103,31 @@ class ApnaLiteCatalogSource:
                     raise ValueError("APNA Lite catalog HTTP status is invalid")
                 self._validate_encoding(response.headers)
                 declared = self._content_length(response.headers)
-                try:
-                    raw = response.read(MAX_INPUT_BYTES + 1)
-                except IncompleteRead as exc:
-                    raw = exc.partial
+                raw_buffer = bytearray()
+                interrupted = False
+                while len(raw_buffer) <= MAX_INPUT_BYTES:
+                    try:
+                        chunk = response.read(
+                            min(_RANGE_CHUNK_BYTES, MAX_INPUT_BYTES + 1 - len(raw_buffer))
+                        )
+                    except IncompleteRead as exc:
+                        raw_buffer.extend(exc.partial)
+                        interrupted = True
+                        break
+                    except (URLError, OSError):
+                        # Keep bytes already received. If Content-Length is known,
+                        # fetch_bytes() can continue from this exact offset with
+                        # validated Range requests instead of restarting the GET.
+                        if declared is None:
+                            raise
+                        interrupted = True
+                        break
+                    if not chunk:
+                        break
+                    raw_buffer.extend(chunk)
+                    if declared is not None and len(raw_buffer) >= declared:
+                        break
+                raw = bytes(raw_buffer)
         except HTTPError as exc:
             raise ValueError(
                 f"APNA Lite catalog HTTP request failed (status {exc.code})"
