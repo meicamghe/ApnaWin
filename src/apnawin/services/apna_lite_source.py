@@ -44,6 +44,7 @@ class ApnaLiteCatalogSource:
         retry_attempts: int = 3,
         opener=None,
         sleep: Callable[[float], object] = time.sleep,
+        progress_callback: Callable[[int, int | None], object] | None = None,
     ) -> None:
         if (
             isinstance(timeout_seconds, bool)
@@ -60,10 +61,17 @@ class ApnaLiteCatalogSource:
             raise ValueError("retry_attempts must be between 1 and 5")
         if not callable(sleep):
             raise TypeError("sleep must be callable")
+        if progress_callback is not None and not callable(progress_callback):
+            raise TypeError("progress_callback must be callable")
         self.timeout_seconds = float(timeout_seconds)
         self.retry_attempts = retry_attempts
         self._opener = opener or build_opener(_RejectRedirects())
         self._sleep = sleep
+        self._progress_callback = progress_callback
+
+    def _report_progress(self, received: int, total: int | None) -> None:
+        if self._progress_callback is not None:
+            self._progress_callback(received, total)
 
     @staticmethod
     def _headers() -> dict[str, str]:
@@ -105,6 +113,7 @@ class ApnaLiteCatalogSource:
                 declared = self._content_length(response.headers)
                 raw_buffer = bytearray()
                 interrupted = False
+                self._report_progress(0, declared)
                 while len(raw_buffer) <= MAX_INPUT_BYTES:
                     try:
                         chunk = response.read(
@@ -125,6 +134,7 @@ class ApnaLiteCatalogSource:
                     if not chunk:
                         break
                     raw_buffer.extend(chunk)
+                    self._report_progress(len(raw_buffer), declared)
                     if declared is not None and len(raw_buffer) >= declared:
                         break
                 raw = bytes(raw_buffer)
@@ -178,6 +188,7 @@ class ApnaLiteCatalogSource:
                     if not chunk or len(chunk) > expected:
                         raise ValueError("APNA Lite catalog range body size is invalid")
                     result.extend(chunk)
+                    self._report_progress(len(result), total)
                     last_error = None
                     break
                 except (HTTPError, URLError, OSError, IncompleteRead) as exc:
