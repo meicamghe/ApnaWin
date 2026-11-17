@@ -121,6 +121,7 @@ class ApnaLiteCatalogSource:
                         )
                     except IncompleteRead as exc:
                         raw_buffer.extend(exc.partial)
+                        self._report_progress(len(raw_buffer), declared)
                         interrupted = True
                         break
                     except (URLError, OSError):
@@ -217,6 +218,7 @@ class ApnaLiteCatalogSource:
                     raise ValueError("APNA Lite catalog response length is inconsistent")
                 if not raw:
                     raise ValueError("APNA Lite catalog response is empty")
+                self._report_progress(len(raw), len(raw))
                 return raw
             except (HTTPError, URLError, OSError, IncompleteRead) as exc:
                 last_error = exc
