@@ -403,7 +403,7 @@ class MainWindow(QMainWindow):
         self.connect_button.setToolTip(
             "Waits for verified TUN routes, DNS and external TLS egress."
             if self.connection_controller is not None
-            else "Connection engine unavailable. Install ApnaWin with its signed Windows installer; "
+            else "Connection engine unavailable. Run Install-ApnaWin.ps1 as administrator from the extracted folder; "
                  "the portable ZIP does not provision the protected elevated VPN helper."
         )
         self.disconnect_button = QPushButton("Disconnect")
