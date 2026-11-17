@@ -375,16 +375,27 @@ class MainWindow(QMainWindow):
         self.edit_button.setEnabled(False)
         self.remove_button.setEnabled(False)
 
-        profile_actions = QHBoxLayout()
-        profile_actions.addWidget(self.add_button)
-        profile_actions.addWidget(self.edit_button)
-        profile_actions.addWidget(self.remove_button)
-        profile_actions.addWidget(self.import_button)
-        profile_actions.addWidget(self.export_button)
-        profile_actions.addWidget(self.import_xray_config_button)
-        profile_actions.addWidget(self.import_apna_apk_button)
-        profile_actions.addWidget(self.import_apna_live_button)
-        profile_actions.addStretch(1)
+        # Keep action buttons in compact rows so the window remains usable
+        # on ordinary laptop displays and at non-maximized sizes.
+        profile_actions = QVBoxLayout()
+        profile_actions.setSpacing(6)
+        profile_actions_primary = QHBoxLayout()
+        for button in (
+            self.add_button, self.edit_button, self.remove_button,
+            self.import_button, self.export_button,
+        ):
+            profile_actions_primary.addWidget(button)
+        profile_actions_primary.addStretch(1)
+        profile_actions_secondary = QHBoxLayout()
+        for button in (
+            self.import_xray_config_button,
+            self.import_apna_apk_button,
+            self.import_apna_live_button,
+        ):
+            profile_actions_secondary.addWidget(button)
+        profile_actions_secondary.addStretch(1)
+        profile_actions.addLayout(profile_actions_primary)
+        profile_actions.addLayout(profile_actions_secondary)
 
         self.connect_button = QPushButton("Connect")
         self.connect_button.clicked.connect(self._connect_selected_profile)
@@ -910,7 +921,11 @@ class MainWindow(QMainWindow):
         self._import_apna_catalog(catalog, source_label=source_label)
 
     def _import_apna_catalog(self, catalog: dict, *, source_label: str) -> None:
-        """Map a catalog entry to an encrypted APNA SSH profile."""
+        """Import every supported free SSH server using its first usable payload.
+
+        The user should not need to understand payloads, brands, or optional
+        transport overrides merely to populate the server list.
+        """
         try:
             servers = list_apna_lite_ssh_servers(catalog)
         except (TypeError, ValueError) as exc:
@@ -928,47 +943,65 @@ class MainWindow(QMainWindow):
             )
             return
 
-        dialog = ApnaCatalogImportDialog(catalog, servers, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            mapped = dialog.selected_profile()
-            if any(
-                item.name.casefold() == mapped.profile.name.casefold()
-                for item in self.profiles
-            ):
-                raise ValueError(
-                    "A profile with this server/payload name already exists. "
-                    "Choose another APNA server or payload."
-                )
-            self.apna_profile_store.save(mapped.profile, mapped.session_config)
-        except (OSError, TypeError, ValueError) as exc:
-            QMessageBox.warning(
+        existing = {item.name.casefold() for item in self.profiles}
+        imported = []
+        skipped = 0
+        for server in servers:
+            category = str(server.get("category", ""))
+            payloads = list_apna_lite_ssh_payloads(catalog, category)
+            mapped = None
+            for payload in payloads:
+                try:
+                    candidate = build_apna_lite_ssh_profile(
+                        catalog,
+                        server,
+                        payload,
+                        # The catalog's built-in credentials and transport
+                        # defaults are used; no user-entered values are needed.
+                    )
+                except (TypeError, ValueError):
+                    continue
+                key = candidate.profile.name.casefold()
+                if key in existing:
+                    continue
+                mapped = candidate
+                break
+            if mapped is None:
+                skipped += 1
+                continue
+            try:
+                self.apna_profile_store.save(mapped.profile, mapped.session_config)
+            except (OSError, TypeError, ValueError):
+                skipped += 1
+                continue
+            imported.append(mapped.profile)
+            existing.add(mapped.profile.name.casefold())
+
+        if not imported:
+            QMessageBox.information(
                 self,
-                "APNA profile import failed",
-                f"The selected APNA profile was not stored. ({type(exc).__name__}: {exc})",
+                "No new APNA profiles",
+                "No new supported server profiles could be imported. "
+                "Existing profiles were left unchanged.",
             )
             return
 
-        updated = [*self.profiles, mapped.profile]
+        updated = [*self.profiles, *imported]
         if self._save_profiles(updated):
             self._refresh_profiles(len(updated) - 1)
             self.status_label.setText(
-                f"Imported APNA SSH profile '{mapped.profile.name}' from {source_label}. "
+                f"Imported {len(imported)} APNA server profile(s) from {source_label}. "
+                f"Skipped {skipped} unsupported, incomplete, or duplicate server(s). "
                 "Credentials and payload settings are encrypted for this Windows user."
             )
-            if not mapped.session_config.ssh.host_key_sha256:
-                self.status_label.setText(
-                    self.status_label.text()
-                    + " Verify the SSH host key using the probe button or a trusted known_hosts file."
-                )
         else:
-            try:
-                self.apna_profile_store.remove(mapped.profile.name)
-            except (OSError, ValueError):
-                self.status_label.setText(
-                    "Profile metadata save failed and encrypted APNA settings could not be rolled back."
-                )
+            # Roll back newly written encrypted records if profile metadata
+            # could not be committed, keeping the two stores consistent.
+            for profile in imported:
+                try:
+                    self.apna_profile_store.remove(profile.name)
+                except (OSError, ValueError):
+                    pass
 
     def _import_xray_config(self) -> None:
         """Import a full-tunnel Xray JSON config and encrypt it with current-user DPAPI."""
