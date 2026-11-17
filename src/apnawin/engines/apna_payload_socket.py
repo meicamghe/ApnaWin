@@ -249,8 +249,32 @@ class ApnaPayloadSocketConnector:
             if isinstance(exc, (PayloadTransportError, ValueError, TypeError)):
                 raise
             endpoint = f"{config.connect_host}:{config.connect_port}"
-            sni_detail = f" (SNI {config.sni})" if config.sni else ""
+            sni = config.sni or (
+                config.connect_host
+                if config.mode is PayloadSocketMode.TLS_HTTP_PROXY
+                else config.target_host
+            )
+            if isinstance(exc, socket.gaierror):
+                diagnosis = "DNS resolution failed"
+            elif isinstance(exc, ssl.SSLCertVerificationError):
+                reason = str(exc).lower()
+                diagnosis = (
+                    "TLS certificate hostname/SNI mismatch"
+                    if "hostname" in reason or "match" in reason
+                    else "TLS certificate verification failed"
+                )
+            elif isinstance(exc, ssl.SSLError):
+                diagnosis = "TLS handshake failed"
+            elif isinstance(exc, (ConnectionRefusedError, TimeoutError, socket.timeout)):
+                diagnosis = "TCP connection failed (refused or timed out)"
+            elif isinstance(exc, OSError):
+                diagnosis = "TCP socket or network connection failed"
+            else:
+                diagnosis = "payload transport failed"
+            sni_detail = f"; SNI={sni}" if config.mode in {
+                PayloadSocketMode.TLS_DIRECT, PayloadSocketMode.TLS_HTTP_PROXY
+            } else ""
             raise PayloadTransportError(
-                f"Could not establish {config.mode.value} payload transport "
-                f"to {endpoint}{sni_detail}: {type(exc).__name__}: {exc}"
+                f"{diagnosis}: {config.mode.value} endpoint={endpoint}{sni_detail}; "
+                f"{type(exc).__name__}: {exc}"
             ) from exc

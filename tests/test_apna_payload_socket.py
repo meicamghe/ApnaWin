@@ -311,3 +311,59 @@ def test_tls_direct_reports_underlying_tls_error_and_endpoint():
         connector.connect(config)
     assert client.fileno() == -1
     server.close()
+
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (socket.gaierror(-2, "name or service not known"), "DNS resolution failed"),
+        (ConnectionRefusedError(111, "connection refused"), "TCP connection failed"),
+        (ssl.SSLCertVerificationError("hostname mismatch"), "TLS certificate hostname/SNI mismatch"),
+        (ssl.SSLError("handshake failure"), "TLS handshake failed"),
+    ],
+)
+def test_transport_errors_are_classified_with_endpoint_and_sni(error, expected):
+    class FailingSocket:
+        def settimeout(self, _timeout):
+            return None
+        def close(self):
+            return None
+
+    connector = ApnaPayloadSocketConnector(
+        socket_factory=lambda *_args, **_kwargs: FailingSocket()
+    )
+    # Fail after TCP setup for TLS cases; fail at socket creation for DNS/TCP.
+    if isinstance(error, (ssl.SSLError, ssl.SSLCertVerificationError)):
+        class FailingTlsContext:
+            def wrap_socket(self, _sock, *, server_hostname):
+                raise error
+        connector = ApnaPayloadSocketConnector(
+            socket_factory=lambda *_args, **_kwargs: FailingSocket(),
+            tls_context=FailingTlsContext(),
+        )
+        config = PayloadSocketConfig(
+            mode=PayloadSocketMode.TLS_DIRECT,
+            connect_host="front.example.test",
+            connect_port=443,
+            target_host="ssh.example.test",
+            target_port=1194,
+            sni="sni.example.test",
+        )
+    else:
+        connector = ApnaPayloadSocketConnector(
+            socket_factory=lambda *_args, **_kwargs: (_ for _ in ()).throw(error)
+        )
+        config = PayloadSocketConfig(
+            mode=PayloadSocketMode.DIRECT,
+            connect_host="front.example.test",
+            connect_port=443,
+            target_host="ssh.example.test",
+            target_port=1194,
+        )
+    with pytest.raises(PayloadTransportError) as caught:
+        connector.connect(config)
+    assert expected in str(caught.value)
+    assert "front.example.test:443" in str(caught.value)
+    if config.mode is PayloadSocketMode.TLS_DIRECT:
+        assert "SNI=sni.example.test" in str(caught.value)
