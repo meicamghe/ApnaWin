@@ -1,6 +1,6 @@
 # Importing an authorized Xray TUN configuration
 
-The profile screen now supports importing one complete Xray JSON TUN configuration for a selected XRAY profile. The importer requires the strict dual-stack, DNS and WFP policy validated by `inspect_tun_inbound`; it does not accept partial-route or SOCKS-only configs as VPN profiles.
+The single **Import…** menu exposes all import paths: ApnaWin metadata JSON, APNA encrypted catalog/APK, live APNA catalog fetch, and Xray JSON for a selected XRAY profile. The Xray JSON path accepts a complete Xray TUN configuration. The importer requires the strict dual-stack, DNS and WFP policy validated by `inspect_tun_inbound`; it does not accept partial-route or SOCKS-only configs as VPN profiles.
 
 ## Secret handling
 
@@ -21,9 +21,11 @@ The Connect button remains disabled. A fixed-path, Program Files-installed UAC h
 ## User workflow
 
 1. Add or select an XRAY profile.
-2. Choose **Import Xray config…**.
+2. Open **Import…** and choose **Xray JSON**.
 3. Select a complete, authorized Xray JSON configuration with one TUN inbound.
 4. ApnaWin validates and encrypts it for the current Windows user.
 5. The profile details show that an encrypted TUN config is present. This does not mean the VPN is connected.
+
+The Xray runtime supports protocol outbounds including VLESS, VMess, Trojan, Shadowsocks, SOCKS, HTTP, WireGuard, Hysteria and MASQUE when the installed Xray build supports the supplied configuration. The actual runtime `run -test` remains authoritative. UDP is protocol/transport-dependent: APNA full-tunnel profiles require a catalog-provided UDPGW port; records without `server_udp_port` are rejected during mapping rather than imported as profiles that cannot connect. Standalone APNA catalog categories such as `ocsudp`, Trojan, V2Ray and Xray are not guessed into credentials or transport settings from their category labels.
 
 No APNA endpoint, credential, server list or authentication format is inferred from the profile's host and port fields.

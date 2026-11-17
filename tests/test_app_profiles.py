@@ -749,7 +749,7 @@ def test_all_import_paths_are_exposed_from_one_import_menu(tmp_path, qapp):
         "ApnaWin profiles (JSON)…",
         "APNA encrypted catalog / APK…",
         "Fetch live APNA catalog…",
-        "Xray TUN configuration…",
+        "Xray JSON (VLESS / VMess / Trojan / UDP-capable)…",
     ]
     assert window.import_xray_config_button.isHidden()
     assert window.import_apna_apk_button.isHidden()
