@@ -84,16 +84,20 @@ def _catalog_bool(value: object, field: str) -> bool:
 
 
 def list_apna_lite_ssh_servers(catalog: dict) -> list[dict]:
-    """Return only free-catalog server records supported by the SSH mapper."""
+    """Return SSH-compatible servers from every catalog tier."""
     if not isinstance(catalog, dict):
         raise TypeError("catalog must be a dictionary")
-    records = catalog.get("Free_servers")
-    if not isinstance(records, list):
-        raise ApnaLiteProfileError("APNA catalog has no free server list")
-    return [
-        record for record in records
-        if isinstance(record, dict) and record.get("category") in _SSH_CATEGORIES
-    ]
+    records: list[dict] = []
+    for section in ("Free_servers", "Premium_servers", "Vip_servers", "Private_servers"):
+        tier_records = catalog.get(section, [])
+        if not isinstance(tier_records, list):
+            raise ApnaLiteProfileError(f"{section} must be an array")
+        for record in tier_records:
+            if isinstance(record, dict) and record.get("category") in _SSH_CATEGORIES:
+                tagged = dict(record)
+                tagged["_catalog_section"] = section
+                records.append(tagged)
+    return records
 
 
 def list_apna_lite_ssh_payloads(catalog: dict, category: str) -> list[dict]:
@@ -228,7 +232,9 @@ def build_apna_lite_ssh_profile(
         server_name = "APNA server"
     if not isinstance(payload_name, str) or not payload_name.strip():
         payload_name = "APNA payload"
-    profile_name = f"{server_name.strip()} - {payload_name.strip()}"[:128]
+    tier = str(server_record.get("_catalog_section", "Free_servers"))
+    tier_label = tier.removesuffix("_servers").replace("_", " ").title()
+    profile_name = f"{tier_label} · {server_name.strip()} - {payload_name.strip()}"[:128]
     profile = ConnectionProfile(
         profile_name or "APNA SSH",
         Transport.APNA_SSH,

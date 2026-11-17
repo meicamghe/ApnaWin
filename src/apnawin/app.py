@@ -3,6 +3,7 @@
 import os
 import secrets
 import sys
+from dataclasses import replace
 from html import escape
 from pathlib import Path
 
@@ -324,7 +325,8 @@ class MainWindow(QMainWindow):
     ) -> None:
         super().__init__()
         self.setWindowTitle("ApnaWin")
-        self.resize(760, 520)
+        self.resize(1120, 780)
+        self.setMinimumSize(900, 650)
         self.profiles_path = profiles_path or profile_file_path()
         self.xray_config_store = xray_config_store or XrayConfigStore(
             self.profiles_path.with_name("xray-configs.json")
@@ -357,6 +359,8 @@ class MainWindow(QMainWindow):
         self.catalog_progress_bar.hide()
 
         self.profile_list = QListWidget()
+        self.profile_list.setMinimumHeight(280)
+        self.profile_list.setUniformItemSizes(True)
         self.profile_list.currentRowChanged.connect(self._show_selected_profile)
 
         self.profile_details = QLabel("No profile selected.")
@@ -385,6 +389,12 @@ class MainWindow(QMainWindow):
         self.import_apna_live_button = QPushButton("Fetch live APNA catalog…")
         self.import_apna_live_button.clicked.connect(self._fetch_live_apna_catalog)
         self.import_apna_live_button.setEnabled(os.name == "nt")
+        self.verify_apna_host_key_button = QPushButton("Verify SSH host key…")
+        self.verify_apna_host_key_button.setToolTip(
+            "Probe the selected APNA server and explicitly pin its SSH fingerprint."
+        )
+        self.verify_apna_host_key_button.clicked.connect(self._verify_selected_apna_host_key)
+        self.verify_apna_host_key_button.setEnabled(False)
         self.edit_button.setEnabled(False)
         self.remove_button.setEnabled(False)
 
@@ -404,6 +414,7 @@ class MainWindow(QMainWindow):
             self.import_xray_config_button,
             self.import_apna_apk_button,
             self.import_apna_live_button,
+            self.verify_apna_host_key_button,
         ):
             profile_actions_secondary.addWidget(button)
         profile_actions_secondary.addStretch(1)
@@ -654,6 +665,10 @@ class MainWindow(QMainWindow):
             and os.name == "nt"
             and self._catalog_worker is None
         )
+        self.verify_apna_host_key_button.setEnabled(
+            self.profile_storage_writable and selected
+            and self.profiles[row].transport is Transport.APNA_SSH
+        )
         if not selected:
             self.import_xray_config_button.setEnabled(False)
             self.profile_details.setText("No profile selected.")
@@ -703,6 +718,52 @@ class MainWindow(QMainWindow):
                 details += f"\nAPNA encrypted settings unavailable ({type(exc).__name__})"
         self.profile_details.setText(details)
         self._update_connection_controls()
+
+    def _verify_selected_apna_host_key(self) -> None:
+        """Probe and explicitly pin the selected APNA SSH host key."""
+        row = self.profile_list.currentRow()
+        if not self.profile_storage_writable or not 0 <= row < len(self.profiles):
+            return
+        profile = self.profiles[row]
+        if profile.transport is not Transport.APNA_SSH:
+            return
+        try:
+            config = self.apna_profile_store.load(profile)
+            fingerprint = scan_apna_ssh_host_key(config)
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "SSH host-key verification failed",
+                "The selected server did not complete an SSH key exchange. "
+                f"({type(exc).__name__}: {exc})",
+            )
+            return
+        answer = QMessageBox.question(
+            self,
+            "Trust SSH host key?",
+            "Fingerprint observed from this server:\\n\\n"
+            f"{fingerprint}\\n\\n"
+            "This is a first-use fingerprint, not an independently authenticated identity. "
+            "Only continue if it matches a fingerprint published by your provider through "
+            "a separate trusted channel. Accepting an unverified fingerprint can trust a "
+            "man-in-the-middle server. Pin this fingerprint for this profile?",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            trusted_ssh = replace(config.ssh, host_key_sha256=fingerprint)
+            self.apna_profile_store.save(profile, replace(config, ssh=trusted_ssh))
+        except (OSError, TypeError, ValueError) as exc:
+            QMessageBox.warning(
+                self,
+                "Could not save SSH host key",
+                f"The fingerprint was not stored. ({type(exc).__name__}: {exc})",
+            )
+            return
+        self.status_label.setText(
+            f"SSH host key pinned for {profile.name}. You can now retry the VPN connection."
+        )
+        self._show_selected_profile(row)
 
     def _add_profile(self) -> None:
         if not self.profile_storage_writable:
@@ -979,10 +1040,10 @@ class MainWindow(QMainWindow):
         self._import_apna_catalog(catalog, source_label=source_label)
 
     def _import_apna_catalog(self, catalog: dict, *, source_label: str) -> None:
-        """Import every supported free SSH server using its first usable payload.
+        """Import supported SSH servers from every catalog tier.
 
-        The user should not need to understand payloads, brands, or optional
-        transport overrides merely to populate the server list.
+        Each server uses its first compatible payload. Unsupported transports
+        remain excluded rather than being misrepresented as SSH.
         """
         try:
             servers = list_apna_lite_ssh_servers(catalog)
@@ -1048,7 +1109,7 @@ class MainWindow(QMainWindow):
         if self._save_profiles(updated):
             self._refresh_profiles(len(updated) - 1)
             self.status_label.setText(
-                f"Imported {len(imported)} APNA server profile(s) from {source_label}. "
+                f"Imported {len(imported)} APNA SSH profile(s) across all catalog tiers from {source_label}. "
                 f"Skipped {skipped} unsupported, incomplete, or duplicate server(s). "
                 "Credentials and payload settings are encrypted for this Windows user."
             )

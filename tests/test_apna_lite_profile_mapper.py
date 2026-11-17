@@ -217,3 +217,27 @@ def test_non_websocket_http_payload_requires_connect_success_only():
         _catalog(), _server(), payload, host_selector=_first
     )
     assert mapped.session_config.payload.expected_http_statuses == (200,)
+
+
+def test_lists_ssh_servers_from_every_catalog_tier_without_mutating_records():
+    free = _server()
+    premium = _server().copy() | {"server_name": "PREMIUM SSH"}
+    vip = _server().copy() | {"server_name": "VIP SSH"}
+    private = _server().copy() | {"server_name": "PRIVATE SSH"}
+    catalog = {
+        "Free_servers": [free, _server("ocsudp")],
+        "Premium_servers": [premium],
+        "Vip_servers": [vip],
+        "Private_servers": [private],
+    }
+
+    servers = list_apna_lite_ssh_servers(catalog)
+
+    assert [item["server_name"] for item in servers] == [
+        "MASTER SSH", "PREMIUM SSH", "VIP SSH", "PRIVATE SSH"
+    ]
+    assert [item["_catalog_section"] for item in servers] == [
+        "Free_servers", "Premium_servers", "Vip_servers", "Private_servers"
+    ]
+    assert "_catalog_section" not in free
+    assert len(servers) == 4

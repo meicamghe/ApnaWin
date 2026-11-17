@@ -576,3 +576,13 @@ def test_live_catalog_worker_reports_only_exception_type_and_message(monkeypatch
 
     assert worker.catalog is None
     assert worker.error == "OSError: temporary network failure"
+
+
+def test_window_has_larger_server_list_and_host_key_verification_action(tmp_path, qapp):
+    window = MainWindow(profiles_path=tmp_path / "profiles.json")
+
+    assert window.width() >= 900
+    assert window.height() >= 650
+    assert window.profile_list.minimumHeight() >= 280
+    assert window.verify_apna_host_key_button.isEnabled() is False
+    window.close()
