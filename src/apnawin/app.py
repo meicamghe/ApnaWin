@@ -1136,6 +1136,10 @@ class MainWindow(QMainWindow):
         self._catalog_worker = None
         worker.deleteLater()
         self._update_catalog_import_actions()
+        if self._close_after_catalog_fetch:
+            self._close_after_catalog_fetch = False
+            self.close()
+            return
         if error is not None or not isinstance(catalog, dict):
             detail = error or "The selected file was empty or invalid."
             self.catalog_progress_label.setText("رمزگشایی فایل ناموفق بود؛ فایل اصلی تغییر نکرد.")
