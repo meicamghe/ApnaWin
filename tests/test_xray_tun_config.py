@@ -172,3 +172,14 @@ def test_is_windows_elevated_uses_windows_admin_token_api(monkeypatch):
         raising=False,
     )
     assert xray_process.is_windows_elevated() is True
+
+@pytest.mark.parametrize(
+    "protocol",
+    ["vless", "vmess", "trojan", "shadowsocks", "socks", "http", "wireguard", "hysteria", "masque"],
+)
+def test_inspect_tun_inbound_accepts_supported_proxy_outbound_protocols(protocol):
+    config = valid_tun_config()
+    config["outbounds"][0]["protocol"] = protocol
+    inbound = inspect_tun_inbound(config)
+    assert inbound.name == "ApnaWin"
+
