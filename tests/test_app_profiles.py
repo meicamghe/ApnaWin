@@ -636,3 +636,38 @@ def test_status_error_text_is_selectable(tmp_path, qapp):
     assert flags & Qt.TextInteractionFlag.TextSelectableByMouse
     assert flags & Qt.TextInteractionFlag.TextSelectableByKeyboard
     window.close()
+
+
+
+def test_apna_import_report_shows_all_tiers_even_when_no_ssh_profiles_exist(
+    tmp_path, qapp, monkeypatch
+):
+    import apnawin.app as app_module
+
+    captured = {}
+    monkeypatch.setattr(
+        app_module,
+        "show_copyable_error",
+        lambda _parent, title, message: captured.update(title=title, message=message),
+    )
+    window = MainWindow(profiles_path=tmp_path / "profiles.json")
+    catalog = {
+        "Free_servers": [{"category": "ocsudp"}, {"category": "ocsws"}],
+        "Premium_servers": [{"category": "trojan"}],
+        "Vip_servers": [{"category": "vmess"}, {"category": "vmess"}],
+        "Private_servers": [{"category": "unknown"}],
+        "Payloads": [],
+    }
+
+    window._import_apna_catalog(catalog, source_label="test catalog")
+
+    assert captured["title"] == "APNA catalog import report"
+    assert "Catalog total: 6 server records" in captured["message"]
+    assert "Free: 2 server records; 1 SSH-compatible" in captured["message"]
+    assert "Premium: 1 server records; 0 SSH-compatible" in captured["message"]
+    assert "VIP: 2 server records; 0 SSH-compatible" in captured["message"]
+    assert "Private: 1 server records; 0 SSH-compatible" in captured["message"]
+    assert "ocsudp=1, ocsws=1" in captured["message"]
+    assert "Only SSH-compatible categories are currently importable" in captured["message"]
+    assert window.profiles == []
+    window.close()

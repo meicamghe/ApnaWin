@@ -1082,110 +1082,123 @@ class MainWindow(QMainWindow):
         self._import_apna_catalog(catalog, source_label=source_label)
 
     def _import_apna_catalog(self, catalog: dict, *, source_label: str) -> None:
-        """Import supported SSH servers from every catalog tier.
+        """Import supported SSH servers and report the complete tier/category inventory."""
+        sections = (
+            ("Free_servers", "Free"),
+            ("Premium_servers", "Premium"),
+            ("Vip_servers", "VIP"),
+            ("Private_servers", "Private"),
+        )
+        supported_categories = {"ocsws", "ocscf", "ocsnormal", "ocshttp"}
+        inventory_lines = []
+        all_total = 0
+        supported_total = 0
+        for section, label in sections:
+            records = catalog.get(section, [])
+            if not isinstance(records, list):
+                records = []
+            all_total += len(records)
+            category_counts = {}
+            for record in records:
+                if isinstance(record, dict):
+                    category = str(record.get("category", "unknown"))
+                    category_counts[category] = category_counts.get(category, 0) + 1
+            ssh_count = sum(
+                count for category, count in category_counts.items()
+                if category in supported_categories
+            )
+            supported_total += ssh_count
+            category_text = ", ".join(
+                f"{category}={count}" for category, count in sorted(category_counts.items())
+            ) or "no records"
+            inventory_lines.append(
+                f"{label}: {len(records)} server records; "
+                f"{ssh_count} SSH-compatible; categories: {category_text}"
+            )
 
-        Each server uses its first compatible payload. Unsupported transports
-        remain excluded rather than being misrepresented as SSH.
-        """
         try:
             servers = list_apna_lite_ssh_servers(catalog)
         except (TypeError, ValueError) as exc:
-            QMessageBox.warning(
+            show_copyable_error(
                 self,
                 "APNA catalog import failed",
-                f"The catalog structure is unsupported. ({type(exc).__name__}: {exc})",
-            )
-            return
-        if not servers:
-            QMessageBox.information(
-                self,
-                "No supported APNA servers",
-                f"The {source_label} contains no server entries supported by the current SSH engine.",
+                f"Catalog structure is unsupported: {type(exc).__name__}: {exc}",
             )
             return
 
         existing = {item.name.casefold() for item in self.profiles}
         imported = []
-        skipped = 0
+        skipped_duplicate = 0
+        skipped_unmappable = 0
+        skipped_storage = 0
         for server in servers:
             category = str(server.get("category", ""))
             payloads = list_apna_lite_ssh_payloads(catalog, category)
             mapped = None
+            duplicate_found = False
             for payload in payloads:
                 try:
-                    candidate = build_apna_lite_ssh_profile(
-                        catalog,
-                        server,
-                        payload,
-                        # The catalog's built-in credentials and transport
-                        # defaults are used; no user-entered values are needed.
-                    )
+                    candidate = build_apna_lite_ssh_profile(catalog, server, payload)
                 except (TypeError, ValueError):
                     continue
                 key = candidate.profile.name.casefold()
                 if key in existing:
+                    duplicate_found = True
                     continue
                 mapped = candidate
                 break
             if mapped is None:
-                skipped += 1
+                if duplicate_found:
+                    skipped_duplicate += 1
+                else:
+                    skipped_unmappable += 1
                 continue
             try:
                 self.apna_profile_store.save(mapped.profile, mapped.session_config)
             except (OSError, TypeError, ValueError):
-                skipped += 1
+                skipped_storage += 1
                 continue
             imported.append(mapped.profile)
             existing.add(mapped.profile.name.casefold())
 
-        if not imported:
-            QMessageBox.information(
-                self,
-                "No new APNA profiles",
-                "No new supported server profiles could be imported. "
-                "Existing profiles were left unchanged.",
-            )
-            return
-
-        updated = [*self.profiles, *imported]
-        if self._save_profiles(updated):
-            self._refresh_profiles(len(updated) - 1)
-            tier_summary = []
-            tier_total = 0
-            ssh_total = 0
-            for section, label in (
-                ("Free_servers", "Free"),
-                ("Premium_servers", "Premium"),
-                ("Vip_servers", "VIP"),
-                ("Private_servers", "Private"),
-            ):
-                records = catalog.get(section, [])
-                if not isinstance(records, list):
-                    records = []
-                tier_total += len(records)
-                ssh_count = sum(
-                    1 for item in records
-                    if isinstance(item, dict)
-                    and item.get("category") in {"ocsws", "ocscf", "ocsnormal", "ocshttp"}
+        report_lines = [
+            f"Source: {source_label}",
+            f"Catalog total: {all_total} server records across all tiers",
+            f"SSH-compatible records: {supported_total}",
+            f"New profiles imported: {len(imported)}",
+            f"Existing/duplicate profiles skipped: {skipped_duplicate}",
+            f"Incomplete or unmappable SSH records skipped: {skipped_unmappable}",
+            f"Encrypted-store failures: {skipped_storage}",
+            "",
+            *inventory_lines,
+            "",
+            "Only SSH-compatible categories are currently importable. Other categories are "
+            "listed above for visibility but are not presented as connectable profiles.",
+        ]
+        report = "\n".join(report_lines)
+        if imported:
+            updated = [*self.profiles, *imported]
+            if self._save_profiles(updated):
+                self._refresh_profiles(len(updated) - 1)
+                self.status_label.setText(
+                    f"Imported {len(imported)} APNA SSH profiles. "
+                    f"Catalog contains {all_total} server records; "
+                    f"{supported_total} are SSH-compatible. "
+                    "Open the import report for tier/category counts."
                 )
-                ssh_total += ssh_count
-                tier_summary.append(f"{label}: {len(records)} total / {ssh_count} SSH")
-            unsupported_total = max(0, tier_total - ssh_total)
-            self.status_label.setText(
-                f"Imported {len(imported)} APNA SSH profile(s) from {source_label}. "
-                f"Catalog inventory: {', '.join(tier_summary)}. "
-                f"{unsupported_total} entries use categories not supported by the current SSH engine; "
-                f"{skipped} SSH entries were incomplete, duplicate, or could not be mapped. "
-                "Credentials and payload settings are encrypted for this Windows user."
-            )
+            else:
+                for profile in imported:
+                    try:
+                        self.apna_profile_store.remove(profile.name)
+                    except (OSError, ValueError):
+                        pass
+                report += "\n\nProfile metadata could not be saved; newly written encrypted records were rolled back."
         else:
-            # Roll back newly written encrypted records if profile metadata
-            # could not be committed, keeping the two stores consistent.
-            for profile in imported:
-                try:
-                    self.apna_profile_store.remove(profile.name)
-                except (OSError, ValueError):
-                    pass
+            self.status_label.setText(
+                f"No new APNA profiles imported. Catalog contains {all_total} server records; "
+                f"{supported_total} are SSH-compatible."
+            )
+        show_copyable_error(self, "APNA catalog import report", report)
 
     def _import_xray_config(self) -> None:
         """Import a full-tunnel Xray JSON config and encrypt it with current-user DPAPI."""
