@@ -15,7 +15,7 @@ This snapshot supersedes any older checklist statements below that describe the 
 - UDP: BadVPN-compatible PacketProto/UDPGW codec and flow tracking; UDPGW stream is carried through SSH direct-tcpip and exposed through SOCKS5 UDP ASSOCIATE.
 - TUN: `ApnaTunnelEngine` is wired to the UI and starts a strict dual-stack Xray native TUN using Wintun with the loopback SOCKS5 gateway as its only outbound. Before reporting connected, it now requires both UDP DNS success for the configured address families and independent certificate-validated TLS egress over IPv4 and IPv6; any failed readiness probe triggers rollback.
 - Health: active APNA session refresh checks SSH authentication and local SOCKS5 listener health in addition to Xray helper health.
-- Validation: Windows CI run 43890182547 passed Ruff, VPN readiness/egress, security and packaging; its full suite had 1129 passed, 1 skipped and one outdated empty-response assertion. That assertion was fixed in the current branch; a fresh full validation is still required.
+- Validation: Windows CI run [43948753770](https://github.com/meicamghe/ApnaWin/actions/runs/43948753770) on merge-synced commit `9f920ac4bb90c96b74266d04400c49f0cfbec1c0` passed Ruff, security, VPN readiness/egress (**179 passed**), full unit/integration (**1132 passed, 1 skipped**) and Windows x64 packaging + smoke test. The verified portable artifact is 82,909,587 bytes; downloaded ZIP CRC passed (255 files), all four principal executables are x64, and Xray/Wintun hashes match the embedded runtime manifest. ZIP SHA-256: `5b61aaabb3e45b9718f54af9a2ef39785c7db7139e0f4e0bd5f28378511bb6d6`. A separate [BadVPN Windows x64 build](https://github.com/meicamghe/ApnaWin/actions/runs/43948753873) also passed and published the pinned-source `tun2socks`/UDPGW binaries, but these remain research artifacts because the upstream TUN backend is TAP-Windows rather than Wintun.
 - Blocker: no live APNA SSH authentication, UDPGW round-trip or Windows application traffic has been proven. The current container cannot resolve the APNA hostnames. A non-blocking live-catalog probe is included in Windows CI to check a different network vantage point without exposing credentials.
 
 ## 1. Evidence baseline
@@ -72,7 +72,7 @@ The sample includes payload methods `http`, `ssl`, `udp`, `direct`. Category nam
 - [x] Reject redirects and oversized responses; keep platform TLS certificate validation enabled.
 - [x] Require HTTP 200, identity content encoding, and matching bounded Content-Length; reject partial and truncated responses.
 - [x] Add mocked transport and synthetic decoder tests.
-- [ ] Verify the endpoint and headers against a fresh live response.
+- [x] Verify the updater endpoint and observed request headers against a fresh live response from Windows CI; live catalog summary observed Version 850, 50 free servers, 644 payloads (no credentials logged).
 - [ ] Compare live and embedded schemas using redacted field/type/count metadata only.
 - [ ] Add version-aware refresh policy and cache integration after upstream behavior is verified.
 
@@ -88,7 +88,7 @@ The sample includes payload methods `http`, `ssl`, `udp`, `direct`. Category nam
 - [x] Identify custom-payload formatter and CR/LF/SSH placeholder token references; the primary DEX exposes `[instant_split]` and `[delay_split]`.
 - [x] Add an isolated APNA payload compiler for host/port/protocol/SSH/line-ending tokens, ISO-8859-1 encoding, instant/delayed segment boundaries and `[rotate=...]`; tests cover chunk ordering, flushes, delays and rotation. The 1-second delay is a configurable sibling-source default, not yet confirmed from protected APNA bytecode.
 - [x] Add a lower-level payload socket connector for direct TCP, HTTP payload injection, and TLS-before-payload; validate bounded HTTP 200 responses, preserve Dropbear no-response mode, and close sockets on all failures. This is a stream transport only, not SSH authentication.
-- [ ] Verify APNA's protected service/mode selection and catalog-to-endpoint mapping before enabling any transport mode.
+- [ ] Verify APNA's protected service/mode selection and catalog-to-endpoint mapping before enabling any transport mode; current mappings are conservative and only four SSH-family categories are enabled.
 - [x] Add a Paramiko SSH session adapter with password/private-key authentication, strict known-hosts rejection, optional explicit OpenSSH SHA-256 host-key pinning, and a loopback-only SOCKS5 TCP CONNECT listener; tests use fake SSH transports and local sockets, so no real APNA authentication is claimed.
 - [x] Expose authenticated SSH `direct-tcpip` channels for the separate UDPGW stream; actual APNA UDPGW endpoint/port is still unknown.
 - [x] Add bounded UDPGW flow-ID allocation, first-packet REBIND, LRU reuse and response-to-flow validation; tests use synthetic packets only.
