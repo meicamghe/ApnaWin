@@ -759,3 +759,23 @@ def test_all_import_paths_are_exposed_from_one_import_menu(tmp_path, qapp):
     assert window.import_apna_live_action.isEnabled() is (os.name == "nt")
     window.close()
 
+def test_close_requested_during_apna_file_decode_closes_after_worker_finishes(
+    tmp_path, qapp, monkeypatch
+):
+    import apnawin.app as app_module
+
+    window = MainWindow(profiles_path=tmp_path / "profiles.json")
+    worker = app_module._ApnaCatalogFileWorker(str(tmp_path / "unused.dat"))
+    worker.catalog = {"Version": "synthetic"}
+    window._catalog_worker = worker
+    window._close_after_catalog_fetch = True
+    closed = []
+    monkeypatch.setattr(window, "close", lambda: closed.append(True))
+
+    window._apna_file_import_finished()
+
+    assert closed == [True]
+    assert window._close_after_catalog_fetch is False
+    assert window._catalog_worker is None
+    window._connection_timer.stop()
+
