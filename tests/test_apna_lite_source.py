@@ -20,6 +20,7 @@ class _Response:
         self.body = body
         self.status = status
         self.headers = headers or {"Content-Length": str(len(body))}
+        self.offset = 0
 
     def __enter__(self):
         return self
@@ -28,7 +29,9 @@ class _Response:
         return False
 
     def read(self, limit: int) -> bytes:
-        return self.body[:limit]
+        chunk = self.body[self.offset : self.offset + limit]
+        self.offset += len(chunk)
+        return chunk
 
 
 class _Opener:
@@ -239,3 +242,49 @@ def test_source_rejects_mismatched_content_range() -> None:
 
     with pytest.raises(ValueError, match="Content-Range"):
         source.fetch_document()
+
+
+
+class _InterruptingResponse(_Response):
+    def __init__(self, body: bytes, *, interrupt_after: int, headers=None) -> None:
+        super().__init__(body, headers=headers)
+        self.interrupt_after = interrupt_after
+        self.interrupted = False
+
+    def read(self, limit: int) -> bytes:
+        if not self.interrupted and self.offset >= self.interrupt_after:
+            self.interrupted = True
+            raise OSError("connection reset during response body")
+        allowed = limit
+        if not self.interrupted:
+            allowed = min(limit, self.interrupt_after - self.offset)
+        return super().read(allowed)
+
+
+def test_source_resumes_after_socket_reset_without_losing_received_bytes() -> None:
+    body = _encrypted_catalog()
+    received = 19
+    opener = _SequenceOpener(
+        [
+            _InterruptingResponse(
+                body,
+                interrupt_after=received,
+                headers={"Content-Length": str(len(body))},
+            ),
+            _Response(
+                body[received:],
+                status=206,
+                headers={
+                    "Content-Length": str(len(body) - received),
+                    "Content-Range": f"bytes {received}-{len(body) - 1}/{len(body)}",
+                },
+            ),
+        ]
+    )
+    source = ApnaLiteCatalogSource(opener=opener, sleep=lambda _seconds: None)
+
+    document = source.fetch_document()
+
+    assert document["Version"] == "synthetic"
+    assert len(opener.requests) == 2
+    assert opener.requests[1][0].get_header("Range") == f"bytes={received}-{len(body) - 1}"
