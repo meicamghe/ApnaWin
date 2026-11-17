@@ -10,7 +10,6 @@ on:
   push:
     branches:
       - main
-      - vpn/dual-stack-egress-readiness
   pull_request:
     branches: [main]
   workflow_dispatch:
