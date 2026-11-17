@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QProgressBar,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -270,6 +271,8 @@ class ApnaCatalogImportDialog(QDialog):
 class _ApnaCatalogFetchWorker(QThread):
     """Fetch the live catalog off the UI thread without persisting plaintext."""
 
+    progress = Signal(int, object)
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.catalog = None
@@ -283,6 +286,7 @@ class _ApnaCatalogFetchWorker(QThread):
             self.catalog = ApnaLiteCatalogSource(
                 timeout_seconds=60.0,
                 retry_attempts=3,
+                progress_callback=self.progress.emit,
             ).fetch_document()
         except Exception as exc:
             self.error = f"{type(exc).__name__}: {exc}"
@@ -342,6 +346,15 @@ class MainWindow(QMainWindow):
             "Disconnected — no verified VPN connection."
         )
         self.status_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.catalog_progress_label = QLabel("")
+        self.catalog_progress_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.catalog_progress_label.setWordWrap(True)
+        self.catalog_progress_label.hide()
+        self.catalog_progress_bar = QProgressBar()
+        self.catalog_progress_bar.setRange(0, 100)
+        self.catalog_progress_bar.setValue(0)
+        self.catalog_progress_bar.setTextVisible(True)
+        self.catalog_progress_bar.hide()
 
         self.profile_list = QListWidget()
         self.profile_list.currentRowChanged.connect(self._show_selected_profile)
@@ -413,6 +426,8 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout()
         layout.addWidget(heading)
         layout.addWidget(self.status_label)
+        layout.addWidget(self.catalog_progress_label)
+        layout.addWidget(self.catalog_progress_bar)
         layout.addWidget(QLabel("Connection profiles"))
         layout.addWidget(self.profile_list)
         layout.addLayout(profile_actions)
@@ -854,12 +869,44 @@ class MainWindow(QMainWindow):
             return
         worker = _ApnaCatalogFetchWorker(self)
         self._catalog_worker = worker
+        worker.progress.connect(self._live_apna_catalog_progress)
         worker.finished.connect(self._live_apna_catalog_finished)
         self.import_apna_live_button.setEnabled(False)
+        self.catalog_progress_label.setText("در حال اتصال و دریافت کاتالوگ سرورها…")
+        self.catalog_progress_label.show()
+        self.catalog_progress_bar.setRange(0, 100)
+        self.catalog_progress_bar.setValue(0)
+        self.catalog_progress_bar.setFormat("0%")
+        self.catalog_progress_bar.show()
         self.status_label.setText(
             "Fetching the live APNA catalog with bounded retries and range resume…"
         )
         worker.start()
+
+    @staticmethod
+    def _format_catalog_bytes(value: int) -> str:
+        if value < 1024:
+            return f"{value} B"
+        if value < 1024 * 1024:
+            return f"{value / 1024:.1f} KB"
+        return f"{value / (1024 * 1024):.2f} MB"
+
+    def _live_apna_catalog_progress(self, received: int, total) -> None:
+        received_text = self._format_catalog_bytes(received)
+        if isinstance(total, int) and total > 0:
+            total_text = self._format_catalog_bytes(total)
+            percent = min(100, int(received * 100 / total))
+            self.catalog_progress_bar.setRange(0, 100)
+            self.catalog_progress_bar.setValue(percent)
+            self.catalog_progress_bar.setFormat(f"{percent}%")
+            self.catalog_progress_label.setText(
+                f"دریافت کاتالوگ سرورها: {received_text} از {total_text}"
+            )
+        else:
+            self.catalog_progress_bar.setRange(0, 0)
+            self.catalog_progress_label.setText(
+                f"دریافت کاتالوگ سرورها: {received_text} (حجم کل نامشخص)"
+            )
 
     def _live_apna_catalog_finished(self) -> None:
         worker = self._catalog_worker
@@ -877,6 +924,8 @@ class MainWindow(QMainWindow):
             return
         if error is not None or not isinstance(catalog, dict):
             detail = error or "The catalog response was empty or invalid."
+            self.catalog_progress_label.setText("دریافت کاتالوگ ناموفق بود؛ می‌توانید دوباره تلاش کنید.")
+            self.catalog_progress_bar.setFormat("ناموفق")
             self.status_label.setText(
                 "Live APNA catalog unavailable. You can still import an APK catalog."
             )
@@ -887,6 +936,10 @@ class MainWindow(QMainWindow):
                 "No plaintext catalog was saved. (" + detail + ")",
             )
             return
+        self.catalog_progress_bar.setRange(0, 100)
+        self.catalog_progress_bar.setValue(100)
+        self.catalog_progress_bar.setFormat("100%")
+        self.catalog_progress_label.setText("دریافت کاتالوگ کامل شد.")
         self._import_apna_catalog(catalog, source_label="live catalog")
 
     def _import_apna_apk(self) -> None:
