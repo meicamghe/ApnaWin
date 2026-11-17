@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QMainWindow,
     QMessageBox,
+    QMenu,
     QPushButton,
     QPlainTextEdit,
     QProgressBar,
@@ -441,7 +442,16 @@ class MainWindow(QMainWindow):
         self.clear_all_button.setToolTip("Remove every saved profile and its encrypted settings.")
         self.clear_all_button.clicked.connect(self._clear_all_profiles)
         self.import_button = QPushButton("Import…")
-        self.import_button.clicked.connect(self._import_profiles)
+        self.import_menu = QMenu(self)
+        self.import_profiles_action = self.import_menu.addAction("ApnaWin profiles (JSON)…")
+        self.import_profiles_action.triggered.connect(self._import_profiles)
+        self.import_apna_file_action = self.import_menu.addAction("APNA encrypted catalog / APK…")
+        self.import_apna_file_action.triggered.connect(self._import_apna_apk)
+        self.import_apna_live_action = self.import_menu.addAction("Fetch live APNA catalog…")
+        self.import_apna_live_action.triggered.connect(self._fetch_live_apna_catalog)
+        self.import_xray_action = self.import_menu.addAction("Xray TUN configuration…")
+        self.import_xray_action.triggered.connect(self._import_xray_config)
+        self.import_button.setMenu(self.import_menu)
         self.export_button = QPushButton("Export…")
         self.export_button.clicked.connect(self._export_profiles)
         self.import_xray_config_button = QPushButton("Import Xray config…")
@@ -477,13 +487,12 @@ class MainWindow(QMainWindow):
             profile_actions_primary.addWidget(button)
         profile_actions_primary.addStretch(1)
         profile_actions_secondary = QHBoxLayout()
-        for button in (
-            self.import_xray_config_button,
-            self.import_apna_apk_button,
-            self.import_apna_live_button,
-            self.verify_apna_host_key_button,
-        ):
-            profile_actions_secondary.addWidget(button)
+        # Legacy action buttons remain as internal compatibility handles, but
+        # all import paths are exposed through the single Import… menu.
+        self.import_xray_config_button.hide()
+        self.import_apna_apk_button.hide()
+        self.import_apna_live_button.hide()
+        profile_actions_secondary.addWidget(self.verify_apna_host_key_button)
         profile_actions_secondary.addStretch(1)
         profile_actions.addLayout(profile_actions_primary)
         profile_actions.addLayout(profile_actions_secondary)
@@ -575,6 +584,22 @@ class MainWindow(QMainWindow):
             not busy and controller is not None
             and state in {ConnectionState.CONNECTED, ConnectionState.ERROR}
         )
+        if hasattr(self, "import_xray_action"):
+            self.import_xray_action.setEnabled(
+                self.profile_storage_writable
+                and profile is not None
+                and profile.transport is Transport.XRAY
+            )
+        if hasattr(self, "import_apna_file_action"):
+            self.import_apna_file_action.setEnabled(
+                self.profile_storage_writable and os.name == "nt"
+                and not (self._catalog_worker is not None and self._catalog_worker.isRunning())
+            )
+        if hasattr(self, "import_apna_live_action"):
+            self.import_apna_live_action.setEnabled(
+                self.profile_storage_writable and os.name == "nt"
+                and not (self._catalog_worker is not None and self._catalog_worker.isRunning())
+            )
 
     def _connect_selected_profile(self):
         if self.connection_controller is None or self._connection_worker is not None:
