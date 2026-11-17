@@ -40,7 +40,11 @@ from apnawin.engines.xray_tunnel import XrayTunnelEngine
 from apnawin.engines.apna_host_key import scan_apna_ssh_host_key
 from apnawin.engines.apna_tunnel_engine import ApnaTunnelEngine
 from apnawin.engines.multi_transport import MultiTransportTunnelEngine
-from apnawin.services.apna_lite_catalog import decode_apna_lite_apk_catalog
+from apnawin.services.apna_lite_catalog import (
+    MAX_INPUT_BYTES,
+    decode_apna_lite_apk_catalog,
+    decode_apna_lite_catalog,
+)
 from apnawin.services.apna_lite_source import ApnaLiteCatalogSource
 from apnawin.services.apna_lite_profile_mapper import (
     build_apna_lite_ssh_profile,
@@ -359,7 +363,8 @@ class MainWindow(QMainWindow):
         self.import_xray_config_button = QPushButton("Import Xray config…")
         self.import_xray_config_button.clicked.connect(self._import_xray_config)
         self.import_xray_config_button.setEnabled(False)
-        self.import_apna_apk_button = QPushButton("Import APNA APK…")
+        self.import_apna_apk_button = QPushButton("Import APNA file…")
+        self.import_apna_apk_button.setToolTip("Import an APK or a downloaded raw APNA catalog file.")
         self.import_apna_apk_button.clicked.connect(self._import_apna_apk)
         self.import_apna_apk_button.setEnabled(os.name == "nt")
         self.import_apna_live_button = QPushButton("Fetch live APNA catalog…")
@@ -872,22 +877,35 @@ class MainWindow(QMainWindow):
             return
         filename, _selected_filter = QFileDialog.getOpenFileName(
             self,
-            "Import APNA Tunnel Lite APK",
+            "Import APNA catalog or APNA Tunnel Lite APK",
             "",
-            "Android APK files (*.apk);;All files (*)",
+            "APNA catalog or APK (*.bin *.dat *.json *.apk);;All files (*)",
         )
         if not filename:
             return
+        path = Path(filename)
         try:
-            catalog = decode_apna_lite_apk_catalog(Path(filename))
+            # APK files are ZIP archives. The live updater download is the
+            # Base64/XXTEA catalog body itself and may have no file extension.
+            with path.open("rb") as stream:
+                signature = stream.read(4)
+            if signature.startswith(b"PK"):
+                catalog = decode_apna_lite_apk_catalog(path)
+                source_label = "APK"
+            else:
+                size = path.stat().st_size
+                if size <= 0 or size > MAX_INPUT_BYTES:
+                    raise ValueError("APNA catalog file size is invalid")
+                catalog = decode_apna_lite_catalog(path.read_bytes())
+                source_label = "downloaded catalog file"
         except (OSError, TypeError, ValueError) as exc:
             QMessageBox.warning(
                 self,
-                "APNA APK import failed",
-                f"The selected APK catalog could not be read. ({type(exc).__name__}: {exc})",
+                "APNA file import failed",
+                f"The selected APNA file could not be decoded. ({type(exc).__name__}: {exc})",
             )
             return
-        self._import_apna_catalog(catalog, source_label="APK")
+        self._import_apna_catalog(catalog, source_label=source_label)
 
     def _import_apna_catalog(self, catalog: dict, *, source_label: str) -> None:
         """Map a catalog entry to an encrypted APNA SSH profile."""
