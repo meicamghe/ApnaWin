@@ -7,7 +7,8 @@ from dataclasses import replace
 from html import escape
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QStandardPaths, Qt, QThread, QTimer, Signal, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -49,7 +50,7 @@ from apnawin.services.apna_lite_catalog import (
     decode_apna_lite_apk_catalog,
     decode_apna_lite_catalog,
 )
-from apnawin.services.apna_lite_source import ApnaLiteCatalogSource
+from apnawin.services.apna_lite_source import APNA_LITE_CATALOG_URL, ApnaLiteCatalogSource
 from apnawin.services.apna_lite_profile_mapper import (
     build_apna_lite_ssh_profile,
     list_apna_lite_ssh_payloads,
@@ -304,24 +305,26 @@ class ApnaCatalogImportDialog(QDialog):
 
 
 class _ApnaCatalogFetchWorker(QThread):
-    """Fetch the live catalog off the UI thread without persisting plaintext."""
+    """Fetch the live catalog off the UI thread and support cancellation."""
 
     progress = Signal(int, object)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
+        from threading import Event
+        self.cancel_event = Event()
         self.catalog = None
         self.error = None
 
+    def cancel(self) -> None:
+        self.cancel_event.set()
+
     def run(self) -> None:
         try:
-            # The upstream endpoint can deliver the ~400 KiB catalog very slowly.
-            # urllib's timeout is an inactivity timeout, so allow slow transfers to
-            # complete instead of restarting them after a few seconds.
             self.catalog = ApnaLiteCatalogSource(
-                timeout_seconds=60.0,
-                retry_attempts=3,
+                timeout_seconds=3.0, retry_attempts=2,
                 progress_callback=self.progress.emit,
+                cancel_event=self.cancel_event,
             ).fetch_document()
         except Exception as exc:
             self.error = f"{type(exc).__name__}: {exc}"
@@ -398,6 +401,7 @@ class MainWindow(QMainWindow):
         self.connection_controller = connection_controller or self._create_live_connection_controller()
         self._connection_worker = None
         self._catalog_worker = None
+        self._file_worker = None
         self._close_after_disconnect = False
         self._close_after_catalog_fetch = False
         self.profiles: list[ConnectionProfile] = []
@@ -422,6 +426,9 @@ class MainWindow(QMainWindow):
         self.catalog_progress_bar.setValue(0)
         self.catalog_progress_bar.setTextVisible(True)
         self.catalog_progress_bar.hide()
+        self.cancel_catalog_button = QPushButton("Cancel catalog download")
+        self.cancel_catalog_button.clicked.connect(self._cancel_live_apna_catalog)
+        self.cancel_catalog_button.hide()
 
         self.profile_list = QListWidget()
         self.profile_list.setMinimumHeight(280)
@@ -449,6 +456,8 @@ class MainWindow(QMainWindow):
         self.import_apna_file_action.triggered.connect(self._import_apna_apk)
         self.import_apna_live_action = self.import_menu.addAction("Fetch live APNA catalog…")
         self.import_apna_live_action.triggered.connect(self._fetch_live_apna_catalog)
+        self.download_apna_manual_action = self.import_menu.addAction("Open manual APNA catalog download…")
+        self.download_apna_manual_action.triggered.connect(self._open_manual_apna_download)
         self.import_xray_action = self.import_menu.addAction("Xray JSON (VLESS / VMess / Trojan / UDP-capable)…")
         self.import_xray_action.triggered.connect(self._import_xray_config)
         self.import_button.setMenu(self.import_menu)
@@ -515,6 +524,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.status_label)
         layout.addWidget(self.catalog_progress_label)
         layout.addWidget(self.catalog_progress_bar)
+        layout.addWidget(self.cancel_catalog_button)
         layout.addWidget(QLabel("Connection profiles"))
         layout.addWidget(self.profile_list)
         layout.addLayout(profile_actions)
@@ -671,9 +681,11 @@ class MainWindow(QMainWindow):
         self._update_connection_controls()
 
     def closeEvent(self, event):
-        catalog_worker = self._catalog_worker
-        if catalog_worker is not None and catalog_worker.isRunning():
+        workers = (self._catalog_worker, self._file_worker)
+        if any(worker is not None and worker.isRunning() for worker in workers):
             self._close_after_catalog_fetch = True
+            if self._catalog_worker is not None and self._catalog_worker.isRunning():
+                self._catalog_worker.cancel()
             event.ignore()
             return
         worker = self._connection_worker
@@ -1010,15 +1022,16 @@ class MainWindow(QMainWindow):
             self.status_label.setText(f"Imported {len(imported)} profile(s).")
 
     def _update_catalog_import_actions(self) -> None:
-        """Keep every APNA import entry point in sync with the shared worker."""
-        busy = self._catalog_worker is not None and self._catalog_worker.isRunning()
-        enabled = self.profile_storage_writable and os.name == "nt" and not busy
-        for action_name in ("import_apna_file_action", "import_apna_live_action"):
-            action = getattr(self, action_name, None)
-            if action is not None:
-                action.setEnabled(enabled)
-        self.import_apna_apk_button.setEnabled(enabled)
-        self.import_apna_live_button.setEnabled(enabled)
+        fetching = self._catalog_worker is not None and self._catalog_worker.isRunning()
+        decoding = self._file_worker is not None and self._file_worker.isRunning()
+        available = self.profile_storage_writable and os.name == "nt"
+        self.import_apna_file_action.setEnabled(available and not decoding)
+        self.import_apna_live_action.setEnabled(available and not fetching)
+        self.download_apna_manual_action.setEnabled(available)
+        self.import_apna_apk_button.setEnabled(available and not decoding)
+        self.import_apna_live_button.setEnabled(available and not fetching)
+        self.cancel_catalog_button.setVisible(fetching)
+        self.cancel_catalog_button.setEnabled(fetching)
 
     def _fetch_live_apna_catalog(self) -> None:
         """Fetch the latest APNA catalog asynchronously, keeping the UI responsive."""
@@ -1032,6 +1045,8 @@ class MainWindow(QMainWindow):
         worker.progress.connect(self._live_apna_catalog_progress)
         worker.finished.connect(self._live_apna_catalog_finished)
         self.import_apna_live_button.setEnabled(False)
+        self.cancel_catalog_button.show()
+        self.cancel_catalog_button.setEnabled(True)
         self.catalog_progress_label.setText("در حال اتصال و دریافت کاتالوگ سرورها…")
         self.catalog_progress_label.show()
         self.catalog_progress_bar.setRange(0, 100)
@@ -1042,6 +1057,18 @@ class MainWindow(QMainWindow):
             "Fetching the live APNA catalog with bounded retries and range resume…"
         )
         worker.start()
+
+    def _open_manual_apna_download(self) -> None:
+        if self.profile_storage_writable and not QDesktopServices.openUrl(QUrl(APNA_LITE_CATALOG_URL)):
+            show_copyable_error(self, "Open manual download",
+                "Open this URL in your browser:\n" + APNA_LITE_CATALOG_URL)
+
+    def _cancel_live_apna_catalog(self) -> None:
+        worker = self._catalog_worker
+        if worker is not None and worker.isRunning():
+            worker.cancel()
+            self.cancel_catalog_button.setEnabled(False)
+            self.catalog_progress_label.setText("درخواست لغو ارسال شد؛ منتظر توقف شبکه…")
 
     @staticmethod
     def _format_catalog_bytes(value: int) -> str:
@@ -1082,6 +1109,11 @@ class MainWindow(QMainWindow):
             return
         if error is not None or not isinstance(catalog, dict):
             detail = error or "The catalog response was empty or invalid."
+            if "cancel" in detail.lower():
+                self.catalog_progress_label.setText("دریافت لغو شد؛ ورود دستی فعال است.")
+                self.catalog_progress_bar.hide()
+                self.status_label.setText("APNA catalog download cancelled.")
+                return
             self.catalog_progress_label.setText("دریافت کاتالوگ ناموفق بود؛ می‌توانید دوباره تلاش کنید.")
             self.catalog_progress_bar.setFormat("ناموفق")
             self.status_label.setText(
@@ -1104,7 +1136,7 @@ class MainWindow(QMainWindow):
         """Import an APNA APK/raw catalog asynchronously; keep the UI responsive."""
         if not self.profile_storage_writable or os.name != "nt":
             return
-        if self._catalog_worker is not None and self._catalog_worker.isRunning():
+        if self._file_worker is not None and self._file_worker.isRunning():
             return
         filename, _selected_filter = QFileDialog.getOpenFileName(
             self,
@@ -1115,7 +1147,7 @@ class MainWindow(QMainWindow):
         if not filename:
             return
         worker = _ApnaCatalogFileWorker(filename, self)
-        self._catalog_worker = worker
+        self._file_worker = worker
         self._update_catalog_import_actions()
         worker.finished.connect(self._apna_file_import_finished)
         self.import_apna_apk_button.setEnabled(False)
@@ -1128,12 +1160,12 @@ class MainWindow(QMainWindow):
         worker.start()
 
     def _apna_file_import_finished(self) -> None:
-        worker = self._catalog_worker
+        worker = self._file_worker
         if not isinstance(worker, _ApnaCatalogFileWorker):
             return
         catalog, error = worker.catalog, worker.error
         source_label = worker.source_label
-        self._catalog_worker = None
+        self._file_worker = None
         worker.deleteLater()
         self._update_catalog_import_actions()
         if self._close_after_catalog_fetch:

@@ -8,6 +8,7 @@ redirects, compression, oversized bodies and inconsistent ranges are rejected.
 from __future__ import annotations
 
 from http.client import IncompleteRead
+from threading import Event
 from urllib.error import HTTPError, URLError
 import math
 import re
@@ -63,6 +64,7 @@ class ApnaLiteCatalogSource:
         opener=None,
         sleep: Callable[[float], object] = time.sleep,
         progress_callback: Callable[[int, int | None], object] | None = None,
+        cancel_event: Event | None = None,
     ) -> None:
         if (
             isinstance(timeout_seconds, bool)
@@ -86,8 +88,18 @@ class ApnaLiteCatalogSource:
         self._opener = opener or build_opener(_SafeHttpsRedirects())
         self._sleep = sleep
         self._progress_callback = progress_callback
+        self._cancel_event = cancel_event or Event()
+
+    def _check_cancelled(self) -> None:
+        if self._cancel_event.is_set():
+            raise RuntimeError("APNA catalog download cancelled")
+
+    def _wait_retry(self, seconds: float) -> None:
+        if self._cancel_event.wait(seconds):
+            self._check_cancelled()
 
     def _report_progress(self, received: int, total: int | None) -> None:
+        self._check_cancelled()
         if self._progress_callback is not None:
             self._progress_callback(received, total)
 
@@ -133,6 +145,7 @@ class ApnaLiteCatalogSource:
                 interrupted = False
                 self._report_progress(0, declared)
                 while len(raw_buffer) <= MAX_INPUT_BYTES:
+                    self._check_cancelled()
                     try:
                         chunk = response.read(
                             min(_RANGE_CHUNK_BYTES, MAX_INPUT_BYTES + 1 - len(raw_buffer))
@@ -172,6 +185,7 @@ class ApnaLiteCatalogSource:
             raise ValueError("APNA Lite catalog range resume bounds are invalid")
         result = bytearray(partial)
         while len(result) < total:
+            self._check_cancelled()
             start = len(result)
             requested_end = min(start + _RANGE_CHUNK_BYTES - 1, total - 1)
             last_error: Exception | None = None
@@ -213,7 +227,7 @@ class ApnaLiteCatalogSource:
                 except (HTTPError, URLError, OSError, IncompleteRead) as exc:
                     last_error = exc
                     if attempt + 1 < self.retry_attempts:
-                        self._sleep(0.5 * (attempt + 1))
+                        self._wait_retry(0.5 * (attempt + 1))
                 if last_error is None:
                     continue
             if last_error is not None:
@@ -226,6 +240,7 @@ class ApnaLiteCatalogSource:
 
     def fetch_bytes(self) -> bytes:
         """Fetch the encrypted catalog with bounded retries and range resumption."""
+        self._check_cancelled()
         last_error: Exception | None = None
         for attempt in range(self.retry_attempts):
             try:
@@ -241,20 +256,22 @@ class ApnaLiteCatalogSource:
             except (HTTPError, URLError, OSError, IncompleteRead) as exc:
                 last_error = exc
                 if attempt + 1 < self.retry_attempts:
-                    self._sleep(0.5 * (attempt + 1))
+                    self._wait_retry(0.5 * (attempt + 1))
             except ValueError as exc:
                 # A declared truncation is resumed in the same attempt. Other
                 # protocol/schema errors are not hidden by blind retries.
                 last_error = exc
                 if "HTTP request failed (status 5" in str(exc) and attempt + 1 < self.retry_attempts:
-                    self._sleep(0.5 * (attempt + 1))
+                    self._wait_retry(0.5 * (attempt + 1))
                 else:
                     raise
         raise ValueError("APNA Lite catalog download failed after bounded retries") from None
 
     def fetch_document(self) -> dict:
         """Fetch and decode one catalog; caller must treat it as secret-bearing."""
-        return decode_apna_lite_catalog(self.fetch_bytes())
+        data = self.fetch_bytes()
+        self._check_cancelled()
+        return decode_apna_lite_catalog(data)
 
     def fetch_summary(self) -> dict[str, int | str]:
         """Return only version and record counts; never expose credentials or payloads."""
