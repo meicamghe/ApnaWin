@@ -749,6 +749,7 @@ def test_all_import_paths_are_exposed_from_one_import_menu(tmp_path, qapp):
         "ApnaWin profiles (JSON)…",
         "APNA encrypted catalog / APK…",
         "Fetch live APNA catalog…",
+        "Open manual APNA catalog download…",
         "Xray JSON (VLESS / VMess / Trojan / UDP-capable)…",
     ]
     assert window.import_xray_config_button.isHidden()
@@ -757,7 +758,28 @@ def test_all_import_paths_are_exposed_from_one_import_menu(tmp_path, qapp):
     assert window.import_xray_action.isEnabled() is False
     assert window.import_apna_file_action.isEnabled() is (os.name == "nt")
     assert window.import_apna_live_action.isEnabled() is (os.name == "nt")
+    assert window.download_apna_manual_action.isEnabled() is (os.name == "nt")
     window.close()
+
+def test_cancel_live_fetch_requests_worker_cancellation(tmp_path, qapp):
+    class Worker:
+        def __init__(self):
+            self.cancelled = False
+        def isRunning(self):
+            return True
+        def cancel(self):
+            self.cancelled = True
+
+    window = MainWindow(profiles_path=tmp_path / "profiles.json")
+    worker = Worker()
+    window._catalog_worker = worker
+    window._cancel_live_apna_catalog()
+    assert worker.cancelled is True
+    assert window.cancel_catalog_button.isEnabled() is False
+    window._catalog_worker = None
+    window._connection_timer.stop()
+    window.close()
+
 
 def test_close_requested_during_apna_file_decode_closes_after_worker_finishes(
     tmp_path, qapp, monkeypatch
@@ -767,7 +789,7 @@ def test_close_requested_during_apna_file_decode_closes_after_worker_finishes(
     window = MainWindow(profiles_path=tmp_path / "profiles.json")
     worker = app_module._ApnaCatalogFileWorker(str(tmp_path / "unused.dat"))
     worker.catalog = {"Version": "synthetic"}
-    window._catalog_worker = worker
+    window._file_worker = worker
     window._close_after_catalog_fetch = True
     closed = []
     monkeypatch.setattr(window, "close", lambda: closed.append(True))
@@ -776,6 +798,6 @@ def test_close_requested_during_apna_file_decode_closes_after_worker_finishes(
 
     assert closed == [True]
     assert window._close_after_catalog_fetch is False
-    assert window._catalog_worker is None
+    assert window._file_worker is None
     window._connection_timer.stop()
 
