@@ -738,3 +738,24 @@ def test_vpn_operation_failure_is_selectable_and_opens_copyable_diagnostics(
     flags = window.status_label.textInteractionFlags()
     assert flags & Qt.TextInteractionFlag.TextSelectableByMouse
     window.close()
+
+def test_all_import_paths_are_exposed_from_one_import_menu(tmp_path, qapp):
+    window = MainWindow(profiles_path=tmp_path / "profiles.json")
+
+    menu = window.import_button.menu()
+    assert menu is window.import_menu
+    action_texts = [action.text() for action in menu.actions()]
+    assert action_texts == [
+        "ApnaWin profiles (JSON)…",
+        "APNA encrypted catalog / APK…",
+        "Fetch live APNA catalog…",
+        "Xray TUN configuration…",
+    ]
+    assert window.import_xray_config_button.isHidden()
+    assert window.import_apna_apk_button.isHidden()
+    assert window.import_apna_live_button.isHidden()
+    assert window.import_xray_action.isEnabled() is False
+    assert window.import_apna_file_action.isEnabled() is (os.name == "nt")
+    assert window.import_apna_live_action.isEnabled() is (os.name == "nt")
+    window.close()
+
