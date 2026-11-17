@@ -248,6 +248,9 @@ class ApnaPayloadSocketConnector:
                     pass
             if isinstance(exc, (PayloadTransportError, ValueError, TypeError)):
                 raise
+            endpoint = f"{config.connect_host}:{config.connect_port}"
+            sni_detail = f" (SNI {config.sni})" if config.sni else ""
             raise PayloadTransportError(
-                f"Could not establish {config.mode.value} payload transport"
+                f"Could not establish {config.mode.value} payload transport "
+                f"to {endpoint}{sni_detail}: {type(exc).__name__}: {exc}"
             ) from exc

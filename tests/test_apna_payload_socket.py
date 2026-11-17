@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import socket
+import ssl
 import threading
 
 import pytest
@@ -281,3 +282,32 @@ def test_http_redirect_is_reported_with_location_and_not_accepted():
     assert "not followed" in str(error.value)
     worker.join(timeout=1)
     assert client.fileno() == -1
+
+
+
+def test_tls_direct_reports_underlying_tls_error_and_endpoint():
+    client, server = socket.socketpair()
+
+    class FailingTlsContext:
+        def wrap_socket(self, sock, *, server_hostname):
+            raise ssl.SSLError("CERTIFICATE_VERIFY_FAILED: hostname mismatch")
+
+    connector = ApnaPayloadSocketConnector(
+        socket_factory=lambda address, timeout: client,
+        tls_context=FailingTlsContext(),
+    )
+    config = PayloadSocketConfig(
+        mode=PayloadSocketMode.TLS_DIRECT,
+        connect_host="front.example.test",
+        connect_port=443,
+        target_host="ssh.example.test",
+        target_port=1194,
+        sni="amtun.example.test",
+    )
+    with pytest.raises(
+        PayloadTransportError,
+        match=r"tls_direct.*front\\.example\\.test:443.*SNI amtun\\.example\\.test.*SSLError.*hostname mismatch",
+    ):
+        connector.connect(config)
+    assert client.fileno() == -1
+    server.close()
