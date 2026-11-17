@@ -8,6 +8,15 @@
 - Windows toolchain: MSYS2 MinGW-w64 x86_64, CMake and Ninja.
 - Targets: `badvpn-tun2socks.exe` and `badvpn-udpgw.exe`.
 
+Verified CI build evidence (2026-11-16):
+
+- Workflow: [APNA BadVPN Windows x64 native build](https://github.com/meicamghe/ApnaWin/actions/runs/43948753873)
+- Artifact: `apnawin-badvpn-windows-x64` (214,255 bytes)
+- Artifact ZIP SHA-256: `284f53f30e8370b6fcfa44c4474973583964debed186a64debe9ba007b57c524`
+- `badvpn-tun2socks.exe` SHA-256: `581f899d0821cec11dca1c2be6d6ccc05e1559fda889af688ad117cac61df0ab`
+- `badvpn-udpgw.exe` SHA-256: `e99e55ff16178f035a13378846d19eb05cfe328087736fc9449095fed6aaece`
+- Downloaded ZIP CRC validation passed; both files were independently identified as PE32+ Windows x64 executables.
+
 The repository includes a dedicated Windows backend (`BConnection_win.c`, `BDatagram_win.c`) and the tun2socks target links `SocksUdpGwClient.c`. The upstream Windows path does compile the BadVPN UDPGW client into tun2socks; it is not excluded by the Windows preprocessor branch. A separate workflow builds the two binaries from a pinned source commit and checks their PE x64 format and CLI startup.
 
 ## Critical Windows adapter limitation
