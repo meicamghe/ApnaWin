@@ -273,9 +273,12 @@ class _ApnaCatalogFetchWorker(QThread):
 
     def run(self) -> None:
         try:
+            # The upstream endpoint can deliver the ~400 KiB catalog very slowly.
+            # urllib's timeout is an inactivity timeout, so allow slow transfers to
+            # complete instead of restarting them after a few seconds.
             self.catalog = ApnaLiteCatalogSource(
-                timeout_seconds=8.0,
-                retry_attempts=2,
+                timeout_seconds=60.0,
+                retry_attempts=3,
             ).fetch_document()
         except Exception as exc:
             self.error = f"{type(exc).__name__}: {exc}"
