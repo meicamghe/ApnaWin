@@ -25,8 +25,13 @@ def test_installer_does_not_rewrite_live_installation_acl_before_copy():
         Path(__file__).parents[1] / "scripts" / "Install-ApnaWin.ps1"
     ).read_text(encoding="utf-8")
 
-    assert "Set-ApnaWinInstallAcl -Path $staging" in script
-    assert "Set-ApnaWinInstallAcl -Path $target" not in script
+    stage_copy = script.index('Copy-Item -Path (Join-Path $source "*")')
+    acl_staging = script.index("Set-ApnaWinInstallAcl -Path $staging")
+    backup_existing = script.index("Move-Item -LiteralPath $target -Destination $backup")
+    swap_staging = script.index("Move-Item -LiteralPath $staging -Destination $target")
+    acl_final = script.index("Set-ApnaWinInstallAcl -Path $target")
+
+    assert stage_copy < acl_staging < backup_existing < swap_staging < acl_final
     assert "Copy-Item -Path (Join-Path $source \"*\") -Destination $target" not in script
 
 

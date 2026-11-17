@@ -246,7 +246,10 @@ class ApnaPayloadSocketConnector:
                     raw_socket.close()
                 except OSError:
                     pass
-            if isinstance(exc, (PayloadTransportError, ValueError, TypeError)):
+            # SSLCertVerificationError inherits ValueError as well as SSLError.
+            # Classify TLS verification failures before the generic ValueError
+            # passthrough so certificate/SNI diagnostics are not lost.
+            if isinstance(exc, PayloadTransportError):
                 raise
             endpoint = f"{config.connect_host}:{config.connect_port}"
             sni = config.sni or (
@@ -264,14 +267,22 @@ class ApnaPayloadSocketConnector:
                     else "TLS certificate verification failed"
                 )
             elif isinstance(exc, ssl.SSLError):
-                diagnosis = "TLS handshake failed"
+                tls_reason = str(exc).lower()
+                if "hostname mismatch" in tls_reason or "hostname" in tls_reason:
+                    diagnosis = "TLS certificate hostname/SNI mismatch"
+                elif "certificate_verify_failed" in tls_reason or "certificate verify failed" in tls_reason:
+                    diagnosis = "TLS certificate verification failed"
+                else:
+                    diagnosis = "TLS handshake failed"
             elif isinstance(exc, (ConnectionRefusedError, TimeoutError, socket.timeout)):
                 diagnosis = "TCP connection failed (refused or timed out)"
             elif isinstance(exc, OSError):
                 diagnosis = "TCP socket or network connection failed"
+            elif isinstance(exc, (ValueError, TypeError)):
+                raise
             else:
                 diagnosis = "payload transport failed"
-            sni_detail = f"; SNI={sni}" if config.mode in {
+            sni_detail = f"; SNI {sni}" if config.mode in {
                 PayloadSocketMode.TLS_DIRECT, PayloadSocketMode.TLS_HTTP_PROXY
             } else ""
             raise PayloadTransportError(
