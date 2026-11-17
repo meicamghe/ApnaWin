@@ -400,7 +400,12 @@ class MainWindow(QMainWindow):
         self.connect_button = QPushButton("Connect")
         self.connect_button.clicked.connect(self._connect_selected_profile)
         self.connect_button.setEnabled(False)
-        self.connect_button.setToolTip("Waits for verified TUN routes, DNS and external TLS egress.")
+        self.connect_button.setToolTip(
+            "Waits for verified TUN routes, DNS and external TLS egress."
+            if self.connection_controller is not None
+            else "Connection engine unavailable. Install ApnaWin with its signed Windows installer; "
+                 "the portable ZIP does not provision the protected elevated VPN helper."
+        )
         self.disconnect_button = QPushButton("Disconnect")
         self.disconnect_button.clicked.connect(self._disconnect_tunnel)
         self.disconnect_button.setEnabled(False)
