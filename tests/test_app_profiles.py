@@ -712,6 +712,7 @@ def test_apna_import_report_shows_all_tiers_even_when_no_ssh_profiles_exist(
     assert "UDP edge | udp.example.test" in captured["message"]
     assert "Trojan edge" in captured["message"]
     assert "Only SSH-compatible categories are currently importable" in captured["message"]
+    assert "SSH profile import unavailable" not in captured["message"]
     assert window.profiles == []
     window.close()
 

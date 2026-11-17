@@ -1245,18 +1245,24 @@ class MainWindow(QMainWindow):
             )
             return
 
-        try:
-            # Decode the account once, not once per server/payload pair. The
-            # repeated XXTEA/credential work used to run synchronously on the UI
-            # thread and could make the window appear frozen on larger catalogs.
-            credentials = decode_apna_lite_catalog_credentials(catalog)
-        except (TypeError, ValueError) as exc:
-            show_copyable_error(
-                self,
-                "APNA catalog credentials failed",
-                f"Catalog credentials could not be decoded: {type(exc).__name__}: {exc}",
-            )
-            return
+        # Catalog inventory is independent from connection credentials. A
+        # report-only catalog (or one containing only unsupported protocols)
+        # must still show every tier and server even when account fields are
+        # absent. Decode credentials once, and only when there is at least one
+        # SSH server/payload pair worth attempting to import.
+        has_ssh_payloads = any(
+            list_apna_lite_ssh_payloads(catalog, str(server.get("category", "")))
+            for server in servers
+        )
+        credentials = None
+        credential_error = None
+        if has_ssh_payloads:
+            try:
+                credentials = decode_apna_lite_catalog_credentials(catalog)
+            except (TypeError, ValueError) as exc:
+                credential_error = (
+                    f"{type(exc).__name__}: {exc}"
+                )
 
         existing = {item.name.casefold() for item in self.profiles}
         imported = []
@@ -1271,6 +1277,8 @@ class MainWindow(QMainWindow):
             # distinct server/payload combination instead of stopping at the
             # first one; the previous break silently hid the remaining choices.
             for payload in payloads:
+                if credentials is None:
+                    continue
                 try:
                     candidate = build_apna_lite_ssh_profile(catalog, server, payload, credentials=credentials)
                 except (TypeError, ValueError):
@@ -1298,6 +1306,10 @@ class MainWindow(QMainWindow):
             f"Existing/duplicate profiles skipped: {skipped_duplicate}",
             f"Incomplete or unmappable SSH records skipped: {skipped_unmappable}",
             f"Encrypted-store failures: {skipped_storage}",
+            *(
+                [f"SSH profile import unavailable because catalog credentials could not be decoded: {credential_error}"]
+                if credential_error else []
+            ),
             "",
             *inventory_lines,
             "",
