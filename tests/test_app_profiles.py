@@ -671,3 +671,28 @@ def test_apna_import_report_shows_all_tiers_even_when_no_ssh_profiles_exist(
     assert "Only SSH-compatible categories are currently importable" in captured["message"]
     assert window.profiles == []
     window.close()
+
+
+
+def test_vpn_operation_failure_is_selectable_and_opens_copyable_diagnostics(
+    tmp_path, qapp, monkeypatch
+):
+    import apnawin.app as app_module
+
+    captured = {}
+    monkeypatch.setattr(
+        app_module,
+        "show_copyable_error",
+        lambda _parent, title, message: captured.update(title=title, message=message),
+    )
+    window = MainWindow(profiles_path=tmp_path / "profiles.json")
+    window._connection_operation_finished(
+        False,
+        "ApnaHostKeyProbeError: SSH host-key exchange failed: HTTP 301",
+    )
+    assert captured["title"] == "VPN operation failed"
+    assert "HTTP 301" in captured["message"]
+    assert "HTTP 301" in window.status_label.text()
+    flags = window.status_label.textInteractionFlags()
+    assert flags & Qt.TextInteractionFlag.TextSelectableByMouse
+    window.close()

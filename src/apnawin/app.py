@@ -582,7 +582,9 @@ class MainWindow(QMainWindow):
         elif success:
             self.status_label.setText("Disconnected — VPN helper stopped.")
         else:
-            self.status_label.setText("VPN operation failed: " + detail)
+            diagnostic = "VPN operation failed:\n" + str(detail)
+            self.status_label.setText(diagnostic)
+            show_copyable_error(self, "VPN operation failed", diagnostic)
         self._update_connection_controls()
 
     def _connection_worker_finished(self):
