@@ -49,6 +49,7 @@ from apnawin.services.apna_lite_catalog import (
     MAX_INPUT_BYTES,
     decode_apna_lite_apk_catalog,
     decode_apna_lite_catalog,
+    decode_apna_lite_catalog_credentials,
 )
 from apnawin.services.apna_lite_source import APNA_LITE_CATALOG_URL, ApnaLiteCatalogSource
 from apnawin.services.apna_lite_profile_mapper import (
@@ -1244,6 +1245,19 @@ class MainWindow(QMainWindow):
             )
             return
 
+        try:
+            # Decode the account once, not once per server/payload pair. The
+            # repeated XXTEA/credential work used to run synchronously on the UI
+            # thread and could make the window appear frozen on larger catalogs.
+            credentials = decode_apna_lite_catalog_credentials(catalog)
+        except (TypeError, ValueError) as exc:
+            show_copyable_error(
+                self,
+                "APNA catalog credentials failed",
+                f"Catalog credentials could not be decoded: {type(exc).__name__}: {exc}",
+            )
+            return
+
         existing = {item.name.casefold() for item in self.profiles}
         imported = []
         skipped_duplicate = 0
@@ -1258,7 +1272,7 @@ class MainWindow(QMainWindow):
             # first one; the previous break silently hid the remaining choices.
             for payload in payloads:
                 try:
-                    candidate = build_apna_lite_ssh_profile(catalog, server, payload)
+                    candidate = build_apna_lite_ssh_profile(catalog, server, payload, credentials=credentials)
                 except (TypeError, ValueError):
                     continue
                 mapped_any = True
