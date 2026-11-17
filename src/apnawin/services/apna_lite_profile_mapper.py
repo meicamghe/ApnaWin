@@ -165,10 +165,12 @@ def build_apna_lite_ssh_profile(
     server_port = _port(server_record.get("server_port"), None, "server_port")
     ssl_port = _port(server_record.get("ssl_port"), server_port, "ssl_port")
     udp_port_value = server_record.get("server_udp_port")
-    udpgw_port = None if udp_port_value in (None, "") else _port(
-        udp_port_value, None, "server_udp_port"
-    )
-    udp_host = server_host if udpgw_port is not None else None
+    if udp_port_value in (None, ""):
+        raise ApnaLiteProfileError(
+            "Full-tunnel APNA requires a server_udp_port for the UDP gateway"
+        )
+    udpgw_port = _port(udp_port_value, None, "server_udp_port")
+    udp_host = server_host
 
     payload_host_pool = _host_pool(payload_record.get("host"), "payload.host")
     selected_payload_host = (

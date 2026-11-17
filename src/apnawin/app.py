@@ -449,7 +449,7 @@ class MainWindow(QMainWindow):
         self.import_apna_file_action.triggered.connect(self._import_apna_apk)
         self.import_apna_live_action = self.import_menu.addAction("Fetch live APNA catalog…")
         self.import_apna_live_action.triggered.connect(self._fetch_live_apna_catalog)
-        self.import_xray_action = self.import_menu.addAction("Xray TUN configuration…")
+        self.import_xray_action = self.import_menu.addAction("Xray JSON (VLESS / VMess / Trojan / UDP-capable)…")
         self.import_xray_action.triggered.connect(self._import_xray_config)
         self.import_button.setMenu(self.import_menu)
         self.export_button = QPushButton("Export…")

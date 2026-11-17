@@ -241,3 +241,12 @@ def test_lists_ssh_servers_from_every_catalog_tier_without_mutating_records():
     ]
     assert "_catalog_section" not in free
     assert len(servers) == 4
+
+def test_rejects_ssh_server_without_udp_gateway_for_full_tunnel():
+    server = _server()
+    server.pop("server_udp_port")
+    with pytest.raises(ApnaLiteProfileError, match="server_udp_port"):
+        build_apna_lite_ssh_profile(
+            _catalog(), server, _payload(), host_selector=_first
+        )
+
