@@ -366,4 +366,4 @@ def test_transport_errors_are_classified_with_endpoint_and_sni(error, expected):
     assert expected in str(caught.value)
     assert "front.example.test:443" in str(caught.value)
     if config.mode is PayloadSocketMode.TLS_DIRECT:
-        assert "SNI=sni.example.test" in str(caught.value)
+        assert "SNI sni.example.test" in str(caught.value)
