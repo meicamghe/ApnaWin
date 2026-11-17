@@ -1034,11 +1034,11 @@ class MainWindow(QMainWindow):
             self.status_label.setText(
                 "Live APNA catalog unavailable. You can still import an APK catalog."
             )
-            QMessageBox.warning(
+            show_copyable_error(
                 self,
                 "Live APNA catalog failed",
                 "The latest APNA server catalog could not be downloaded or decoded. "
-                "No plaintext catalog was saved. (" + detail + ")",
+                "No plaintext catalog was saved.\\n\\n" + detail,
             )
             return
         self.catalog_progress_bar.setRange(0, 100)
@@ -1093,6 +1093,7 @@ class MainWindow(QMainWindow):
         )
         supported_categories = {"ocsws", "ocscf", "ocsnormal", "ocshttp"}
         inventory_lines = []
+        record_inventory_lines = []
         all_total = 0
         supported_total = 0
         for section, label in sections:
@@ -1101,10 +1102,19 @@ class MainWindow(QMainWindow):
                 records = []
             all_total += len(records)
             category_counts = {}
-            for record in records:
+            for index, record in enumerate(records, start=1):
                 if isinstance(record, dict):
                     category = str(record.get("category", "unknown"))
                     category_counts[category] = category_counts.get(category, 0) + 1
+                    name = str(record.get("server_name") or f"Server {index}")[:128]
+                    host = str(record.get("server_host") or "host unavailable")[:253]
+                    record_inventory_lines.append(
+                        f"{label} | {category} | {name} | {host}"
+                    )
+                else:
+                    record_inventory_lines.append(
+                        f"{label} | invalid record {index} | not importable"
+                    )
             ssh_count = sum(
                 count for category, count in category_counts.items()
                 if category in supported_categories
@@ -1171,8 +1181,11 @@ class MainWindow(QMainWindow):
             "",
             *inventory_lines,
             "",
+            "Complete server inventory (tier | category | name | host):",
+            *record_inventory_lines,
+            "",
             "Only SSH-compatible categories are currently importable. Other categories are "
-            "listed above for visibility but are not presented as connectable profiles.",
+            "listed for visibility but are not presented as connectable profiles.",
         ]
         report = "\n".join(report_lines)
         if imported:

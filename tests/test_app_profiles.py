@@ -652,10 +652,13 @@ def test_apna_import_report_shows_all_tiers_even_when_no_ssh_profiles_exist(
     )
     window = MainWindow(profiles_path=tmp_path / "profiles.json")
     catalog = {
-        "Free_servers": [{"category": "ocsudp"}, {"category": "ocsws"}],
-        "Premium_servers": [{"category": "trojan"}],
-        "Vip_servers": [{"category": "vmess"}, {"category": "vmess"}],
-        "Private_servers": [{"category": "unknown"}],
+        "Free_servers": [
+            {"category": "ocsudp", "server_name": "UDP edge", "server_host": "udp.example.test"},
+            {"category": "ocsws", "server_name": "SSH edge", "server_host": "ssh.example.test"},
+        ],
+        "Premium_servers": [{"category": "trojan", "server_name": "Trojan edge"}],
+        "Vip_servers": [{"category": "vmess", "server_name": "VMess one"}, {"category": "vmess", "server_name": "VMess two"}],
+        "Private_servers": [{"category": "unknown", "server_name": "Private edge"}],
         "Payloads": [],
     }
 
@@ -668,6 +671,9 @@ def test_apna_import_report_shows_all_tiers_even_when_no_ssh_profiles_exist(
     assert "VIP: 2 server records; 0 SSH-compatible" in captured["message"]
     assert "Private: 1 server records; 0 SSH-compatible" in captured["message"]
     assert "ocsudp=1, ocsws=1" in captured["message"]
+    assert "Complete server inventory" in captured["message"]
+    assert "UDP edge | udp.example.test" in captured["message"]
+    assert "Trojan edge" in captured["message"]
     assert "Only SSH-compatible categories are currently importable" in captured["message"]
     assert window.profiles == []
     window.close()
