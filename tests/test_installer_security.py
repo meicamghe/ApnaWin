@@ -28,3 +28,15 @@ def test_installer_does_not_rewrite_live_installation_acl_before_copy():
     assert "Set-ApnaWinInstallAcl -Path $staging" in script
     assert "Set-ApnaWinInstallAcl -Path $target" not in script
     assert "Copy-Item -Path (Join-Path $source \"*\") -Destination $target" not in script
+
+
+
+def test_installer_normalizes_acl_for_every_staged_file_and_final_install():
+    script = (
+        Path(__file__).parents[1] / "scripts" / "Install-ApnaWin.ps1"
+    ).read_text(encoding="utf-8")
+
+    assert "& icacls.exe $Path /reset /T /C" in script
+    assert "& icacls.exe $Path /inheritance:e /T /C" in script
+    assert "Set-ApnaWinInstallAcl -Path $target" in script
+    assert "Could not reset inherited ACLs" in script

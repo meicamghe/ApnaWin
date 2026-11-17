@@ -35,9 +35,18 @@ $targetMovedToBackup = $false
 function Set-ApnaWinInstallAcl {
     param([Parameter(Mandatory = $true)][string]$Path)
 
-    # Apply the protected ACL to a clean staging tree, never to the live
-    # installation. Existing files may have empty or otherwise broken DACLs.
-    & icacls.exe $Path /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)(F)" "*S-1-5-32-544:(OI)(CI)(F)" "*S-1-5-32-545:(OI)(CI)(RX)" /T | Out-Null
+    # Normalize every object first, then let the secured root ACL inherit
+    # consistently. This repairs empty/broken file DACLs instead of merely
+    # setting permissions on the top-level directory.
+    & icacls.exe $Path /reset /T /C | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not reset inherited ACLs in $Path"
+    }
+    & icacls.exe $Path /inheritance:e /T /C | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not enable ACL inheritance in $Path"
+    }
+    & icacls.exe $Path /grant:r "*S-1-5-18:(OI)(CI)(F)" "*S-1-5-32-544:(OI)(CI)(F)" "*S-1-5-32-545:(OI)(CI)(RX)" /T /C | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw "Could not apply the protected Program Files ACL to $Path"
     }
@@ -76,9 +85,15 @@ try {
 
     try {
         Move-Item -LiteralPath $staging -Destination $target
+        # Re-apply and verify the ACL on the final path as well. Some extraction
+        # and move combinations preserve unexpected child DACLs.
+        Set-ApnaWinInstallAcl -Path $target
     }
     catch {
-        if ($targetMovedToBackup -and -not (Test-Path -LiteralPath $target)) {
+        if (Test-Path -LiteralPath $target -PathType Container) {
+            Remove-Item -LiteralPath $target -Recurse -Force
+        }
+        if ($targetMovedToBackup -and (Test-Path -LiteralPath $backup -PathType Container)) {
             Move-Item -LiteralPath $backup -Destination $target
             $targetMovedToBackup = $false
         }

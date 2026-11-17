@@ -13,6 +13,7 @@ import math
 import re
 import time
 from typing import Callable
+from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from apnawin.services.apna_lite_catalog import (
@@ -29,9 +30,26 @@ _RANGE_CHUNK_BYTES = 64 * 1024
 _CONTENT_RANGE = re.compile(r"bytes (\d+)-(\d+)/(\d+)", re.IGNORECASE)
 
 
-class _RejectRedirects(HTTPRedirectHandler):
+class _SafeHttpsRedirects(HTTPRedirectHandler):
+    """Follow bounded HTTPS redirects without permitting TLS downgrade or userinfo."""
+
+    max_redirections = 5
+    max_repeats = 2
+
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
+        source = urlsplit(req.full_url)
+        target = urlsplit(newurl)
+        if (
+            source.scheme.lower() != "https"
+            or target.scheme.lower() != "https"
+            or not target.hostname
+            or target.username is not None
+            or target.password is not None
+            or target.port not in (None, 443)
+            or target.fragment
+        ):
+            raise ValueError("APNA catalog redirect rejected: HTTPS destination required")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 class ApnaLiteCatalogSource:
@@ -65,7 +83,7 @@ class ApnaLiteCatalogSource:
             raise TypeError("progress_callback must be callable")
         self.timeout_seconds = float(timeout_seconds)
         self.retry_attempts = retry_attempts
-        self._opener = opener or build_opener(_RejectRedirects())
+        self._opener = opener or build_opener(_SafeHttpsRedirects())
         self._sleep = sleep
         self._progress_callback = progress_callback
 

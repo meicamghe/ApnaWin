@@ -303,3 +303,26 @@ def test_source_resumes_after_socket_reset_without_losing_received_bytes() -> No
     assert document["Version"] == "synthetic"
     assert len(opener.requests) == 2
     assert opener.requests[1][0].get_header("Range") == f"bytes={received}-{len(body) - 1}"
+
+
+
+def test_https_redirect_handler_allows_https_and_rejects_downgrade():
+    from urllib.request import Request
+    from apnawin.services.apna_lite_source import _SafeHttpsRedirects
+
+    handler = _SafeHttpsRedirects()
+    request = Request("https://paperonboard.com/updater/catalog")
+    redirected = handler.redirect_request(
+        request, None, 301, "Moved Permanently", {}, "https://cdn.example.test/catalog"
+    )
+    assert redirected.full_url == "https://cdn.example.test/catalog"
+
+    with pytest.raises(ValueError, match="HTTPS destination required"):
+        handler.redirect_request(
+            request, None, 301, "Moved Permanently", {}, "http://cdn.example.test/catalog"
+        )
+
+    with pytest.raises(ValueError, match="HTTPS destination required"):
+        handler.redirect_request(
+            request, None, 301, "Moved Permanently", {}, "https://user:pass@cdn.example.test/catalog"
+        )

@@ -1136,32 +1136,29 @@ class MainWindow(QMainWindow):
         for server in servers:
             category = str(server.get("category", ""))
             payloads = list_apna_lite_ssh_payloads(catalog, category)
-            mapped = None
-            duplicate_found = False
+            mapped_any = False
+            # A server can expose several valid payload variants. Import every
+            # distinct server/payload combination instead of stopping at the
+            # first one; the previous break silently hid the remaining choices.
             for payload in payloads:
                 try:
                     candidate = build_apna_lite_ssh_profile(catalog, server, payload)
                 except (TypeError, ValueError):
                     continue
+                mapped_any = True
                 key = candidate.profile.name.casefold()
                 if key in existing:
-                    duplicate_found = True
-                    continue
-                mapped = candidate
-                break
-            if mapped is None:
-                if duplicate_found:
                     skipped_duplicate += 1
-                else:
-                    skipped_unmappable += 1
-                continue
-            try:
-                self.apna_profile_store.save(mapped.profile, mapped.session_config)
-            except (OSError, TypeError, ValueError):
-                skipped_storage += 1
-                continue
-            imported.append(mapped.profile)
-            existing.add(mapped.profile.name.casefold())
+                    continue
+                try:
+                    self.apna_profile_store.save(candidate.profile, candidate.session_config)
+                except (OSError, TypeError, ValueError):
+                    skipped_storage += 1
+                    continue
+                imported.append(candidate.profile)
+                existing.add(key)
+            if not mapped_any:
+                skipped_unmappable += 1
 
         report_lines = [
             f"Source: {source_label}",
