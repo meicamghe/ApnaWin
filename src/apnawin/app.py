@@ -326,6 +326,33 @@ class _ApnaCatalogFetchWorker(QThread):
             self.error = f"{type(exc).__name__}: {exc}"
 
 
+class _ApnaCatalogFileWorker(QThread):
+    """Read and decode a downloaded APNA catalog without blocking the UI."""
+
+    def __init__(self, filename: str, parent=None) -> None:
+        super().__init__(parent)
+        self.filename = filename
+        self.catalog = None
+        self.source_label = "downloaded catalog file"
+        self.error = None
+
+    def run(self) -> None:
+        try:
+            path = Path(self.filename)
+            with path.open("rb") as stream:
+                signature = stream.read(4)
+            if signature.startswith(b"PK"):
+                self.catalog = decode_apna_lite_apk_catalog(path)
+                self.source_label = "APK"
+            else:
+                size = path.stat().st_size
+                if size <= 0 or size > MAX_INPUT_BYTES:
+                    raise ValueError("APNA catalog file size is invalid")
+                self.catalog = decode_apna_lite_catalog(path.read_bytes())
+        except Exception as exc:
+            self.error = f"{type(exc).__name__}: {exc}"
+
+
 class _ConnectionWorker(QThread):
     operation_finished = Signal(bool, str)
 
@@ -1048,8 +1075,10 @@ class MainWindow(QMainWindow):
         self._import_apna_catalog(catalog, source_label="live catalog")
 
     def _import_apna_apk(self) -> None:
-        """Import an embedded APNA Lite catalog and encrypt the selected SSH profile."""
+        """Import an APNA APK/raw catalog asynchronously; keep the UI responsive."""
         if not self.profile_storage_writable or os.name != "nt":
+            return
+        if self._catalog_worker is not None and self._catalog_worker.isRunning():
             return
         filename, _selected_filter = QFileDialog.getOpenFileName(
             self,
@@ -1059,28 +1088,44 @@ class MainWindow(QMainWindow):
         )
         if not filename:
             return
-        path = Path(filename)
-        try:
-            # APK files are ZIP archives. The live updater download is the
-            # Base64/XXTEA catalog body itself and may have no file extension.
-            with path.open("rb") as stream:
-                signature = stream.read(4)
-            if signature.startswith(b"PK"):
-                catalog = decode_apna_lite_apk_catalog(path)
-                source_label = "APK"
-            else:
-                size = path.stat().st_size
-                if size <= 0 or size > MAX_INPUT_BYTES:
-                    raise ValueError("APNA catalog file size is invalid")
-                catalog = decode_apna_lite_catalog(path.read_bytes())
-                source_label = "downloaded catalog file"
-        except (OSError, TypeError, ValueError) as exc:
-            QMessageBox.warning(
+        worker = _ApnaCatalogFileWorker(filename, self)
+        self._catalog_worker = worker
+        worker.finished.connect(self._apna_file_import_finished)
+        self.import_apna_apk_button.setEnabled(False)
+        self.catalog_progress_label.setText("در حال خواندن و رمزگشایی فایل سرورها…")
+        self.catalog_progress_label.show()
+        self.catalog_progress_bar.setRange(0, 0)
+        self.catalog_progress_bar.setFormat("در حال پردازش…")
+        self.catalog_progress_bar.show()
+        self.status_label.setText("Decoding APNA catalog in the background…")
+        worker.start()
+
+    def _apna_file_import_finished(self) -> None:
+        worker = self._catalog_worker
+        if not isinstance(worker, _ApnaCatalogFileWorker):
+            return
+        catalog, error = worker.catalog, worker.error
+        source_label = worker.source_label
+        self._catalog_worker = None
+        worker.deleteLater()
+        self.import_apna_apk_button.setEnabled(
+            self.profile_storage_writable and os.name == "nt"
+        )
+        if error is not None or not isinstance(catalog, dict):
+            detail = error or "The selected file was empty or invalid."
+            self.catalog_progress_label.setText("رمزگشایی فایل ناموفق بود؛ فایل اصلی تغییر نکرد.")
+            self.catalog_progress_bar.setFormat("ناموفق")
+            show_copyable_error(
                 self,
                 "APNA file import failed",
-                f"The selected APNA file could not be decoded. ({type(exc).__name__}: {exc})",
+                "The selected APNA file could not be decoded. The source file was not modified.\n\n"
+                + detail,
             )
             return
+        self.catalog_progress_bar.setRange(0, 100)
+        self.catalog_progress_bar.setValue(100)
+        self.catalog_progress_bar.setFormat("100%")
+        self.catalog_progress_label.setText("رمزگشایی فایل کامل شد؛ در حال آماده‌سازی فهرست…")
         self._import_apna_catalog(catalog, source_label=source_label)
 
     def _import_apna_catalog(self, catalog: dict, *, source_label: str) -> None:

@@ -560,6 +560,42 @@ def test_live_catalog_worker_returns_catalog_without_writing_plaintext(monkeypat
     assert worker.error is None
 
 
+def test_apna_catalog_file_worker_decodes_raw_catalog_off_ui_thread(tmp_path, qapp, monkeypatch):
+    import apnawin.app as app_module
+
+    source = tmp_path / "servers.dat"
+    source.write_bytes(b"encrypted-fixture")
+    expected = {"Version": "synthetic", "Free_servers": [], "Payloads": []}
+    monkeypatch.setattr(app_module, "decode_apna_lite_catalog", lambda data: expected)
+    worker = app_module._ApnaCatalogFileWorker(str(source))
+    worker.run()
+
+    assert worker.catalog is expected
+    assert worker.error is None
+    assert worker.source_label == "downloaded catalog file"
+
+
+def test_apna_catalog_file_worker_reports_decode_error_without_changing_source(
+    tmp_path, qapp, monkeypatch
+):
+    import apnawin.app as app_module
+
+    source = tmp_path / "servers.dat"
+    original = b"invalid-encrypted-catalog"
+    source.write_bytes(original)
+
+    def fail_decode(_data):
+        raise ValueError("Invalid Base64 catalog")
+
+    monkeypatch.setattr(app_module, "decode_apna_lite_catalog", fail_decode)
+    worker = app_module._ApnaCatalogFileWorker(str(source))
+    worker.run()
+
+    assert worker.catalog is None
+    assert worker.error == "ValueError: Invalid Base64 catalog"
+    assert source.read_bytes() == original
+
+
 def test_live_catalog_worker_reports_only_exception_type_and_message(monkeypatch, qapp):
     import apnawin.app as app_module
 
