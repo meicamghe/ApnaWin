@@ -103,6 +103,21 @@ def test_source_uses_reported_request_headers_and_finite_timeout() -> None:
     assert opener.timeout == 3.5
 
 
+def test_source_reports_download_progress_with_total_bytes() -> None:
+    body = _encrypted_catalog()
+    updates: list[tuple[int, int | None]] = []
+    source = ApnaLiteCatalogSource(
+        opener=_Opener(body),
+        progress_callback=lambda received, total: updates.append((received, total)),
+    )
+
+    source.fetch_document()
+
+    assert updates[0] == (0, len(body))
+    assert updates[-1] == (len(body), len(body))
+    assert all(received <= total for received, total in updates if total is not None)
+
+
 def test_safe_summary_does_not_expose_credentials_or_payloads() -> None:
     source = ApnaLiteCatalogSource(opener=_Opener(_encrypted_catalog()))
 
