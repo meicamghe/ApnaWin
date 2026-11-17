@@ -25,24 +25,78 @@ if ($source.StartsWith($target.TrimEnd('\') + '\', [System.StringComparison]::Or
     throw "Source and destination folders must not contain one another."
 }
 
-New-Item -ItemType Directory -Path $target -Force | Out-Null
+$parent = Split-Path -Parent $target
+$leaf = Split-Path -Leaf $target
+$token = [Guid]::NewGuid().ToString("N")
+$staging = Join-Path $parent "$leaf.installing-$token"
+$backup = Join-Path $parent "$leaf.backup-$(Get-Date -Format 'yyyyMMdd-HHmmss')-$token"
+$targetMovedToBackup = $false
 
 function Set-ApnaWinInstallAcl {
-    # Do not use icacls /C: partial ACL failures must stop installation.
-    & icacls.exe $target /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)(F)" "*S-1-5-32-544:(OI)(CI)(F)" "*S-1-5-32-545:(OI)(CI)(RX)" /T | Out-Null
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    # Apply the protected ACL to a clean staging tree, never to the live
+    # installation. Existing files may have empty or otherwise broken DACLs.
+    & icacls.exe $Path /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)(F)" "*S-1-5-32-544:(OI)(CI)(F)" "*S-1-5-32-545:(OI)(CI)(RX)" /T | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        throw "Could not apply the protected Program Files ACL to $target"
+        throw "Could not apply the protected Program Files ACL to $Path"
     }
 }
 
-# Lock down an existing installation before overwriting its elevated helper.
-Set-ApnaWinInstallAcl
-Copy-Item -Path (Join-Path $source "*") -Destination $target -Recurse -Force
-# Re-apply after copying so newly created files receive the intended ACL.
-Set-ApnaWinInstallAcl
+try {
+    New-Item -ItemType Directory -Path $staging -Force | Out-Null
 
-if (-not (Test-Path -LiteralPath (Join-Path $target "ApnaWinElevator.exe") -PathType Leaf)) {
-    throw "Installation did not produce the elevated helper."
+    # Build and secure a complete new installation beside the live one.
+    Copy-Item -Path (Join-Path $source "*") -Destination $staging -Recurse -Force
+    Set-ApnaWinInstallAcl -Path $staging
+
+    foreach ($required in @(
+        "ApnaWin.exe",
+        "ApnaWinElevator.exe",
+        "engine/xray.exe",
+        "engine/wintun.dll",
+        "engine/runtime-manifest.json"
+    )) {
+        if (-not (Test-Path -LiteralPath (Join-Path $staging $required) -PathType Leaf)) {
+            throw "Staged installation is missing required file: $required"
+        }
+    }
+
+    # Stop the desktop process before swapping directories. User settings are
+    # stored outside Program Files and are not touched by this installer.
+    Get-Process -Name "ApnaWin","ApnaWinElevator" -ErrorAction SilentlyContinue |
+        Stop-Process -Force -ErrorAction SilentlyContinue
+
+    if (Test-Path -LiteralPath $target -PathType Container) {
+        # Keep the previous installation as a rollback copy. Renaming the
+        # directory avoids writing through potentially damaged file ACLs.
+        Move-Item -LiteralPath $target -Destination $backup
+        $targetMovedToBackup = $true
+    }
+
+    try {
+        Move-Item -LiteralPath $staging -Destination $target
+    }
+    catch {
+        if ($targetMovedToBackup -and -not (Test-Path -LiteralPath $target)) {
+            Move-Item -LiteralPath $backup -Destination $target
+            $targetMovedToBackup = $false
+        }
+        throw
+    }
+
+    if (-not (Test-Path -LiteralPath (Join-Path $target "ApnaWinElevator.exe") -PathType Leaf)) {
+        throw "Installation did not produce the elevated helper."
+    }
+
+    Write-Output "ApnaWin installed to $target"
+    if ($targetMovedToBackup) {
+        Write-Output "Previous installation retained for rollback at $backup"
+    }
+    Write-Output "Launch ApnaWin.exe normally. UAC elevation is requested only for the VPN helper."
 }
-Write-Output "ApnaWin installed to $target"
-Write-Output "Launch ApnaWin.exe normally. UAC elevation is requested only for the VPN helper."
+finally {
+    if (Test-Path -LiteralPath $staging) {
+        Remove-Item -LiteralPath $staging -Recurse -Force
+    }
+}

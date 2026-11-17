@@ -1,17 +1,30 @@
 from pathlib import Path
 
 
-def test_installer_protects_existing_program_files_tree_before_copying_executables():
+def test_installer_stages_new_tree_and_keeps_previous_install_for_rollback():
     script = (
         Path(__file__).parents[1] / "scripts" / "Install-ApnaWin.ps1"
     ).read_text(encoding="utf-8")
 
-    copy = script.index('Copy-Item -Path (Join-Path $source "*")')
-    acl_before_copy = script.rfind("Set-ApnaWinInstallAcl", 0, copy)
-    acl_after_copy = script.find("Set-ApnaWinInstallAcl", copy + 1)
+    stage_copy = script.index('Copy-Item -Path (Join-Path $source "*")')
+    acl_staging = script.index("Set-ApnaWinInstallAcl -Path $staging")
+    backup_existing = script.index("Move-Item -LiteralPath $target -Destination $backup")
+    swap_staging = script.index("Move-Item -LiteralPath $staging -Destination $target")
+    rollback = script.index("Move-Item -LiteralPath $backup -Destination $target")
 
-    assert 0 <= acl_before_copy < copy < acl_after_copy
-    assert "/inheritance:r" in script
+    assert stage_copy < acl_staging < backup_existing < swap_staging < rollback
+    assert "$targetMovedToBackup = $true" in script
+    assert "Previous installation retained for rollback" in script
+    assert "User settings are" in script
     assert "/grant:r" in script
-    assert "/T /C" not in script
     assert "$LASTEXITCODE -ne 0" in script
+
+
+def test_installer_does_not_rewrite_live_installation_acl_before_copy():
+    script = (
+        Path(__file__).parents[1] / "scripts" / "Install-ApnaWin.ps1"
+    ).read_text(encoding="utf-8")
+
+    assert "Set-ApnaWinInstallAcl -Path $staging" in script
+    assert "Set-ApnaWinInstallAcl -Path $target" not in script
+    assert "Copy-Item -Path (Join-Path $source \"*\") -Destination $target" not in script
