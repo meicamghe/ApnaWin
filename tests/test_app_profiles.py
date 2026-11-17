@@ -543,9 +543,13 @@ def test_live_catalog_worker_returns_catalog_without_writing_plaintext(monkeypat
 
     class FakeSource:
         def __init__(self, **kwargs):
-            assert kwargs == {"timeout_seconds": 60.0, "retry_attempts": 3}
+            assert kwargs["timeout_seconds"] == 60.0
+            assert kwargs["retry_attempts"] == 3
+            assert callable(kwargs["progress_callback"])
+            self.progress_callback = kwargs["progress_callback"]
 
         def fetch_document(self):
+            self.progress_callback(128, 512)
             return {"Version": "synthetic", "Free_servers": [], "Payloads": []}
 
     monkeypatch.setattr(app_module, "ApnaLiteCatalogSource", FakeSource)
