@@ -364,7 +364,9 @@ class MainWindow(QMainWindow):
         self.import_xray_config_button.clicked.connect(self._import_xray_config)
         self.import_xray_config_button.setEnabled(False)
         self.import_apna_apk_button = QPushButton("Import APNA file…")
-        self.import_apna_apk_button.setToolTip("Import an APK or a downloaded raw APNA catalog file.")
+        self.import_apna_apk_button.setToolTip(
+            "Import an APK or a downloaded raw APNA catalog file."
+        )
         self.import_apna_apk_button.clicked.connect(self._import_apna_apk)
         self.import_apna_apk_button.setEnabled(os.name == "nt")
         self.import_apna_live_button = QPushButton("Fetch live APNA catalog…")
