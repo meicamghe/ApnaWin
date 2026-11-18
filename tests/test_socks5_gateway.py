@@ -250,6 +250,28 @@ class _EchoServer(socketserver.ThreadingTCPServer):
     block_on_close = False
 
 
+def test_gateway_rejects_zero_destination_port_without_crashing_handler() -> None:
+    gateway = Socks5Gateway(
+        Socks5GatewayConfig(
+            ssh_proxy_host="127.0.0.1",
+            ssh_proxy_port=1080,
+        )
+    ).start()
+    client = socket.create_connection(gateway.address, timeout=2)
+    client.settimeout(2)
+    try:
+        client.sendall(b"\\x05\\x01\\x00")
+        assert _recv_exact(client, 2) == b"\\x05\\x00"
+        request = b"\\x05\\x01\\x00\\x03" + bytes((len(b"example.test"),))
+        request += b"example.test" + b"\\x00\\x00"
+        client.sendall(request)
+        response = _recv_exact(client, 10)
+        assert response[:3] == b"\\x05\\x01\\x00"
+    finally:
+        client.close()
+        gateway.close()
+
+
 def test_tcp_connect_is_forwarded_through_ssh_socks() -> None:
     echo_server = _EchoServer(("127.0.0.1", 0), _EchoHandler)
     echo_thread = threading.Thread(target=echo_server.serve_forever, daemon=True)
