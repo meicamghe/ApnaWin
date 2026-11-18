@@ -190,3 +190,16 @@ def test_remove_many_writes_once(tmp_path, monkeypatch):
     assert writes == [0]
     assert not store.has_config("APNA work")
     assert not store.has_config("APNA second")
+
+
+def test_store_accepts_catalog_batch_larger_than_legacy_four_mib_limit(tmp_path):
+    store = ApnaProfileStore(
+        tmp_path / "apna-profiles.json",
+        protect=lambda _raw: b"x" * (3 * 1024 * 1024),
+        unprotect=lambda raw: raw,
+    )
+    store.save(_profile(), _config())
+    path = tmp_path / "apna-profiles.json"
+    assert path.stat().st_size > 4 * 1024 * 1024
+    assert store.has_config("APNA work")
+
