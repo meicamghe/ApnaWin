@@ -250,3 +250,15 @@ def test_ssh_server_without_udp_gateway_remains_importable_for_tcp():
     assert mapped.session_config.udpgw_port is None
     assert mapped.session_config.transparent_dns is False
 
+
+
+
+def test_maps_only_an_explicit_provider_ca_bundle_path():
+    mapped = build_apna_lite_ssh_profile(
+        _catalog(),
+        _server(),
+        _payload(sslws="true", port="443"),
+        host_selector=_first,
+        ca_bundle_file="trusted-provider-ca.pem",
+    )
+    assert mapped.session_config.payload.ca_bundle_file == "trusted-provider-ca.pem"
