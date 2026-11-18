@@ -6,6 +6,7 @@ SSH authentication or create a VPN interface; those remain separate stages.
 """
 from __future__ import annotations
 
+import ipaddress
 import math
 import socket
 import ssl
@@ -218,6 +219,42 @@ def _read_http_connect_response(
     return status
 
 
+def _tls_certificate_diagnosis(exc: ssl.SSLCertVerificationError) -> str:
+    """Explain certificate verification failures without weakening TLS checks."""
+    reason = str(exc).lower()
+    verify_code = getattr(exc, "verify_code", None)
+    verify_message = str(getattr(exc, "verify_message", "") or "").lower()
+    detail = f"{reason} {verify_message}"
+    if "hostname" in detail or "ip address mismatch" in detail or verify_code == 62:
+        return "TLS certificate hostname/SNI mismatch"
+    if "self-signed" in detail or "unknown ca" in detail or verify_code in {18, 19, 20, 21}:
+        return (
+            "TLS certificate is self-signed or its issuer is not trusted; "
+            "use only a CA certificate obtained from a trusted provider source"
+        )
+    if "expired" in detail or "not yet valid" in detail or verify_code in {9, 10}:
+        return "TLS certificate is expired or not yet valid"
+    if "unable to get local issuer" in detail or "unable to verify the first certificate" in detail:
+        return "TLS certificate chain is incomplete or its issuer is not trusted"
+    return "TLS certificate verification failed"
+
+
+def _sni_warning(sni: str, endpoint_host: str) -> str:
+    """Flag a likely catalog SNI mismatch; never rewrite provider configuration."""
+    try:
+        ipaddress.ip_address(sni)
+    except ValueError:
+        return ""
+    try:
+        ipaddress.ip_address(endpoint_host)
+    except ValueError:
+        return (
+            "; WARNING: SNI is an IP literal while the endpoint is a DNS hostname; "
+            "verify the catalog SNI value with the provider"
+        )
+    return ""
+
+
 class ApnaPayloadSocketConnector:
     """Create the TCP/TLS socket used as the lower transport for an SSH client."""
 
@@ -309,12 +346,7 @@ class ApnaPayloadSocketConnector:
             if isinstance(exc, socket.gaierror):
                 diagnosis = "DNS resolution failed"
             elif isinstance(exc, ssl.SSLCertVerificationError):
-                reason = str(exc).lower()
-                diagnosis = (
-                    "TLS certificate hostname/SNI mismatch"
-                    if "hostname" in reason or "match" in reason
-                    else "TLS certificate verification failed"
-                )
+                diagnosis = _tls_certificate_diagnosis(exc)
             elif isinstance(exc, ssl.SSLError):
                 tls_reason = str(exc).lower()
                 if "hostname mismatch" in tls_reason or "hostname" in tls_reason:
@@ -331,9 +363,11 @@ class ApnaPayloadSocketConnector:
                 raise
             else:
                 diagnosis = "payload transport failed"
-            sni_detail = f"; SNI {sni}" if config.mode in {
-                PayloadSocketMode.TLS_DIRECT, PayloadSocketMode.TLS_HTTP_PROXY
-            } else ""
+            sni_detail = (
+                f"; SNI {sni}{_sni_warning(sni, config.connect_host)}"
+                if config.mode in {PayloadSocketMode.TLS_DIRECT, PayloadSocketMode.TLS_HTTP_PROXY}
+                else ""
+            )
             raise PayloadTransportError(
                 f"{diagnosis}: {config.mode.value} endpoint={endpoint}{sni_detail}; "
                 f"{type(exc).__name__}: {exc}"
