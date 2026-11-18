@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 
 import pytest
@@ -205,3 +206,22 @@ def test_store_accepts_catalog_batch_larger_than_legacy_four_mib_limit(tmp_path)
     assert path.stat().st_size > 4 * 1024 * 1024
     assert store.has_config("APNA work")
 
+
+
+
+def test_store_loads_legacy_profile_without_optional_ca_bundle(tmp_path):
+    store = _store(tmp_path)
+    store.save(_profile(), _config())
+    path = tmp_path / "apna-profiles.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    ciphertext = base64.b64decode(document["profiles"]["apna work"])
+    plaintext = json.loads(ciphertext.removeprefix(b"encrypted:").decode("utf-8"))
+    plaintext["payload"].pop("ca_bundle_file", None)
+    legacy_ciphertext = b"encrypted:" + json.dumps(
+        plaintext, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    document["profiles"]["apna work"] = base64.b64encode(legacy_ciphertext).decode("ascii")
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+    loaded = store.load(_profile())
+    assert loaded.payload.ca_bundle_file is None
