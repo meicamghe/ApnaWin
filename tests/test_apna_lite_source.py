@@ -179,7 +179,7 @@ def test_rejects_truncated_content_length() -> None:
             headers={"Content-Length": str(len(body))},
         )
     )
-    with pytest.raises(ValueError, match="full download restart was incomplete"):
+    with pytest.raises(ValueError, match="full download restart failed after bounded retries"):
         source.fetch_document()
 
 
@@ -363,3 +363,24 @@ def test_source_restarts_clean_download_when_range_resume_network_retries_fail()
     assert len(opener.requests) == 5
     assert opener.requests[1][0].get_header("Range") == f"bytes={received}-{len(body) - 1}"
     assert opener.requests[4][0].get_header("Range") is None
+
+
+
+def test_source_retries_incomplete_clean_restart_until_full_body_arrives() -> None:
+    body = _encrypted_catalog()
+    received = 19
+    opener = _SequenceOpener(
+        [
+            _Response(body[:received], headers={"Content-Length": str(len(body))}),
+            _Response(body, status=200),
+            _Response(body[:received], headers={"Content-Length": str(len(body))}),
+            _Response(body),
+        ]
+    )
+    source = ApnaLiteCatalogSource(opener=opener, sleep=lambda _seconds: None)
+
+    assert source.fetch_document()["Version"] == "synthetic"
+    assert len(opener.requests) == 4
+    assert opener.requests[1][0].get_header("Range") == f"bytes={received}-{len(body) - 1}"
+    assert opener.requests[2][0].get_header("Range") is None
+    assert opener.requests[3][0].get_header("Range") is None
