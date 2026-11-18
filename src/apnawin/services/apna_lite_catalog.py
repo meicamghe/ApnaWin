@@ -263,11 +263,22 @@ def decode_apna_lite_catalog(encrypted: bytes) -> dict[str, Any]:
     normalized = re.sub(rb"\s+", b"", encrypted)
     if not normalized or len(normalized) > MAX_INPUT_BYTES:
         raise ApnaLiteCatalogError("Base64 catalog size is invalid")
+    # Base64 padding is optional in some APNA download responses. Accept
+    # valid unpadded Base64, but never repair an impossible one-character tail.
+    remainder = len(normalized) % 4
+    if remainder == 1:
+        raise ApnaLiteCatalogError("Invalid Base64 catalog length")
+    if remainder:
+        normalized += b"=" * (4 - remainder)
     try:
         ciphertext = base64.b64decode(normalized, validate=True)
     except (binascii.Error, ValueError) as exc:
         raise ApnaLiteCatalogError("Invalid Base64 catalog") from exc
 
+    if len(ciphertext) < 8 or len(ciphertext) % 4:
+        raise ApnaLiteCatalogError(
+            "Invalid encrypted catalog length: XXTEA data must be at least 8 bytes and divisible by 4"
+        )
     plaintext = _decrypt_xxtea(ciphertext)
     try:
         text = plaintext.decode("utf-8")

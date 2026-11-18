@@ -118,6 +118,18 @@ def test_decode_synthetic_catalog_and_safe_summary() -> None:
     assert "Password" not in summary
 
 
+
+def test_decode_accepts_valid_unpadded_base64_catalog() -> None:
+    encoded = _encrypted(_document()).rstrip(b"=")
+    decoded = decode_apna_lite_catalog(encoded)
+    assert decoded["Version"] == "test-1"
+
+
+def test_decode_reports_invalid_xxtea_length_after_base64_padding() -> None:
+    # Valid Base64, but decoded bytes cannot be an XXTEA block envelope.
+    with pytest.raises(ApnaLiteCatalogError, match="XXTEA data"):
+        decode_apna_lite_catalog(base64.b64encode(b"1234567890").rstrip(b"="))
+
 def test_rejects_invalid_base64() -> None:
     with pytest.raises(ApnaLiteCatalogError, match="Base64"):
         decode_apna_lite_catalog(b"not base64!")

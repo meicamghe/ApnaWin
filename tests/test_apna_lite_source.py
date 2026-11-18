@@ -179,7 +179,7 @@ def test_rejects_truncated_content_length() -> None:
             headers={"Content-Length": str(len(body))},
         )
     )
-    with pytest.raises(ValueError, match="range response status"):
+    with pytest.raises(ValueError, match="full download restart was incomplete"):
         source.fetch_document()
 
 
@@ -326,3 +326,17 @@ def test_https_redirect_handler_allows_https_and_rejects_downgrade():
         handler.redirect_request(
             request, None, 301, "Moved Permanently", {}, "https://user:pass@cdn.example.test/catalog"
         )
+
+
+def test_source_restarts_full_download_when_server_ignores_range() -> None:
+    body = _encrypted_catalog()
+    first = _Response(body[:19], headers={"Content-Length": str(len(body))})
+    range_ignored = _Response(body, status=200)
+    restarted_full = _Response(body)
+    opener = _SequenceOpener([first, range_ignored, restarted_full])
+    source = ApnaLiteCatalogSource(opener=opener, sleep=lambda _seconds: None)
+
+    assert source.fetch_document()["Version"] == "synthetic"
+    assert len(opener.requests) == 3
+    assert opener.requests[1][0].get_header("Range") == f"bytes=19-{len(body) - 1}"
+    assert opener.requests[2][0].get_header("Range") is None

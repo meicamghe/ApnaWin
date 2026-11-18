@@ -196,6 +196,8 @@ class ApnaLiteCatalogSource:
                 try:
                     with self._opener.open(request, timeout=self.timeout_seconds) as response:
                         if response.status != 206:
+                            if response.status == 200:
+                                raise ValueError("APNA Lite catalog range requests are unsupported")
                             raise ValueError("APNA Lite catalog range response status is invalid")
                         self._validate_encoding(response.headers)
                         content_range = response.headers.get("Content-Range", "")
@@ -247,7 +249,27 @@ class ApnaLiteCatalogSource:
                 raw, declared = self._read_initial_response()
                 if declared is not None and len(raw) != declared:
                     if len(raw) < declared:
-                        return self._resume_ranges(raw, declared)
+                        try:
+                            return self._resume_ranges(raw, declared)
+                        except ValueError as range_error:
+                            if "range requests are unsupported" not in str(range_error):
+                                raise
+                            # Some CDNs/proxies ignore Range and return 200. Make
+                            # one bounded full GET restart; accept it only if the
+                            # complete declared body arrives.
+                            restarted, restarted_total = self._read_initial_response()
+                            if (
+                                restarted
+                                and (
+                                    restarted_total is None
+                                    or len(restarted) == restarted_total
+                                )
+                            ):
+                                self._report_progress(len(restarted), len(restarted))
+                                return restarted
+                            raise ValueError(
+                                "APNA Lite catalog server does not support Range and the full download restart was incomplete"
+                            ) from None
                     raise ValueError("APNA Lite catalog response length is inconsistent")
                 if not raw:
                     raise ValueError("APNA Lite catalog response is empty")
