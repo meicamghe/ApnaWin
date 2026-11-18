@@ -595,8 +595,9 @@ class MainWindow(QMainWindow):
         self.profile_details.setTextFormat(Qt.TextFormat.PlainText)
         self.profile_details.setWordWrap(True)
 
+        # Keep a hidden compatibility handle; profile creation is not exposed in the UI.
         self.add_button = QPushButton("Add")
-        self.add_button.clicked.connect(self._add_profile)
+        self.add_button.hide()
         self.edit_button = QPushButton("Edit")
         self.edit_button.clicked.connect(self._edit_profile)
         self.remove_button = QPushButton("Remove")
@@ -606,8 +607,7 @@ class MainWindow(QMainWindow):
         self.clear_all_button.clicked.connect(self._clear_all_profiles)
         self.import_button = QPushButton("Import…")
         self.import_menu = QMenu(self)
-        self.import_profiles_action = self.import_menu.addAction("ApnaWin profiles (JSON)…")
-        self.import_profiles_action.triggered.connect(self._import_profiles)
+        # Generic ApnaWin profile JSON import is intentionally not exposed.
         self.import_apna_file_action = self.import_menu.addAction("APNA encrypted catalog / APK…")
         self.import_apna_file_action.triggered.connect(self._import_apna_apk)
         self.import_apna_live_action = self.import_menu.addAction("Fetch live APNA catalog…")
@@ -646,7 +646,7 @@ class MainWindow(QMainWindow):
         profile_actions.setSpacing(6)
         profile_actions_primary = QHBoxLayout()
         for button in (
-            self.add_button, self.edit_button, self.remove_button,
+            self.edit_button, self.remove_button,
             self.import_button, self.export_button, self.clear_all_button,
         ):
             profile_actions_primary.addWidget(button)
