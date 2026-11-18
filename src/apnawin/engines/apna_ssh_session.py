@@ -284,6 +284,9 @@ class ApnaSshSession:
     def connect(self) -> tuple[str, int]:
         if self._ssh_client is not None or self._server is not None:
             raise ApnaSshError("SSH session is already initialized")
+        # A closed session object may be deliberately reused for reconnects.
+        # Reset the close guard before acquiring new sockets/client resources.
+        self._closed = False
         if (
             self.payload_config.target_host != self.config.ssh_host
             or self.payload_config.target_port != self.config.ssh_port
