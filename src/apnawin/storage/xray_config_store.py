@@ -275,9 +275,21 @@ class XrayConfigStore:
         records[new_key] = records.pop(old_key)
         self._write_records(records)
 
-    def remove(self, profile_name: str) -> None:
-        key = _profile_key(profile_name)
+    def remove_many(self, profile_names: list[str]) -> None:
+        """Remove multiple encrypted config records with one read/write cycle."""
+        if not isinstance(profile_names, list):
+            raise TypeError("profile_names must be a list")
+        keys = {_profile_key(name) for name in profile_names}
+        if not keys:
+            return
         records = self._read_records()
-        if key in records:
-            del records[key]
+        changed = False
+        for key in keys:
+            if key in records:
+                del records[key]
+                changed = True
+        if changed:
             self._write_records(records)
+
+    def remove(self, profile_name: str) -> None:
+        self.remove_many([profile_name])
