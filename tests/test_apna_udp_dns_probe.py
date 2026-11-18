@@ -91,6 +91,18 @@ def test_response_validator_accepts_uncompressed_answer_owner_name() -> None:
     assert _validate_response(_response(query, answer=answer), 0x1234)
 
 
+@pytest.mark.parametrize("pointer", (b"\xc0\x1d", b"\xc0\x1f"))
+def test_response_validator_rejects_self_or_forward_compression_pointer(pointer) -> None:
+    query = _query_bytes(0x1234)
+    answer = pointer + struct.pack("!HHIH", 1, 1, 60, 4) + b"\x5d\xb8\xd8\x22"
+    assert not _validate_response(_response(query, answer=answer), 0x1234)
+
+
+def test_response_validator_requires_all_declared_answer_records() -> None:
+    query = _query_bytes(0x1234)
+    assert not _validate_response(_response(query, answers=2), 0x1234)
+
+
 def test_udp_dns_probe_uses_each_configured_address_family(monkeypatch) -> None:
     observed = []
 
