@@ -239,7 +239,7 @@ def test_session_can_reconnect_after_close_and_close_new_resources() -> None:
         assert session.is_authenticated
         session.close()
         assert clients[-1].closed
-        assert peers[-1].fileno() == -1
+        assert endpoints[-1].fileno() == -1
         assert len(clients) == 2
         assert first_address[0] == second_address[0]
     finally:
