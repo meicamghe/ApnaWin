@@ -213,7 +213,9 @@ class _GatewayHandler(socketserver.BaseRequestHandler):
                 return
             target_host = _read_socks5_address(self.request, address_type)
             target_port = struct.unpack("!H", _recv_exact(self.request, 2))[0]
-            if target_port == 0:
+            # SOCKS5 UDP ASSOCIATE commonly uses port 0 to mean any
+            # client-side UDP source port. Reject port zero only for CONNECT.
+            if command == 1 and target_port == 0:
                 self.request.sendall(_socks5_reply(1))
                 return
 
