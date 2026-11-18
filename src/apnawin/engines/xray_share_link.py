@@ -227,6 +227,7 @@ def _parse_vmess(parsed) -> tuple[str, int, dict, dict]:
         "path": str(document.get("path") or "/"),
         "sni": str(document.get("sni") or document.get("host") or host),
         "fp": str(document.get("fp") or ""),
+        "profile_name": str(document.get("ps") or ""),
     }
     if query["type"] == "grpc":
         query["serviceName"] = query["path"].lstrip("/")
@@ -343,7 +344,7 @@ def import_xray_share_link(uri: str) -> ImportedXrayProfile:
     if scheme == "vmess":
         parsed = urlsplit(text)
         host, port, outbound, query = _parse_vmess(parsed)
-        fragment = parsed.fragment
+        fragment = parsed.fragment or query.get("profile_name", "")
     else:
         parsed = urlsplit(text)
         if parsed.scheme.lower() != scheme:
