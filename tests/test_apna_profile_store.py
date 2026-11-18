@@ -29,6 +29,7 @@ def _config():
             target_port=443,
             payload="CONNECT [host_port] [protocol][crlf][crlf]",
             sni="proxy.example.test",
+            ca_bundle_file="trusted-provider-ca.pem",
             cf_host="front.example.test",
             brand="ApnaWin",
             user_agent="ApnaWin-Test/1.0",
@@ -57,6 +58,7 @@ def test_round_trip_encrypted_profile_and_config_loader(tmp_path):
     assert loaded.ssh.password == "do-not-log"
     assert loaded.ssh.host_key_sha256 == _config().ssh.host_key_sha256
     assert loaded.payload.payload == _config().payload.payload
+    assert loaded.payload.ca_bundle_file == "trusted-provider-ca.pem"
     assert loaded.payload.cf_host == "front.example.test"
     assert loaded.payload.brand == "ApnaWin"
     assert loaded.payload.user_agent == "ApnaWin-Test/1.0"
