@@ -53,7 +53,11 @@ The APK's Android native libraries cannot be assumed to run on Windows. Use Wind
 
 ## Verification status
 
-The Windows GitHub Actions workflow runs the Python test suite on Windows and builds/smoke-tests the portable application folder. Workflow run [#144](https://github.com/meicamghe/ApnaWin/actions/runs/43568756016) passed both the test and Windows build/smoke-test jobs, including artifact upload. Passing unit tests and a packaged-app smoke test do not establish VPN connectivity, server compatibility, privileged networking behavior, or successful operation on a clean machine. Connect remains disabled until the separate end-to-end networking acceptance criteria are met.
+GitHub Actions runs Ruff, the full Windows test suite, installer/runtime security tests, VPN readiness/egress tests, Windows x64 packaging and a packaged-app smoke test. The current code also has component-level tests for APNA SSH, payload handling, UDPGW framing, Xray share-link import and rollback/cleanup.
+
+A Windows test run on commit `64a41d7` reported 1226 passed, 1 skipped and one failure caused by a test asserting that the peer end of a socketpair should be closed by the SSH session. The assertion was corrected. The SSH TCP relay was also changed to preserve remote responses after a client-side half-close, with a dedicated regression test. Check the latest PR workflow run before treating these changes as CI-verified.
+
+A successful CI suite, live catalog fetch, or packaged-app smoke test does **not** establish an authenticated APNA connection or real provider traffic. Real host-key verification, SSH authentication, UDPGW datagram round-trip, routed TCP/UDP/DNS, IPv4/IPv6 leak checks and clean-host cleanup remain release gates. See [the APNA live Windows acceptance runbook](apna-live-windows-acceptance.md).
 
 ## Profile text rendering
 
@@ -61,4 +65,4 @@ Profile fields originate from imported or user-edited local data. The profile de
 
 ## Remote server configuration
 
-The Android app may refresh its server catalog and connection parameters remotely. This behavior is not yet reproducibly verified. The discovery evidence requirements, separation of catalog/profile/account data, secure refresh pipeline and acceptance criteria are recorded in [remote configuration discovery](remote-configuration.md). The current catalog schema is an internal normalized format, not a claim about APNA's upstream API. Do not hard-code guessed backend endpoints or treat a downloaded server list as proof of engine compatibility.
+APNA Lite APK catalog import and bounded live catalog retrieval are implemented. The embedded catalog decoder is validated against the supplied APK asset; the live fetch path uses observed Android request headers, bounded retries and range-resume handling. Manual APK import remains available if live retrieval fails. Catalog refresh is lower priority than transport reliability, and a downloaded catalog is not proof that a server/payload pair is compatible. Only the SSH-family categories listed above are mapped; other protected-runtime semantics remain under investigation. The discovery evidence and security boundaries are recorded in [remote configuration discovery](remote-configuration.md).
