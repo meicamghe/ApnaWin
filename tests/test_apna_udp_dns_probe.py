@@ -20,12 +20,14 @@ def _response(
     answers: int = 1,
     flags: int = 0x8180,
     question: bytes | None = None,
+    answer: bytes | None = None,
 ) -> bytes:
     transaction_id = struct.unpack("!H", query[:2])[0]
     question = query[12:] if question is None else question
     header = struct.pack("!HHHHHH", transaction_id, flags, 1, answers, 0, 0)
     # A compressed owner name, A/IN, TTL=60, RDLENGTH=4, 93.184.216.34.
-    answer = b"\xc0\x0c" + struct.pack("!HHIH", 1, 1, 60, 4) + bytes((93, 184, 216, 34))
+    if answer is None:
+        answer = b"\xc0\x0c" + struct.pack("!HHIH", 1, 1, 60, 4) + bytes((93, 184, 216, 34))
     return header + question + answer
 
 
@@ -66,6 +68,27 @@ def test_response_validator_requires_the_exact_question() -> None:
 def test_response_validator_rejects_short_and_non_byte_responses() -> None:
     assert not _validate_response(b"short", 0x1234)
     assert not _validate_response("not bytes", 0x1234)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "answer",
+    (
+        b"\xc0\x0c" + struct.pack("!HHIH", 1, 1, 60, 4) + b"\x5d\xb8\xd8",
+        b"\xc0\x0c" + struct.pack("!HHIH", 1, 1, 60, 32) + b"\x5d\xb8\xd8\x22",
+        b"\xc0\x0c" + struct.pack("!HHIH", 1, 1, 60, 4) + b"\x5d\xb8\xd8\x22"[:-1],
+        b"\xc0",
+        b"\xc0\xff" + struct.pack("!HHIH", 1, 1, 60, 4) + b"\x5d\xb8\xd8\x22",
+    ),
+)
+def test_response_validator_rejects_incomplete_or_invalid_answer_records(answer) -> None:
+    query = _query_bytes(0x1234)
+    assert not _validate_response(_response(query, answer=answer), 0x1234)
+
+
+def test_response_validator_accepts_uncompressed_answer_owner_name() -> None:
+    query = _query_bytes(0x1234)
+    answer = b"\x07example\x03com\x00" + struct.pack("!HHIH", 1, 1, 60, 4) + b"\x5d\xb8\xd8\x22"
+    assert _validate_response(_response(query, answer=answer), 0x1234)
 
 
 def test_udp_dns_probe_uses_each_configured_address_family(monkeypatch) -> None:
