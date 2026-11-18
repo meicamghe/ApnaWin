@@ -252,11 +252,17 @@ class ApnaLiteCatalogSource:
                         try:
                             return self._resume_ranges(raw, declared)
                         except ValueError as range_error:
-                            if "range requests are unsupported" not in str(range_error):
+                            # Range can fail because a CDN ignores it, a proxy
+                            # drops the resumed connection, or the server returns
+                            # an inconsistent partial response. Discard the
+                            # assembled bytes and make one clean full GET. Never
+                            # decode or persist a mixture of partial responses.
+                            message = str(range_error)
+                            if not (
+                                "range requests are unsupported" in message
+                                or "range resume failed" in message
+                            ):
                                 raise
-                            # Some CDNs/proxies ignore Range and return 200. Make
-                            # one bounded full GET restart; accept it only if the
-                            # complete declared body arrives.
                             restarted, restarted_total = self._read_initial_response()
                             if (
                                 restarted
@@ -268,7 +274,7 @@ class ApnaLiteCatalogSource:
                                 self._report_progress(len(restarted), len(restarted))
                                 return restarted
                             raise ValueError(
-                                "APNA Lite catalog server does not support Range and the full download restart was incomplete"
+                                "APNA Lite catalog range recovery failed and the full download restart was incomplete"
                             ) from None
                     raise ValueError("APNA Lite catalog response length is inconsistent")
                 if not raw:
