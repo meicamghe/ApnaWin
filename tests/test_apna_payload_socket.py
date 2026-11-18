@@ -412,3 +412,45 @@ def test_http_failures_have_actionable_status_specific_diagnostics(status, diagn
     assert "must-not-leak" not in message
     worker.join(timeout=1)
     assert client.fileno() == -1
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (ssl.SSLCertVerificationError("self-signed certificate"), "self-signed or its issuer is not trusted"),
+        (ssl.SSLCertVerificationError("certificate has expired"), "expired or not yet valid"),
+        (ssl.SSLCertVerificationError("unable to get local issuer certificate"), "chain is incomplete"),
+        (ssl.SSLCertVerificationError("hostname mismatch"), "hostname/SNI mismatch"),
+    ],
+)
+def test_tls_certificate_failures_have_specific_safe_diagnostics(error, expected):
+    class FailingSocket:
+        def settimeout(self, _timeout):
+            return None
+        def close(self):
+            return None
+
+    class FailingTlsContext:
+        def wrap_socket(self, _sock, *, server_hostname):
+            raise error
+
+    connector = ApnaPayloadSocketConnector(
+        socket_factory=lambda *_args, **_kwargs: FailingSocket(),
+        tls_context=FailingTlsContext(),
+    )
+    config = PayloadSocketConfig(
+        mode=PayloadSocketMode.TLS_DIRECT,
+        connect_host="xm76.tumsongcloud.xyz",
+        connect_port=443,
+        target_host="xm76.tumsongcloud.xyz",
+        target_port=443,
+        sni="104.17.208.5",
+    )
+    with pytest.raises(PayloadTransportError) as caught:
+        connector.connect(config)
+    message = str(caught.value)
+    assert expected in message
+    assert "endpoint=xm76.tumsongcloud.xyz:443" in message
+    assert "SNI 104.17.208.5" in message
+    assert "SNI is an IP literal while the endpoint is a DNS hostname" in message
+    assert "disable" not in message.lower()
