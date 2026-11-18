@@ -9,7 +9,7 @@ MANIFEST = """<?xml version="1.0" encoding="utf-8"?>
   <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="36" />
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-  <application>
+  <application android:name=".ApnaApplication">
     <service android:name=".TunnelService"
       android:permission="android.permission.BIND_VPN_SERVICE"
       android:exported="true" />
@@ -23,6 +23,7 @@ def test_parse_manifest_returns_allowlisted_metadata():
     report = apk_manifest.parse_manifest_xml(MANIFEST)
 
     assert report["package_name"] == "org.example.client"
+    assert report["application_class"] == ".ApnaApplication"
     assert report["version_code"] == 51
     assert report["version_name_present"] is True
     assert report["min_sdk"] == 24
@@ -191,3 +192,10 @@ def test_parser_deduplicates_duplicate_vpn_service_names():
     report = apk_manifest.parse_manifest_xml(xml)
     assert report["vpn_services"] == [".TunnelService"]
     assert len(report["components"]) == 2
+
+
+def test_parser_ignores_invalid_application_class_name():
+    xml = """<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+        package="org.example"><application android:name="Bad/Class" /></manifest>"""
+    report = apk_manifest.parse_manifest_xml(xml)
+    assert report["application_class"] is None

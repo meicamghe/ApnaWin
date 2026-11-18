@@ -78,7 +78,12 @@ def parse_manifest_xml(xml_text: str) -> dict[str, Any]:
     components: list[dict[str, Any]] = []
     vpn_services: list[str] = []
     application = root.find("application")
+    application_class = None
     if application is not None:
+        declared_application_class = _android_attr(application, "name")
+        if (declared_application_class and len(declared_application_class) <= 255
+                and _valid_component_name(declared_application_class)):
+            application_class = declared_application_class
         for node in application:
             if node.tag not in _COMPONENT_TAGS:
                 continue
@@ -104,6 +109,7 @@ def parse_manifest_xml(xml_text: str) -> dict[str, Any]:
     return {
         "format": "apnawin-apk-manifest-v1",
         "package_name": package_name,
+        "application_class": application_class,
         "version_code": _safe_int(_android_attr(root, "versionCode")),
         "version_name_present": _android_attr(root, "versionName") is not None,
         "min_sdk": _safe_int(_android_attr(uses_sdk, "minSdkVersion")) if uses_sdk is not None else None,

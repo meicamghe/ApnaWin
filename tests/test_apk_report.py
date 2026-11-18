@@ -85,7 +85,7 @@ def _report_fixtures(dex_count=2):
             {"abi": "x86_64", "library_name": "libordinary2.so", "file_size_bytes": 30},
         ],
     }
-    manifest = {"package_name": "org.example.app", "vpn_services": [".TunnelService"]}
+    manifest = {"package_name": "org.example.app", "application_class": ".ApnaApplication", "vpn_services": [".TunnelService"]}
     dex = {
         "dex_file_count": dex_count,
         "manifest_service_classes": [
@@ -127,6 +127,7 @@ def test_combined_report_correlates_evidence_and_summarizes_abis():
         timeout=30,
         manifest_services=[".TunnelService"],
         package_name="org.example.app",
+        manifest_application_class=".ApnaApplication",
     )
     assert report["native"]["library_count"] == 3
     assert report["native"]["abi_library_counts"] == {
