@@ -6,6 +6,7 @@ rejected rather than silently treated as SSH.
 """
 from __future__ import annotations
 
+import re
 import secrets
 from dataclasses import dataclass
 from typing import Callable
@@ -65,10 +66,12 @@ def _select(pool: list[str], selector: Callable[[list[str]], str], field: str) -
 
 def _port(value: object, fallback: object, field: str) -> int:
     selected = fallback if value in ("Pulled", None, "") else value
-    try:
-        port = int(selected)
-    except (TypeError, ValueError) as exc:
-        raise ApnaLiteProfileError(f"{field} is not a numeric port") from exc
+    if isinstance(selected, bool) or not (
+        isinstance(selected, int)
+        or isinstance(selected, str) and re.fullmatch(r"[0-9]{1,5}", selected)
+    ):
+        raise ApnaLiteProfileError(f"{field} is not an integer port")
+    port = int(selected)
     if not 1 <= port <= 65535:
         raise ApnaLiteProfileError(f"{field} is outside the TCP/UDP port range")
     return port
