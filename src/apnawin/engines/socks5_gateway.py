@@ -313,16 +313,25 @@ class Socks5Gateway:
 
     @staticmethod
     def _relay_tcp(client: socket.socket, upstream: socket.socket) -> None:
-        peers = (client, upstream)
-        while True:
-            readable, _, _ = select.select(peers, [], [], 30)
+        # Preserve both TCP directions independently. EOF from one peer is a
+        # half-close, not a reason to discard a response still flowing back.
+        readers = {client, upstream}
+        while readers:
+            readable, _, _ = select.select(tuple(readers), [], [], 30)
             if not readable:
                 continue
             for source in readable:
+                if source not in readers:
+                    continue
                 destination = upstream if source is client else client
                 data = source.recv(64 * 1024)
                 if not data:
-                    return
+                    readers.remove(source)
+                    try:
+                        destination.shutdown(socket.SHUT_WR)
+                    except OSError:
+                        pass
+                    continue
                 destination.sendall(data)
 
     def _handle_udp_associate(self, control: socket.socket, peer_ip: str) -> None:
