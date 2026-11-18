@@ -786,7 +786,6 @@ def test_all_import_paths_are_exposed_from_one_import_menu(tmp_path, qapp):
     assert menu is window.import_menu
     action_texts = [action.text() for action in menu.actions()]
     assert action_texts == [
-        "ApnaWin profiles (JSON)…",
         "APNA encrypted catalog / APK…",
         "Fetch live APNA catalog…",
         "Open manual APNA catalog download…",
