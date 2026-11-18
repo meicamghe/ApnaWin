@@ -519,7 +519,17 @@ class _ConnectionWorker(QThread):
             else:
                 raise ValueError("Unsupported connection operation")
         except Exception as exc:
-            self.operation_finished.emit(False, f"{type(exc).__name__}: {exc}")
+            detail = f"{type(exc).__name__}: {exc}"
+            if self.action == "connect" and self.profile is not None:
+                # Keep diagnostics attributable to the selected profile when
+                # several catalog entries fail for different provider reasons.
+                context = (
+                    f"Profile: {self.profile.name} "
+                    f"({self.profile.transport.value}) "
+                    f"at {self.profile.endpoint_host}:{self.profile.endpoint_port}"
+                )
+                detail = f"{context}\n{detail}"
+            self.operation_finished.emit(False, detail)
         else:
             self.operation_finished.emit(True, self.action)
 
@@ -979,8 +989,9 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             show_copyable_error(
                 self,
-                "SSH host-key verification failed",
-                "The selected server did not complete an SSH key exchange.\n\n"
+                f"SSH host-key verification failed — {profile.name}",
+                "The selected server did not complete an SSH key exchange.\n"
+                f"Profile: {profile.name} ({profile.endpoint_host}:{profile.endpoint_port})\n\n"
                 f"{type(exc).__name__}: {exc}",
             )
             return
