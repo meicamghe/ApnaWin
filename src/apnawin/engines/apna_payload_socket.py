@@ -150,21 +150,70 @@ def _read_http_connect_response(
         raise PayloadTransportError("Proxy returned an invalid HTTP status line") from exc
     if status not in expected_statuses:
         expected = ", ".join(str(value) for value in expected_statuses)
+        header_lines = bytes(response).decode("iso-8859-1").split("\\r\\n")[1:]
+        headers: dict[str, str] = {}
+        for line in header_lines:
+            if not line:
+                break
+            if ":" not in line:
+                continue
+            name, value = line.split(":", 1)
+            key = name.strip().lower()
+            # Keep diagnostics useful without exposing cookies, authentication
+            # challenges, arbitrary provider data, or response bodies.
+            if key in {"server", "via", "x-cache", "cf-ray", "content-type", "retry-after"}:
+                clean = " ".join(value.strip().split())[:160]
+                if clean:
+                    headers[key] = clean
+        metadata = (
+            " Response headers: "
+            + ", ".join(f"{key}={value}" for key, value in sorted(headers.items()))
+            + "."
+            if headers else ""
+        )
         if 300 <= status < 400:
-            location = ""
-            for line in bytes(response).decode("iso-8859-1").split("\r\n")[1:]:
-                if line.lower().startswith("location:"):
-                    location = line.split(":", 1)[1].strip()
-                    break
+            location = next(
+                (
+                    line.split(":", 1)[1].strip()[:512]
+                    for line in header_lines
+                    if line.lower().startswith("location:")
+                ),
+                "",
+            )
             destination = f" Location: {location}." if location else ""
             raise PayloadTransportError(
-                f"Proxy returned HTTP {status} redirect.{destination} "
+                f"Proxy returned HTTP {status} redirect.{destination}{metadata} "
                 "Redirects are not followed for SSH payloads because changing the "
                 "request target can alter the provider's SSH tunnel route. "
                 f"Expected one of: {expected}. Check the selected payload, host, port and path."
             )
+        if status == 400:
+            diagnosis = (
+                "The proxy rejected the HTTP request as malformed. Check payload syntax, "
+                "HTTP method/version, Host header, path, target host/port and CRLF placement."
+            )
+        elif status == 401 or status == 407:
+            diagnosis = (
+                "The proxy requires authentication or rejected proxy credentials; "
+                "verify the provider's required authentication mode."
+            )
+        elif status == 403:
+            diagnosis = (
+                "The proxy understood the request but denied it. Check provider policy, "
+                "payload/server pairing, Host/SNI and whether this endpoint permits tunneling."
+            )
+        elif status == 404:
+            diagnosis = "The requested proxy path was not found; verify the payload path and Host."
+        elif status == 408 or status == 504:
+            diagnosis = "The proxy timed out while handling the request; check endpoint reachability and load."
+        elif status == 429:
+            diagnosis = "The proxy rate-limited the request; respect Retry-After and avoid rapid retries."
+        elif 500 <= status <= 599:
+            diagnosis = "The proxy or upstream service failed; retry later and verify provider status."
+        else:
+            diagnosis = "The proxy returned an unexpected HTTP response; verify the selected payload and endpoint."
         raise PayloadTransportError(
-            f"Proxy returned HTTP {status}; expected one of: {expected}"
+            f"Proxy returned HTTP {status}; {diagnosis}{metadata} Expected one of: {expected}"
         )
     return status
 
