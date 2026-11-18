@@ -155,3 +155,8 @@ The Android TUN layer and Windows Wintun layer solve the packet-capture/route pr
 - No real server credentials or raw decrypted catalog records are included in this document.
 - This static analysis does not prove that any current APNA endpoint is online or accepts a connection.
 - CI success and a Windows artifact do not prove APNA compatibility. Real Windows handshake, routed traffic, DNS/IPv4/IPv6 and disconnect tests remain mandatory.
+
+
+## 9. Complete v51 split APK follow-up — 2026-11-18
+
+The user supplied `APNA-APKs.zip`, which contains the exact same base APK SHA-256 recorded above plus the previously missing `split_config.arm64_v8a.apk`. Offline analysis of the ABI split identified nine ARM64 native libraries, including a Go SSH implementation candidate (`libsalamander.so`), BadVPN tun2socks/UDPGW (`libtun2socks.so`), an IPv4-only pdnsd build, Xray-core and an as-yet-unidentified QUIC/DTLS/SOCKS/HTTP Go binary (`libudpqtwo.so`). See [v51 split APK and native-library analysis](apna-lite-split-apk-native-analysis.md) for archive/member hashes, binary evidence and limitations. The ABI split contains Android ARM64 ELF files only; it does not supply reusable Windows x64 binaries. This narrows the next SSH task to the protected service/native entry-point handoff, but does not establish category-to-engine selection or real provider compatibility.
