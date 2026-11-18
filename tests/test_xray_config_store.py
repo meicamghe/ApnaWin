@@ -69,6 +69,28 @@ def test_store_renames_and_removes_profile_config(tmp_path):
     assert not store.has_config("branch")
 
 
+def test_store_remove_many_performs_one_write_for_multiple_profiles(tmp_path, monkeypatch):
+    protect, unprotect = fake_crypto()
+    store = XrayConfigStore(tmp_path / "xray-configs.json", protect=protect, unprotect=unprotect)
+    config = valid_config_bytes()
+    for name in ("One", "Two", "Three"):
+        store.save(name, config)
+
+    writes = []
+    original_write = store._write_records
+    def counted_write(records):
+        writes.append(set(records))
+        original_write(records)
+    monkeypatch.setattr(store, "_write_records", counted_write)
+
+    store.remove_many(["one", "TWO", "missing"])
+
+    assert writes == [{"three"}]
+    assert store.has_config("Three")
+    assert not store.has_config("One")
+    assert not store.has_config("Two")
+
+
 def test_store_rejects_duplicate_profile_config_name(tmp_path):
     protect, unprotect = fake_crypto()
     store = XrayConfigStore(tmp_path / "xray-configs.json", protect=protect, unprotect=unprotect)
