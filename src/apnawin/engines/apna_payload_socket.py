@@ -199,10 +199,24 @@ def _read_http_connect_response(
                 "verify the provider's required authentication mode."
             )
         elif status == 403:
-            diagnosis = (
-                "The proxy understood the request but denied it. Check provider policy, "
-                "payload/server pairing, Host/SNI and whether this endpoint permits tunneling."
+            cloudfront_edge = (
+                headers.get("server", "").lower() == "cloudfront"
+                or "cloudfront" in headers.get("via", "").lower()
+                or "error from cloudfront" in headers.get("x-cache", "").lower()
             )
+            if cloudfront_edge:
+                diagnosis = (
+                    "CloudFront returned an edge-level HTTP denial. The request reached "
+                    "CloudFront, but no SSH stream was established. Verify this profile's "
+                    "catalog payload method/path, Host header, viewer port, SNI and the "
+                    "provider's CloudFront behavior/origin policy; do not substitute another "
+                    "profile's values."
+                )
+            else:
+                diagnosis = (
+                    "The proxy understood the request but denied it. Check provider policy, "
+                    "payload/server pairing, Host/SNI and whether this endpoint permits tunneling."
+                )
         elif status == 404:
             diagnosis = "The requested proxy path was not found; verify the payload path and Host."
         elif status == 408 or status == 504:
