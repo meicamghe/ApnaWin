@@ -242,6 +242,14 @@ def test_lists_ssh_servers_from_every_catalog_tier_without_mutating_records():
     assert "_catalog_section" not in free
     assert len(servers) == 4
 
+@pytest.mark.parametrize("invalid_port", [True, False, 1.5, 1.0, "1.5", "-1", " 443", "65536"])
+def test_rejects_non_integer_or_out_of_range_server_ports(invalid_port):
+    server = _server()
+    server["server_port"] = invalid_port
+    with pytest.raises(ApnaLiteProfileError):
+        build_apna_lite_ssh_profile(_catalog(), server, _payload(), host_selector=_first)
+
+
 def test_ssh_server_without_udp_gateway_remains_importable_for_tcp():
     server = _server()
     server.pop("server_udp_port")
