@@ -405,6 +405,40 @@ def test_cloudfront_403_identifies_edge_denial_without_accepting_it():
     assert client.fileno() == -1
 
 
+def test_cloudflare_403_identifies_edge_denial_and_cf_ray():
+    def server(server_socket):
+        server_socket.recv(4096)
+        server_socket.sendall(
+            b"HTTP/1.1 403 Forbidden\\r\\n"
+            b"Content-Type: text/plain; charset=UTF-8\\r\\n"
+            b"Server: cloudflare\\r\\n"
+            b"CF-Ray: a5c4acb96f2a4d3a-FRA\\r\\n"
+            b"Content-Length: 0\\r\\n\\r\\n"
+        )
+        server_socket.close()
+
+    client, worker = _socket_pair_factory(server)
+    connector = ApnaPayloadSocketConnector(
+        socket_factory=lambda address, timeout: client
+    )
+    config = PayloadSocketConfig(
+        mode=PayloadSocketMode.HTTP_PROXY,
+        connect_host="xm5.researchmaster.guru",
+        connect_port=1194,
+        target_host="ssh.example.test",
+        target_port=1194,
+        payload="CONNECT [host_port] [protocol][crlf][crlf]",
+    )
+    with pytest.raises(PayloadTransportError) as caught:
+        connector.connect(config)
+    message = str(caught.value)
+    assert "Cloudflare returned an HTTP 403" in message
+    assert "no SSH stream was established" in message
+    assert "cf-ray=a5c4acb96f2a4d3a-FRA" in message
+    worker.join(timeout=1)
+    assert client.fileno() == -1
+
+
 @pytest.mark.parametrize(
     ("status", "diagnosis"),
     [
