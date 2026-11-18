@@ -286,6 +286,10 @@ def test_ssh_session_rejects_invalid_channel_timeout(value):
             paramiko.SSHException("Incompatible ssh peer"),
             "SSH protocol negotiation failed: Incompatible ssh peer",
         ),
+        (
+            paramiko.SSHException("Server ssh.example.test not found in known_hosts"),
+            "SSH host identity could not be verified",
+        ),
     ],
 )
 def test_connect_preserves_actionable_ssh_stage_errors(failure, message):
