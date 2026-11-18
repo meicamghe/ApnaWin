@@ -382,12 +382,12 @@ def test_cloudfront_403_identifies_edge_denial_without_accepting_it():
     def server(server_socket):
         server_socket.recv(4096)
         server_socket.sendall(
-            b"HTTP/1.1 403 Forbidden\\r\\n"
-            b"Content-Type: text/html\\r\\n"
-            b"Server: CloudFront\\r\\n"
-            b"Via: 1.1 edge-id.cloudfront.net (CloudFront)\\r\\n"
-            b"X-Cache: Error from cloudfront\\r\\n"
-            b"Content-Length: 0\\r\\n\\r\\n"
+            b"HTTP/1.1 403 Forbidden\r\n"
+            b"Content-Type: text/html\r\n"
+            b"Server: CloudFront\r\n"
+            b"Via: 1.1 edge-id.cloudfront.net (CloudFront)\r\n"
+            b"X-Cache: Error from cloudfront\r\n"
+            b"Content-Length: 0\r\n\r\n"
         )
         server_socket.close()
 
