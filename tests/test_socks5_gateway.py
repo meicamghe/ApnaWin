@@ -306,3 +306,30 @@ def test_tcp_connect_is_forwarded_through_ssh_socks() -> None:
         echo_server.server_close()
         ssh_thread.join(timeout=1)
         echo_thread.join(timeout=1)
+
+
+def test_gateway_tcp_relay_preserves_response_after_client_half_close() -> None:
+    client, relay_client = socket.socketpair()
+    relay_upstream, upstream = socket.socketpair()
+    worker = threading.Thread(
+        target=Socks5Gateway._relay_tcp,
+        args=(relay_client, relay_upstream),
+        daemon=True,
+    )
+    worker.start()
+    try:
+        client.sendall(b"request-before-fin")
+        client.shutdown(socket.SHUT_WR)
+        assert _recv_exact(upstream, len(b"request-before-fin")) == b"request-before-fin"
+        assert upstream.recv(1) == b""
+        upstream.sendall(b"response-after-fin")
+        upstream.shutdown(socket.SHUT_WR)
+        assert _recv_exact(client, len(b"response-after-fin")) == b"response-after-fin"
+        assert client.recv(1) == b""
+        worker.join(timeout=2)
+        assert not worker.is_alive()
+    finally:
+        client.close()
+        relay_client.close()
+        relay_upstream.close()
+        upstream.close()
