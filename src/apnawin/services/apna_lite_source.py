@@ -240,6 +240,27 @@ class ApnaLiteCatalogSource:
             raise ValueError("APNA Lite catalog range assembly is incomplete")
         return bytes(result)
 
+    def _restart_full_download(self) -> bytes:
+        """Retry a clean, non-Range GET after the server rejects resume."""
+        last_error: Exception | None = None
+        for attempt in range(self.retry_attempts):
+            self._check_cancelled()
+            try:
+                raw, declared = self._read_initial_response()
+                if not raw:
+                    raise ValueError("APNA Lite catalog full download returned an empty body")
+                if declared is not None and len(raw) != declared:
+                    raise ValueError("APNA Lite catalog full download was incomplete")
+                self._report_progress(len(raw), declared if declared is not None else len(raw))
+                return raw
+            except (HTTPError, URLError, OSError, IncompleteRead, ValueError) as exc:
+                last_error = exc
+                if attempt + 1 < self.retry_attempts:
+                    self._wait_retry(0.5 * (attempt + 1))
+        raise ValueError(
+            "APNA Lite catalog full download restart failed after bounded retries"
+        ) from last_error
+
     def fetch_bytes(self) -> bytes:
         """Fetch the encrypted catalog with bounded retries and range resumption."""
         self._check_cancelled()
@@ -263,19 +284,7 @@ class ApnaLiteCatalogSource:
                                 or "range resume failed" in message
                             ):
                                 raise
-                            restarted, restarted_total = self._read_initial_response()
-                            if (
-                                restarted
-                                and (
-                                    restarted_total is None
-                                    or len(restarted) == restarted_total
-                                )
-                            ):
-                                self._report_progress(len(restarted), len(restarted))
-                                return restarted
-                            raise ValueError(
-                                "APNA Lite catalog range recovery failed and the full download restart was incomplete"
-                            ) from None
+                            return self._restart_full_download()
                     raise ValueError("APNA Lite catalog response length is inconsistent")
                 if not raw:
                     raise ValueError("APNA Lite catalog response is empty")
