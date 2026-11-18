@@ -63,6 +63,7 @@ def test_supervisor_starts_fixed_helper_with_selected_profile_and_store(tmp_path
         "profile": "Office",
         "readiness_timeout": 12.0,
     }
+    assert supervisor.has_process
     assert supervisor.is_running
 
 
@@ -107,6 +108,7 @@ def test_supervisor_retains_abnormally_exited_helper_and_refuses_restart(tmp_pat
 
     assert supervisor.poll() == 7
     assert first_process.closed is False
+    assert supervisor.has_process
     assert supervisor._process is first_process
     assert supervisor.is_running is False
     with pytest.raises(RuntimeError, match="cleanup is unverified"):
@@ -134,6 +136,7 @@ def test_supervisor_clean_exit_is_released_only_on_explicit_stop(tmp_path):
     supervisor.stop()
     assert first_process.closed is True
     assert supervisor._process is None
+    assert not supervisor.has_process
     assert supervisor.start(xray_profile()) == 1234
 
 

@@ -42,6 +42,11 @@ class XrayTunnelSupervisor:
             raise ValueError(f"{name} must be a positive finite number")
 
     @property
+    def has_process(self) -> bool:
+        """Whether a helper handle is still owned, including after abnormal exit."""
+        return self._process is not None
+
+    @property
     def is_running(self) -> bool:
         return self._process is not None and self._process.poll() is None
 

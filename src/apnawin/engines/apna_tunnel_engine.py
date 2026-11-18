@@ -183,22 +183,35 @@ class ApnaTunnelEngine:
             self._state = ConnectionState.CONNECTED
         except Exception as exc:
             cleanup_errors = []
-            if self._xray_started:
+            xray_owned = self._xray_started or bool(
+                getattr(self._xray_supervisor, "has_process", False)
+            )
+            if xray_owned:
                 try:
                     self._xray_supervisor.stop()
                     self._xray_started = False
                     self._xray_profile = None
                 except Exception as cleanup_exc:
                     cleanup_errors.append(cleanup_exc)
-            if not self._xray_started:
+            if not self._xray_started and not bool(
+                getattr(self._xray_supervisor, "has_process", False)
+            ):
                 self._xray_profile = None
-            if not self._xray_started and self._session is not None:
+            xray_owned = self._xray_started or bool(
+                getattr(self._xray_supervisor, "has_process", False)
+            )
+            if not xray_owned and self._session is not None:
                 try:
                     self._session.disconnect()
                     self._session = None
                 except Exception as cleanup_exc:
                     cleanup_errors.append(cleanup_exc)
-            if not self._xray_started and self._session is None and self._config_name is not None:
+            if (
+                not self._xray_started
+                and not bool(getattr(self._xray_supervisor, "has_process", False))
+                and self._session is None
+                and self._config_name is not None
+            ):
                 try:
                     self._config_store.remove(self._config_name)
                     self._config_name = None
@@ -207,6 +220,7 @@ class ApnaTunnelEngine:
 
             resources_retained = (
                 self._xray_started
+                or bool(getattr(self._xray_supervisor, "has_process", False))
                 or self._session is not None
                 or self._config_name is not None
             )
@@ -256,12 +270,15 @@ class ApnaTunnelEngine:
             self._state is ConnectionState.DISCONNECTED
             and self._session is None
             and not self._xray_started
+            and not bool(getattr(self._xray_supervisor, "has_process", False))
             and self._config_name is None
         ):
             return
 
         self._state = ConnectionState.DISCONNECTING
-        if self._xray_started:
+        if self._xray_started or bool(
+            getattr(self._xray_supervisor, "has_process", False)
+        ):
             try:
                 self._xray_supervisor.stop()
             except Exception as exc:

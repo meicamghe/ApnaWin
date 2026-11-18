@@ -82,13 +82,18 @@ class _FakeConfigStore:
 
 
 class _FakeSupervisor:
-    def __init__(self, events, *, fail_start=False, fail_stop=False, exit_after_start=False):
+    def __init__(self, events, *, fail_start=False, fail_stop=False, exit_after_start=False, fail_after_start=False):
         self.events = events
         self.fail_start = fail_start
         self.fail_stop = fail_stop
         self.exit_after_start = exit_after_start
+        self.fail_after_start = fail_after_start
         self.running = False
         self.started_profile = None
+
+    @property
+    def has_process(self):
+        return self.running
 
     def start(self, profile):
         self.events.append("xray-start")
@@ -96,6 +101,8 @@ class _FakeSupervisor:
         if self.fail_start:
             raise OSError("Xray failed to start")
         self.running = True
+        if self.fail_after_start:
+            raise OSError("Xray PID inspection failed after helper ownership was acquired")
 
     def poll(self):
         if self.exit_after_start:
@@ -129,11 +136,11 @@ def _session_config():
     )
 
 
-def _engine(events, *, fail_xray_start=False, fail_xray_stop=False, fail_session_disconnect=False, exit_after_start=False, fail_tcp_egress=False):
+def _engine(events, *, fail_xray_start=False, fail_xray_stop=False, fail_session_disconnect=False, exit_after_start=False, fail_tcp_egress=False, fail_after_xray_start=False):
     store = _FakeConfigStore(events)
     supervisor = _FakeSupervisor(
         events, fail_start=fail_xray_start, fail_stop=fail_xray_stop,
-        exit_after_start=exit_after_start,
+        exit_after_start=exit_after_start, fail_after_start=fail_after_xray_start,
     )
     sessions = []
     def make_session(config):
@@ -226,6 +233,43 @@ def test_engine_rolls_back_when_dual_stack_tls_egress_probe_fails():
     ]
     assert engine.state is ConnectionState.DISCONNECTED
     assert not store.saved
+
+def test_engine_cleans_supervisor_owned_process_when_start_raises_after_acquiring_it():
+    events = []
+    engine, store, supervisor, _sessions = _engine(
+        events, fail_after_xray_start=True
+    )
+    with pytest.raises(ApnaTunnelEngineError, match="startup failed"):
+        engine.connect(_profile())
+    assert events == [
+        "session-connect", "config-save", "xray-start", "xray-stop",
+        "session-disconnect", "config-remove",
+    ]
+    assert not supervisor.has_process
+    assert engine.state is ConnectionState.DISCONNECTED
+    assert not store.saved
+
+
+def test_engine_retains_resources_when_owned_process_cleanup_fails_during_startup():
+    events = []
+    engine, store, supervisor, sessions = _engine(
+        events, fail_after_xray_start=True, fail_xray_stop=True
+    )
+    with pytest.raises(ApnaTunnelEngineError, match="cleanup also failed"):
+        engine.connect(_profile())
+    assert supervisor.has_process
+    assert sessions[0].healthy
+    assert "session-disconnect" not in events
+    assert store.saved
+
+    with pytest.raises(ApnaTunnelEngineError, match="Xray TUN cleanup failed"):
+        engine.disconnect()
+    supervisor.fail_stop = False
+    engine.disconnect()
+    assert engine.state is ConnectionState.DISCONNECTED
+    assert not supervisor.has_process
+    assert not store.saved
+
 
 def test_engine_rejects_wrong_transport():
     engine, _store, _supervisor, _sessions = _engine([])
