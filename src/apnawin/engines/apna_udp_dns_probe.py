@@ -23,22 +23,20 @@ def _skip_dns_name(packet: bytes, offset: int) -> int | None:
     """Return the byte after a DNS name, validating labels and compression."""
     cursor = offset
     visited: set[int] = set()
-    jumped = False
     wire_length = 0
     while cursor < len(packet):
         length = packet[cursor]
         if length == 0:
-            return cursor + 1 if not jumped else offset + 2
+            return cursor + 1
         if length & 0xC0 == 0xC0:
             if cursor + 1 >= len(packet):
                 return None
             pointer = ((length & 0x3F) << 8) | packet[cursor + 1]
-            if pointer >= len(packet) or pointer in visited or pointer == cursor:
+            if pointer >= cursor or pointer in visited or pointer >= len(packet):
                 return None
             visited.add(pointer)
-            # A compression pointer terminates this name in the current RR.
-            # Validate its target chain without changing the caller's offset.
             target = pointer
+            target_wire_length = 0
             for _ in range(len(packet)):
                 if target >= len(packet):
                     return None
@@ -49,12 +47,15 @@ def _skip_dns_name(packet: bytes, offset: int) -> int | None:
                     if target + 1 >= len(packet):
                         return None
                     next_target = ((part & 0x3F) << 8) | packet[target + 1]
-                    if next_target in visited or next_target >= len(packet):
+                    if next_target >= target or next_target in visited or next_target >= len(packet):
                         return None
                     visited.add(next_target)
                     target = next_target
                     continue
                 if part & 0xC0 or part > 63 or target + 1 + part > len(packet):
+                    return None
+                target_wire_length += part + 1
+                if target_wire_length > 255:
                     return None
                 target += 1 + part
             else:
