@@ -37,6 +37,7 @@ class PayloadSocketConfig:
     target_port: int
     payload: str = ""
     sni: str | None = None
+    ca_bundle_file: str | None = None
     cf_host: str | None = None
     brand: str | None = None
     user_agent: str | None = None
@@ -111,6 +112,13 @@ class PayloadSocketConfig:
             or any(ord(char) < 0x21 or ord(char) > 0x7E for char in self.sni)
         ):
             raise ValueError("sni is invalid")
+        if self.ca_bundle_file is not None and (
+            not isinstance(self.ca_bundle_file, str)
+            or not self.ca_bundle_file
+            or len(self.ca_bundle_file) > 4096
+            or any(ord(char) < 0x20 or ord(char) > 0x7E for char in self.ca_bundle_file)
+        ):
+            raise ValueError("ca_bundle_file must be a valid trusted CA bundle path")
 
 
 class _SocketWriter:
@@ -232,6 +240,12 @@ def _read_http_connect_response(
                 )
         elif status == 404:
             diagnosis = "The requested proxy path was not found; verify the payload path and Host."
+        elif status == 409:
+            diagnosis = (
+                "The proxy reported a conflict for this request. Verify the provider's required "
+                "payload method/path, Host, SNI, endpoint port and session policy; do not retry "
+                "with altered routing values unless the provider documents them."
+            )
         elif status == 408 or status == 504:
             diagnosis = "The proxy timed out while handling the request; check endpoint reachability and load."
         elif status == 429:
@@ -315,7 +329,13 @@ class ApnaPayloadSocketConnector:
                     if config.mode is PayloadSocketMode.TLS_HTTP_PROXY
                     else config.target_host
                 )
-                active_socket = self._tls_context.wrap_socket(
+                tls_context = self._tls_context
+                if config.ca_bundle_file is not None:
+                    # Add a provider-supplied CA to the normal system trust store.
+                    # Certificate verification remains enabled.
+                    tls_context = ssl.create_default_context()
+                    tls_context.load_verify_locations(cafile=config.ca_bundle_file)
+                active_socket = tls_context.wrap_socket(
                     raw_socket,
                     server_hostname=config.sni or default_sni,
                 )
