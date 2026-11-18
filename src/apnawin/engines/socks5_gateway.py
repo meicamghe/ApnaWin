@@ -464,9 +464,14 @@ class Socks5Gateway:
         flow = flows.lookup(packet.connection_id)
         if flow is None:
             return False
+        # A UDPGW reply must come from the remote endpoint bound to this flow.
+        # Do not let a malformed or cross-flow response spoof another source
+        # address/port back to the local SOCKS5 client.
+        if packet.address != flow[2] or packet.port != flow[3]:
+            return False
         destination = (str(flow[0]), flow[1])
         relay.sendto(
-            encode_socks5_udp_datagram(str(packet.address), packet.port, packet.data),
+            encode_socks5_udp_datagram(str(flow[2]), flow[3], packet.data),
             destination,
         )
         return True

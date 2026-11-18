@@ -333,3 +333,77 @@ def test_gateway_tcp_relay_preserves_response_after_client_half_close() -> None:
         relay_client.close()
         relay_upstream.close()
         upstream.close()
+
+
+def test_udp_response_rejects_source_endpoint_mismatch() -> None:
+    from types import SimpleNamespace
+
+    from apnawin.engines.udpgw_flows import UdpGwFlowTable
+
+    flows = UdpGwFlowTable()
+    lease = flows.get_or_create(
+        local_address="127.0.0.1",
+        local_port=42000,
+        remote_address="8.8.8.8",
+        remote_port=53,
+    )
+
+    class Relay:
+        sent = []
+
+        def sendto(self, data, destination):
+            self.sent.append((data, destination))
+
+    relay = Relay()
+    mismatched = SimpleNamespace(
+        is_keepalive=False,
+        address=ipaddress.ip_address("1.1.1.1"),
+        port=53,
+        connection_id=lease.connection_id,
+        data=b"spoofed",
+    )
+    assert not Socks5Gateway._send_udp_response(mismatched, flows, relay)
+
+    wrong_port = SimpleNamespace(
+        is_keepalive=False,
+        address=ipaddress.ip_address("8.8.8.8"),
+        port=443,
+        connection_id=lease.connection_id,
+        data=b"spoofed",
+    )
+    assert not Socks5Gateway._send_udp_response(wrong_port, flows, relay)
+    assert relay.sent == []
+
+
+def test_udp_response_uses_the_flow_bound_source_endpoint() -> None:
+    from types import SimpleNamespace
+
+    from apnawin.engines.udpgw_flows import UdpGwFlowTable
+
+    flows = UdpGwFlowTable()
+    lease = flows.get_or_create(
+        local_address="127.0.0.1",
+        local_port=42000,
+        remote_address="8.8.8.8",
+        remote_port=53,
+    )
+
+    class Relay:
+        sent = []
+
+        def sendto(self, data, destination):
+            self.sent.append((data, destination))
+
+    relay = Relay()
+    packet = SimpleNamespace(
+        is_keepalive=False,
+        address=ipaddress.ip_address("8.8.8.8"),
+        port=53,
+        connection_id=lease.connection_id,
+        data=b"dns-reply",
+    )
+    assert Socks5Gateway._send_udp_response(packet, flows, relay)
+    assert len(relay.sent) == 1
+    payload, destination = relay.sent[0]
+    assert destination == ("127.0.0.1", 42000)
+    assert parse_socks5_udp_datagram(payload) == ("8.8.8.8", 53, b"dns-reply")
