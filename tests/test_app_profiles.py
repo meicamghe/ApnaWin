@@ -7,7 +7,7 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
-from apnawin.app import MainWindow
+from apnawin.app import ApnaCatalogImportDialog, MainWindow
 from apnawin.domain.profile import ConnectionProfile, Transport
 from apnawin.storage.profile_store import load_profiles, save_profiles
 
@@ -864,3 +864,51 @@ def test_connection_worker_error_identifies_the_failing_profile():
     assert success is False
     assert "Profile: Free · SSH profile 17 (apna_ssh) at ssh17.example.test:443" in detail
     assert "ConnectionError: TLS certificate verification failed" in detail
+
+
+
+def test_apna_import_dialog_passes_only_user_selected_ca_bundle(tmp_path, qapp, monkeypatch):
+    import apnawin.app as app_module
+
+    catalog = {
+        "Version": 1,
+        "Payloads": [
+            {
+                "category": "ocsws",
+                "friendly_name": "TLS payload",
+                "method": "http",
+                "sslws": "true",
+                "host": "front.example.test",
+                "port": "443",
+                "payload": "GET / HTTP/1.1[crlf]Host: [host][crlf][crlf]",
+                "sausage": "",
+            }
+        ],
+    }
+    server = {
+        "server_name": "Test SSH",
+        "category": "ocsws",
+        "server_host": "ssh.example.test",
+        "server_port": "1194",
+    }
+    ca_file = tmp_path / "provider-ca.pem"
+    ca_file.write_text("provider supplied CA placeholder", encoding="ascii")
+    monkeypatch.setattr(
+        app_module.QFileDialog,
+        "getOpenFileName",
+        lambda *_args, **_kwargs: (str(ca_file), "PEM"),
+    )
+    captured = {}
+    monkeypatch.setattr(
+        app_module,
+        "build_apna_lite_ssh_profile",
+        lambda *_args, **kwargs: captured.update(kwargs) or object(),
+    )
+
+    dialog = ApnaCatalogImportDialog(catalog, [server])
+    dialog._choose_ca_bundle()
+    dialog._build_profile()
+
+    assert dialog.ca_bundle_edit.text() == str(ca_file)
+    assert captured["ca_bundle_file"] == str(ca_file)
+    dialog.close()
