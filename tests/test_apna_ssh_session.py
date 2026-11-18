@@ -446,3 +446,77 @@ def test_tcp_relay_preserves_remote_response_after_client_half_close() -> None:
     finally:
         client.close()
         relay_peer.close()
+
+
+def test_listener_bind_failure_releases_ssh_resources_and_allows_retry() -> None:
+    blocker = socket.socket()
+    blocker.bind(("127.0.0.1", 0))
+    blocker.listen(1)
+    port = blocker.getsockname()[1]
+    endpoints = []
+    peers = []
+    clients = []
+
+    class FakeTransport:
+        def is_active(self):
+            return True
+
+        def is_authenticated(self):
+            return True
+
+    class FakeSshClient:
+        def __init__(self):
+            self.closed = False
+            clients.append(self)
+
+        def load_system_host_keys(self):
+            return None
+
+        def set_missing_host_key_policy(self, _policy):
+            return None
+
+        def connect(self, **_kwargs):
+            return None
+
+        def get_transport(self):
+            return FakeTransport()
+
+        def close(self):
+            self.closed = True
+
+    class Connector:
+        def connect(self, _config):
+            endpoint, peer = socket.socketpair()
+            endpoints.append(endpoint)
+            peers.append(peer)
+            return endpoint
+
+    session = ApnaSshSession(
+        ApnaSshConfig(
+            "ssh.example.test", 22, "user", password="secret", local_port=port
+        ),
+        _payload_config(),
+        connector=Connector(),
+        ssh_client_factory=FakeSshClient,
+    )
+    try:
+        with pytest.raises(OSError):
+            session.connect()
+        assert clients[0].closed
+        assert endpoints[0].fileno() == -1
+        assert session._ssh_client is None
+        assert session._payload_socket is None
+        assert session._server is None
+
+        blocker.close()
+        address = session.connect()
+        assert address == ("127.0.0.1", port)
+        assert session.is_authenticated
+        session.close()
+        assert clients[1].closed
+        assert endpoints[1].fileno() == -1
+    finally:
+        blocker.close()
+        session.close()
+        for peer in peers:
+            peer.close()

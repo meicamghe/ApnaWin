@@ -297,6 +297,8 @@ class ApnaSshSession:
             raise ValueError("Payload target must match the SSH host and port")
         client = self._ssh_client_factory()
         sock = None
+        server = None
+        thread = None
         try:
             client.load_system_host_keys()
             for known_hosts in self.config.known_hosts_files:
@@ -326,19 +328,35 @@ class ApnaSshSession:
             transport = client.get_transport()
             if transport is None or not transport.is_active() or not transport.is_authenticated():
                 raise ApnaSshError("SSH authentication did not complete")
-            self._ssh_client = client
-            self._payload_socket = sock
+            # Bind the listener before publishing any session-owned state.
+            # If bind/start fails, the caller must be able to retry this object
+            # without retaining a closed SSH client or payload socket.
             server = _ThreadingSocksServer(
                 (self.config.local_host, self.config.local_port),
                 _SocksHandler,
             )
             server.session = self
+            self._ssh_client = client
+            self._payload_socket = sock
             self._server = server
             thread = threading.Thread(target=server.serve_forever, daemon=True)
-            thread.start()
             self._server_thread = thread
+            thread.start()
             return self.socks_address
         except Exception as exc:
+            self._ssh_client = None
+            self._payload_socket = None
+            self._server = None
+            self._server_thread = None
+            if server is not None:
+                try:
+                    if thread is not None and thread.is_alive():
+                        server.shutdown()
+                    server.server_close()
+                    if thread is not None and thread.is_alive():
+                        thread.join(timeout=2)
+                except OSError:
+                    pass
             client.close()
             if sock is not None:
                 try:
