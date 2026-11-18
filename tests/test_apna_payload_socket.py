@@ -369,15 +369,6 @@ def test_transport_errors_are_classified_with_endpoint_and_sni(error, expected):
         assert "SNI sni.example.test" in str(caught.value)
 
 
-@pytest.mark.parametrize(
-    ("status", "diagnosis"),
-    [
-        (400, "malformed"),
-        (403, "denied"),
-        (429, "rate-limited"),
-        (502, "upstream service failed"),
-    ],
-)
 def test_cloudfront_403_identifies_edge_denial_without_accepting_it():
     def server(server_socket):
         server_socket.recv(4096)
@@ -414,6 +405,15 @@ def test_cloudfront_403_identifies_edge_denial_without_accepting_it():
     assert client.fileno() == -1
 
 
+@pytest.mark.parametrize(
+    ("status", "diagnosis"),
+    [
+        (400, "malformed"),
+        (403, "denied"),
+        (429, "rate-limited"),
+        (502, "upstream service failed"),
+    ],
+)
 def test_http_failures_have_actionable_status_specific_diagnostics(status, diagnosis):
     def server(server_socket):
         server_socket.recv(4096)
