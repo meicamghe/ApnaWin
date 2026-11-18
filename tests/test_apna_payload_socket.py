@@ -367,3 +367,48 @@ def test_transport_errors_are_classified_with_endpoint_and_sni(error, expected):
     assert "front.example.test:443" in str(caught.value)
     if config.mode is PayloadSocketMode.TLS_DIRECT:
         assert "SNI sni.example.test" in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    ("status", "diagnosis"),
+    [
+        (400, "malformed"),
+        (403, "denied"),
+        (429, "rate-limited"),
+        (502, "upstream service failed"),
+    ],
+)
+def test_http_failures_have_actionable_status_specific_diagnostics(status, diagnosis):
+    def server(server_socket):
+        server_socket.recv(4096)
+        server_socket.sendall(
+            f"HTTP/1.1 {status} Test Failure\\r\\n"
+            "Server: test-proxy\\r\\n"
+            "Via: edge-gateway\\r\\n"
+            "Set-Cookie: secret=must-not-leak\\r\\n"
+            "Content-Length: 0\\r\\n\\r\\n".encode("ascii")
+        )
+        server_socket.close()
+
+    client, worker = _socket_pair_factory(server)
+    connector = ApnaPayloadSocketConnector(
+        socket_factory=lambda address, timeout: client
+    )
+    config = PayloadSocketConfig(
+        mode=PayloadSocketMode.HTTP_PROXY,
+        connect_host="proxy.example.test",
+        connect_port=8080,
+        target_host="ssh.example.test",
+        target_port=443,
+        payload="CONNECT [host_port] [protocol][crlf][crlf]",
+    )
+    with pytest.raises(PayloadTransportError) as caught:
+        connector.connect(config)
+    message = str(caught.value)
+    assert f"HTTP {status}" in message
+    assert diagnosis in message
+    assert "server=test-proxy" in message
+    assert "via=edge-gateway" in message
+    assert "must-not-leak" not in message
+    worker.join(timeout=1)
+    assert client.fileno() == -1
