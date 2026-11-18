@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import base64
 import binascii
-import ipaddress
 import json
 import re
 import uuid
@@ -59,6 +58,14 @@ def _query(parsed) -> dict[str, str]:
             raise XrayShareLinkError(f"Share link contains duplicate query parameter: {key}")
         result[key] = value
     return result
+
+
+def _url_endpoint(parsed) -> tuple[str, int]:
+    try:
+        host, port = parsed.hostname, parsed.port
+    except ValueError as exc:
+        raise XrayShareLinkError("Share link contains an invalid server endpoint") from exc
+    return _host_port(host, port)
 
 
 def _host_port(host: str | None, port: int | None) -> tuple[str, int]:
@@ -163,7 +170,7 @@ def _stream_settings(
 
 
 def _parse_vless(parsed) -> tuple[str, int, dict, dict]:
-    host, port = _host_port(parsed.hostname, parsed.port)
+    host, port = _url_endpoint(parsed)
     user_id = unquote(parsed.username or "")
     try:
         normalized_id = str(uuid.UUID(user_id))
@@ -268,7 +275,7 @@ def _parse_shadowsocks(parsed) -> tuple[str, int, dict, dict]:
             raise XrayShareLinkError("Shadowsocks link must include method:password@host:port")
         user_info, endpoint = decoded.rsplit("@", 1)
         host_port = urlsplit("//" + endpoint)
-        host, port = _host_port(host_port.hostname, host_port.port)
+        host, port = _url_endpoint(host_port)
     else:
         user_info, _separator, endpoint = raw.rpartition("@")
         host_port = urlsplit("//" + endpoint)
