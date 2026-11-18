@@ -16,7 +16,7 @@ from apnawin.storage.xray_config_store import dpapi_protect, dpapi_unprotect
 
 
 _FORMAT_VERSION = 1
-_MAX_STORE_BYTES = 32 * 1024 * 1024
+_MAX_STORE_BYTES = 100 * 1024 * 1024
 _MAX_PROFILE_BYTES = 256 * 1024
 
 
