@@ -334,13 +334,13 @@ def test_missing_service_class_has_no_native_method_claim(tmp_path, monkeypatch)
 
 def test_parse_native_library_loads_finds_literal_system_and_runtime_loads():
     output = (
-        ".class public Lcom/example/Loader;\\n"
-        ".method public static load()V\\n"
-        '    const-string v0, "salamander"\\n'
-        "    invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\\n"
-        '    const-string v1, "/data/app/lib/libudpqtwo.so"\\n'
-        "    invoke-virtual {v2, v1}, Ljava/lang/Runtime;->load(Ljava/lang/String;)V\\n"
-        ".end method\\n"
+        ".class public Lcom/example/Loader;\n"
+        ".method public static load()V\n"
+        '    const-string v0, "salamander"\n'
+        "    invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        '    const-string v1, "/data/app/lib/libudpqtwo.so"\n'
+        "    invoke-virtual {v2, v1}, Ljava/lang/Runtime;->load(Ljava/lang/String;)V\n"
+        ".end method\n"
     )
     assert apk_dex._parse_native_library_loads(output) == [
         "libudpqtwo.so", "salamander"
@@ -349,11 +349,11 @@ def test_parse_native_library_loads_finds_literal_system_and_runtime_loads():
 
 def test_parse_native_library_loads_ignores_unrelated_strings_and_dynamic_values():
     output = (
-        ".method public static load()V\\n"
-        '    const-string v0, "not-a-library"\\n'
-        "    invoke-static {v0}, Ljava/lang/System;->currentTimeMillis()J\\n"
-        "    invoke-static {v1}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\\n"
-        ".end method\\n"
+        ".method public static load()V\n"
+        '    const-string v0, "not-a-library"\n'
+        "    invoke-static {v0}, Ljava/lang/System;->currentTimeMillis()J\n"
+        "    invoke-static {v1}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        ".end method\n"
     )
     assert apk_dex._parse_native_library_loads(output) == []
 
@@ -363,14 +363,14 @@ def test_inspector_scans_manifest_application_class_for_native_loads(tmp_path, m
     apk.write_bytes(b"placeholder")
     commands = []
     outputs = iter([
-        b"classes.dex\\n",
-        b"C d 2 3 80 com.example.Loader\\nC d 1 1 30 com.example.TunnelService\\n",
-        b".class public Lcom/example/TunnelService;\\n.end class\\n",
-        b".class public Lcom/example/Loader;\\n.method public load()V\\n"
-        b'const-string v0, "salamander"\\n'
-        b"invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\\n"
-        b".end method\\n",
-        b"classes.dex 100\\n",
+        b"classes.dex\n",
+        b"C d 2 3 80 com.example.Loader\nC d 1 1 30 com.example.TunnelService\n",
+        b".class public Lcom/example/TunnelService;\n.end class\n",
+        b".class public Lcom/example/Loader;\n.method public load()V\n"
+        b'const-string v0, "salamander"\n'
+        b"invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        b".end method\n",
+        b"classes.dex 100\n",
     ])
 
     def fake_run(executable, args, timeout, limit, failure, timed_out, overflow):
