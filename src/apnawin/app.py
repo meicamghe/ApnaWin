@@ -1498,15 +1498,18 @@ class MainWindow(QMainWindow):
         if not self._save_profiles([]):
             return
         cleanup_errors = []
-        for profile in previous:
-            for label, store in (
-                ("Xray", self.xray_config_store),
-                ("APNA", self.apna_profile_store),
-            ):
-                try:
-                    store.remove(profile.name)
-                except (OSError, TypeError, ValueError) as exc:
-                    cleanup_errors.append(f"{profile.name} / {label}: {type(exc).__name__}")
+        profile_names = [profile.name for profile in previous]
+        # Batch removal is essential here: per-profile remove() performs a full
+        # read/modify/fsync/write cycle. With thousands of imported profiles,
+        # doing that on the GUI thread can make the application appear hung.
+        for label, store in (
+            ("Xray", self.xray_config_store),
+            ("APNA", self.apna_profile_store),
+        ):
+            try:
+                store.remove_many(profile_names)
+            except (OSError, TypeError, ValueError, RuntimeError) as exc:
+                cleanup_errors.append(f"{label}: {type(exc).__name__}")
         self._refresh_profiles()
         if cleanup_errors:
             show_copyable_error(
