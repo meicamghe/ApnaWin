@@ -382,11 +382,11 @@ def test_http_failures_have_actionable_status_specific_diagnostics(status, diagn
     def server(server_socket):
         server_socket.recv(4096)
         server_socket.sendall(
-            f"HTTP/1.1 {status} Test Failure\\r\\n"
-            "Server: test-proxy\\r\\n"
-            "Via: edge-gateway\\r\\n"
-            "Set-Cookie: secret=must-not-leak\\r\\n"
-            "Content-Length: 0\\r\\n\\r\\n".encode("ascii")
+            f"HTTP/1.1 {status} Test Failure\r\n"
+            "Server: test-proxy\r\n"
+            "Via: edge-gateway\r\n"
+            "Set-Cookie: secret=must-not-leak\r\n"
+            "Content-Length: 0\r\n\r\n".encode("ascii")
         )
         server_socket.close()
 
