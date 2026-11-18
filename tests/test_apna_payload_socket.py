@@ -409,11 +409,11 @@ def test_cloudflare_403_identifies_edge_denial_and_cf_ray():
     def server(server_socket):
         server_socket.recv(4096)
         server_socket.sendall(
-            b"HTTP/1.1 403 Forbidden\\r\\n"
-            b"Content-Type: text/plain; charset=UTF-8\\r\\n"
-            b"Server: cloudflare\\r\\n"
-            b"CF-Ray: a5c4acb96f2a4d3a-FRA\\r\\n"
-            b"Content-Length: 0\\r\\n\\r\\n"
+            b"HTTP/1.1 403 Forbidden\r\n"
+            b"Content-Type: text/plain; charset=UTF-8\r\n"
+            b"Server: cloudflare\r\n"
+            b"CF-Ray: a5c4acb96f2a4d3a-FRA\r\n"
+            b"Content-Length: 0\r\n\r\n"
         )
         server_socket.close()
 
