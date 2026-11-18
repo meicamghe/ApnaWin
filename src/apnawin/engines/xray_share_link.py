@@ -249,7 +249,7 @@ def _parse_vmess(parsed) -> tuple[str, int, dict, dict]:
 
 
 def _parse_trojan(parsed) -> tuple[str, int, dict, dict]:
-    host, port = _host_port(parsed.hostname, parsed.port)
+    host, port = _url_endpoint(parsed)
     password = unquote(parsed.username or "")
     if not password or len(password) > 1024 or any(ord(ch) < 32 for ch in password):
         raise XrayShareLinkError("Trojan link must contain a valid password")
@@ -279,7 +279,7 @@ def _parse_shadowsocks(parsed) -> tuple[str, int, dict, dict]:
     else:
         user_info, _separator, endpoint = raw.rpartition("@")
         host_port = urlsplit("//" + endpoint)
-        host, port = _host_port(host_port.hostname, host_port.port)
+        host, port = _url_endpoint(host_port)
         if ":" not in user_info:
             user_info = _decode_base64(user_info, "Shadowsocks credentials").decode("utf-8")
     if ":" not in user_info:
