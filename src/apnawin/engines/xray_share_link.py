@@ -209,8 +209,13 @@ def _parse_vmess(parsed) -> tuple[str, int, dict, dict]:
     if not isinstance(document, dict):
         raise XrayShareLinkError("VMess payload must contain a JSON object")
     host = document.get("add")
+    raw_port = document.get("port")
+    if isinstance(raw_port, bool) or not isinstance(raw_port, (str, int)):
+        raise XrayShareLinkError("VMess payload contains an invalid port")
+    if isinstance(raw_port, str) and not re.fullmatch(r"[0-9]{1,5}", raw_port):
+        raise XrayShareLinkError("VMess payload contains an invalid port")
     try:
-        port = int(document.get("port"))
+        port = int(raw_port)
     except (TypeError, ValueError) as exc:
         raise XrayShareLinkError("VMess payload contains an invalid port") from exc
     host, port = _host_port(host, port)
@@ -218,8 +223,13 @@ def _parse_vmess(parsed) -> tuple[str, int, dict, dict]:
         user_id = str(uuid.UUID(str(document.get("id", ""))))
     except ValueError as exc:
         raise XrayShareLinkError("VMess payload must contain a valid UUID user ID") from exc
+    raw_alter_id = document.get("aid", 0)
+    if isinstance(raw_alter_id, bool) or not isinstance(raw_alter_id, (str, int)):
+        raise XrayShareLinkError("VMess alterId must be an integer")
+    if isinstance(raw_alter_id, str) and not re.fullmatch(r"[0-9]{1,5}", raw_alter_id):
+        raise XrayShareLinkError("VMess alterId must be an integer")
     try:
-        alter_id = int(document.get("aid", 0))
+        alter_id = int(raw_alter_id)
     except (TypeError, ValueError) as exc:
         raise XrayShareLinkError("VMess alterId must be an integer") from exc
     if not 0 <= alter_id <= 65535:
@@ -227,9 +237,15 @@ def _parse_vmess(parsed) -> tuple[str, int, dict, dict]:
     cipher = str(document.get("scy") or "auto")
     if cipher not in {"auto", "aes-128-gcm", "chacha20-poly1305", "none", "zero"}:
         raise XrayShareLinkError("Unsupported VMess cipher")
+    raw_tls = document.get("tls", "")
+    if not isinstance(raw_tls, str):
+        raise XrayShareLinkError("VMess TLS mode must be text")
+    tls_mode = raw_tls.strip().lower()
+    if tls_mode not in {"", "none", "false", "0", "tls", "true", "1"}:
+        raise XrayShareLinkError("Unsupported VMess TLS mode")
     query = {
         "type": str(document.get("net") or "tcp"),
-        "security": "tls" if str(document.get("tls", "")).lower() in {"tls", "1", "true"} else "none",
+        "security": "tls" if tls_mode in {"tls", "true", "1"} else "none",
         "host": str(document.get("host") or ""),
         "path": str(document.get("path") or "/"),
         "sni": str(document.get("sni") or document.get("host") or host),
