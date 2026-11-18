@@ -79,18 +79,16 @@ class MultiTransportTunnelEngine:
         if self._active is None:
             return self._state
         refresh = getattr(self._active, "refresh", None)
-        if callable(refresh):
-            try:
-                observed = refresh()
-                if not isinstance(observed, ConnectionState):
-                    raise TypeError("engine refresh() must return a ConnectionState")
-                self._state = observed
-            except Exception as exc:
-                self._state = ConnectionState.ERROR
-                self.last_error = f"{type(exc).__name__}: {exc}"
-                raise
-        else:
-            self._state = self._active.state
+        try:
+            observed = refresh() if callable(refresh) else self._active.state
+            if not isinstance(observed, ConnectionState):
+                source = "refresh()" if callable(refresh) else "state"
+                raise TypeError(f"engine {source} must provide a ConnectionState")
+            self._state = observed
+        except Exception as exc:
+            self._state = ConnectionState.ERROR
+            self.last_error = f"{type(exc).__name__}: {exc}"
+            raise
         if self._state is ConnectionState.DISCONNECTED:
             self._active = None
             self._candidate = None

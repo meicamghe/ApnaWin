@@ -116,3 +116,21 @@ def test_refresh_rejects_invalid_state_without_releasing_engine_ownership():
     assert engine.refresh() is ConnectionState.CONNECTED
     engine.disconnect()
     assert engine.state is ConnectionState.DISCONNECTED
+
+
+def test_refresh_validates_state_property_when_engine_has_no_refresh_method():
+    selected = _FakeEngine()
+    selected.refresh = None
+    engine = MultiTransportTunnelEngine({Transport.APNA_SSH: selected})
+    profile = _profile(Transport.APNA_SSH)
+    engine.validate_profile(profile)
+    engine.connect(profile)
+
+    selected._state = "connected"
+    with pytest.raises(TypeError, match="engine state.*ConnectionState"):
+        engine.refresh()
+    assert engine.state is ConnectionState.ERROR
+
+    selected._state = ConnectionState.CONNECTED
+    assert engine.refresh() is ConnectionState.CONNECTED
+    engine.disconnect()
