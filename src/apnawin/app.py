@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QInputDialog,
     QListWidget,
     QMainWindow,
     QMessageBox,
@@ -42,6 +43,7 @@ from apnawin.engines.xray_process import (
 from apnawin.storage.profile_store import load_profiles, save_profiles
 from apnawin.storage.xray_config_store import XrayConfigStore
 from apnawin.engines.xray_tunnel import XrayTunnelEngine
+from apnawin.engines.xray_share_link import import_xray_share_link
 from apnawin.engines.apna_host_key import scan_apna_ssh_host_key
 from apnawin.engines.apna_tunnel_engine import ApnaTunnelEngine
 from apnawin.engines.multi_transport import MultiTransportTunnelEngine
@@ -636,6 +638,10 @@ class MainWindow(QMainWindow):
         self.download_apna_manual_action.triggered.connect(self._open_manual_apna_download)
         self.import_xray_action = self.import_menu.addAction("Xray JSON (VLESS / VMess / Trojan / UDP-capable)…")
         self.import_xray_action.triggered.connect(self._import_xray_config)
+        self.import_xray_share_action = self.import_menu.addAction(
+            "Xray share link (VLESS / VMess / Trojan / Shadowsocks)…"
+        )
+        self.import_xray_share_action.triggered.connect(self._import_xray_share_link)
         self.import_button.setMenu(self.import_menu)
         self.export_button = QPushButton("Export…")
         self.export_button.clicked.connect(self._export_profiles)
@@ -776,6 +782,8 @@ class MainWindow(QMainWindow):
                 and profile is not None
                 and profile.transport is Transport.XRAY
             )
+        if hasattr(self, "import_xray_share_action"):
+            self.import_xray_share_action.setEnabled(self.profile_storage_writable)
         self._update_catalog_import_actions()
 
     def _connect_selected_profile(self):
@@ -1433,6 +1441,59 @@ class MainWindow(QMainWindow):
         self.catalog_progress_label.show()
         if report:
             show_copyable_error(self, "APNA catalog import report", f"Source: {source_label}\n" + report)
+
+    def _import_xray_share_link(self) -> None:
+        """Create an encrypted full-tunnel profile from a supported Xray share link."""
+        if not self.profile_storage_writable:
+            return
+        share_link, accepted = QInputDialog.getMultiLineText(
+            self,
+            "Import Xray share link",
+            "Paste one VLESS, VMess, Trojan or Shadowsocks share link:",
+        )
+        if not accepted or not share_link.strip():
+            return
+
+        imported = None
+        stored = False
+        try:
+            imported = import_xray_share_link(share_link.strip())
+            if any(
+                item.name.casefold() == imported.profile.name.casefold()
+                for item in self.profiles
+            ):
+                raise ValueError("A profile with this name already exists")
+            self.xray_config_store.save(imported.profile.name, imported.config_bytes)
+            stored = True
+            updated = [*self.profiles, imported.profile]
+            if not self._save_profiles(updated):
+                self.xray_config_store.remove(imported.profile.name)
+                return
+        except (OSError, TypeError, ValueError) as exc:
+            if stored and imported is not None:
+                try:
+                    self.xray_config_store.remove(imported.profile.name)
+                except (OSError, TypeError, ValueError):
+                    QMessageBox.critical(
+                        self,
+                        "Xray import rollback failed",
+                        "The profile metadata was not saved and encrypted config cleanup failed. "
+                        "Do not retry until the encrypted profile store is checked.",
+                    )
+                    return
+            QMessageBox.warning(
+                self,
+                "Xray share-link import failed",
+                f"The link was not imported. Credentials are not included in diagnostics. "
+                f"({type(exc).__name__}: {exc})",
+            )
+            return
+
+        self._refresh_profiles(len(self.profiles) - 1)
+        self.status_label.setText(
+            f"{imported.protocol.upper()} profile imported. Connection credentials are "
+            "encrypted for this Windows user; TLS certificate verification remains enabled."
+        )
 
     def _import_xray_config(self) -> None:
         """Import a full-tunnel Xray JSON config and encrypt it with current-user DPAPI."""
