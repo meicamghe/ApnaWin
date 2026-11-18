@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ipaddress
+import math
 import secrets
 import socket
 import struct
@@ -11,24 +12,33 @@ class UdpDnsProbeError(ConnectionError):
     """UDP DNS traffic did not complete through the active tunnel."""
 
 
+_QUESTION = b"\\x07example\\x03com\\x00" + struct.pack("!HH", 1, 1)
+
+
 def _query_bytes(transaction_id: int) -> bytes:
-    question = b"\x07example\x03com\x00" + struct.pack("!HH", 1, 1)
-    return struct.pack("!HHHHHH", transaction_id, 0x0100, 1, 0, 0, 0) + question
+    return struct.pack("!HHHHHH", transaction_id, 0x0100, 1, 0, 0, 0) + _QUESTION
 
 
 def _validate_response(response: bytes, transaction_id: int) -> bool:
-    if len(response) < 12:
+    """Accept only a matching, complete standard DNS response with an answer."""
+    if not isinstance(response, bytes) or len(response) < 12 + len(_QUESTION):
         return False
     response_id, flags, questions, answers, _authority, _additional = struct.unpack(
         "!HHHHHH", response[:12]
     )
-    return (
-        response_id == transaction_id
-        and bool(flags & 0x8000)
-        and (flags & 0x000F) == 0
-        and questions == 1
-        and answers > 0
-    )
+    # QR=1, OPCODE=QUERY, TC=0, RCODE=NOERROR. Other response flags
+    # (AA/RD/RA/AD/CD) are not relevant to this reachability check.
+    if (
+        response_id != transaction_id
+        or not flags & 0x8000
+        or flags & 0x7800
+        or flags & 0x0200
+        or flags & 0x000F
+        or questions != 1
+        or answers == 0
+    ):
+        return False
+    return response[12 : 12 + len(_QUESTION)] == _QUESTION
 
 
 def probe_udp_dns(
@@ -44,18 +54,25 @@ def probe_udp_dns(
     """
     if not isinstance(dns_servers, tuple) or not dns_servers:
         raise ValueError("dns_servers must be a non-empty tuple of IP literals")
-    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout <= 0:
-        raise ValueError("timeout must be positive")
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(timeout)
+        or timeout <= 0
+    ):
+        raise ValueError("timeout must be finite and positive")
 
     grouped: dict[int, list[str]] = {4: [], 6: []}
     for server in dns_servers:
         try:
             address = ipaddress.ip_address(server)
-        except ValueError as exc:
+        except (ValueError, TypeError) as exc:
             raise ValueError("DNS probe servers must be IP literals") from exc
         if address.is_unspecified or address.is_multicast or address.is_link_local:
             raise ValueError("DNS probe server must be a usable unicast address")
-        grouped[address.version].append(str(address))
+        normalized = str(address)
+        if normalized not in grouped[address.version]:
+            grouped[address.version].append(normalized)
 
     successful_families = set()
     failures = []
@@ -72,7 +89,12 @@ def probe_udp_dns(
                     client.settimeout(timeout)
                     client.sendto(query, destination)
                     response, peer = client.recvfrom(4096)
-                if str(ipaddress.ip_address(peer[0])) != server or peer[1] != 53:
+                if (
+                    not isinstance(peer, tuple)
+                    or len(peer) < 2
+                    or str(ipaddress.ip_address(peer[0])) != server
+                    or peer[1] != 53
+                ):
                     failures.append(f"{server}: response source mismatch")
                     continue
                 if not _validate_response(response, transaction_id):
@@ -80,7 +102,7 @@ def probe_udp_dns(
                     continue
                 successful_families.add(family)
                 break
-            except OSError as exc:
+            except (OSError, ValueError, TypeError, IndexError) as exc:
                 failures.append(f"{server}: {exc}")
 
     required_families = {family for family, servers in grouped.items() if servers}
