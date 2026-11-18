@@ -23,6 +23,7 @@ def make_store(path):
 
 def test_share_link_import_creates_profile_and_encrypted_config(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
+    assert app is not None
     share_link = (
         "vless://00000000-0000-4000-8000-000000000001@edge.example.test:443"
         "?encryption=none&type=ws&security=tls&sni=cdn.example.test"
