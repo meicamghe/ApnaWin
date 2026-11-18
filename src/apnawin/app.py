@@ -547,6 +547,7 @@ class MainWindow(QMainWindow):
         self._catalog_worker = None
         self._file_worker = None
         self._catalog_import_worker = None
+        self._catalog_import_source_label = "APNA catalog"
         self._close_after_disconnect = False
         self._close_after_catalog_fetch = False
         self.profiles: list[ConnectionProfile] = []
@@ -1343,10 +1344,9 @@ class MainWindow(QMainWindow):
             catalog, self.profiles, self.apna_profile_store, self
         )
         self._catalog_import_worker = worker
+        self._catalog_import_source_label = source_label
         worker.progress.connect(self._apna_catalog_import_progress)
-        worker.finished.connect(
-            lambda source=source_label: self._apna_catalog_import_finished(source)
-        )
+        worker.finished.connect(self._apna_catalog_import_finished)
         self.catalog_progress_label.setText("کاتالوگ رمزگشایی شد؛ در حال ساخت فهرست سرورها در پس‌زمینه…")
         self.catalog_progress_label.show()
         self.catalog_progress_bar.setRange(0, 0)
@@ -1361,7 +1361,8 @@ class MainWindow(QMainWindow):
             self.catalog_progress_bar.setValue(current)
             self.catalog_progress_bar.setFormat(f"{current}/{total} servers")
 
-    def _apna_catalog_import_finished(self, source_label: str) -> None:
+    def _apna_catalog_import_finished(self) -> None:
+        source_label = self._catalog_import_source_label
         worker = self._catalog_import_worker
         if not isinstance(worker, _ApnaCatalogImportWorker):
             return
@@ -1390,7 +1391,7 @@ class MainWindow(QMainWindow):
             else:
                 try:
                     self.apna_profile_store.remove_many([profile.name for profile in imported])
-                except (OSError, TypeError, ValueError):
+                except Exception:
                     report += "\n\nRollback warning: encrypted APNA records could not be fully removed."
                 report += "\n\nProfile metadata could not be saved; newly written encrypted records were rolled back."
         else:
