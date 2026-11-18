@@ -144,3 +144,49 @@ def test_store_rename_rejects_changed_endpoint(tmp_path):
         store.rename(_profile(), changed)
     assert store.has_config("APNA work")
     assert not store.has_config("APNA work renamed")
+
+
+def test_save_many_writes_batch_once_and_round_trips(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    writes = []
+    original_write = store._write
+
+    def counted_write(records):
+        writes.append(len(records))
+        return original_write(records)
+
+    monkeypatch.setattr(store, "_write", counted_write)
+    second = ConnectionProfile("APNA second", Transport.APNA_SSH, "ssh.example.test", 443)
+    store.save_many([(_profile(), _config()), (second, _config())])
+
+    assert writes == [2]
+    assert store.has_config("APNA work")
+    assert store.has_config("APNA second")
+    assert store.load(second).ssh.password == "do-not-log"
+
+
+def test_save_many_rejects_duplicate_names_before_writing(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    writes = []
+    monkeypatch.setattr(store, "_write", lambda _records: writes.append(True))
+    with pytest.raises(ValueError, match="duplicate"):
+        store.save_many([(_profile(), _config()), (_profile(), _config())])
+    assert writes == []
+
+
+def test_remove_many_writes_once(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    second = ConnectionProfile("APNA second", Transport.APNA_SSH, "ssh.example.test", 443)
+    store.save_many([(_profile(), _config()), (second, _config())])
+    writes = []
+    original_write = store._write
+
+    def counted_write(records):
+        writes.append(len(records))
+        return original_write(records)
+
+    monkeypatch.setattr(store, "_write", counted_write)
+    store.remove_many(["APNA work", "APNA second"])
+    assert writes == [0]
+    assert not store.has_config("APNA work")
+    assert not store.has_config("APNA second")

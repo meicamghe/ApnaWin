@@ -251,21 +251,55 @@ class ApnaProfileStore:
             temporary.unlink(missing_ok=True)
 
     def save(self, profile: ConnectionProfile, config: ApnaTunnelSessionConfig) -> None:
-        if not isinstance(profile, ConnectionProfile) or profile.transport is not Transport.APNA_SSH:
-            raise TypeError("profile must be an APNA_SSH ConnectionProfile")
-        if (
-            config.ssh.ssh_host != profile.endpoint_host
-            or config.ssh.ssh_port != profile.endpoint_port
-        ):
-            raise ValueError("APNA SSH settings must match the selected profile endpoint")
-        key = _profile_key(profile.name)
-        plaintext = _serialize_config(config)
-        ciphertext = self._protect(plaintext)
-        if not isinstance(ciphertext, bytes) or not ciphertext:
-            raise ApnaProfileStoreError("DPAPI protector returned invalid ciphertext")
+        self.save_many([(profile, config)])
+
+    def save_many(
+        self,
+        entries: list[tuple[ConnectionProfile, ApnaTunnelSessionConfig]],
+    ) -> None:
+        """Encrypt a batch and atomically persist it with one read/write cycle."""
+        if not isinstance(entries, list):
+            raise TypeError("entries must be a list")
+        updates: dict[str, str] = {}
+        for entry in entries:
+            if not isinstance(entry, tuple) or len(entry) != 2:
+                raise TypeError("each APNA entry must be a (profile, config) pair")
+            profile, config = entry
+            if not isinstance(profile, ConnectionProfile) or profile.transport is not Transport.APNA_SSH:
+                raise TypeError("profile must be an APNA_SSH ConnectionProfile")
+            if (
+                config.ssh.ssh_host != profile.endpoint_host
+                or config.ssh.ssh_port != profile.endpoint_port
+            ):
+                raise ValueError("APNA SSH settings must match the selected profile endpoint")
+            key = _profile_key(profile.name)
+            if key in updates:
+                raise ValueError("APNA batch contains duplicate profile names")
+            ciphertext = self._protect(_serialize_config(config))
+            if not isinstance(ciphertext, bytes) or not ciphertext:
+                raise ApnaProfileStoreError("DPAPI protector returned invalid ciphertext")
+            updates[key] = base64.b64encode(ciphertext).decode("ascii")
+        if not updates:
+            return
         records = self._read()
-        records[key] = base64.b64encode(ciphertext).decode("ascii")
+        records.update(updates)
         self._write(records)
+
+    def remove_many(self, profile_names: list[str]) -> None:
+        """Remove a batch of profile records with one read/write cycle."""
+        if not isinstance(profile_names, list):
+            raise TypeError("profile_names must be a list")
+        keys = {_profile_key(name) for name in profile_names}
+        if not keys:
+            return
+        records = self._read()
+        changed = False
+        for key in keys:
+            if key in records:
+                del records[key]
+                changed = True
+        if changed:
+            self._write(records)
 
     def has_profile(self, profile: ConnectionProfile) -> bool:
         """Return whether encrypted settings exist without decrypting secrets."""

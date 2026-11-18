@@ -700,6 +700,10 @@ def test_apna_import_report_shows_all_tiers_even_when_no_ssh_profiles_exist(
     }
 
     window._import_apna_catalog(catalog, source_label="test catalog")
+    worker = window._catalog_import_worker
+    assert worker is not None
+    assert worker.wait(5000)
+    qapp.processEvents()
 
     assert captured["title"] == "APNA catalog import report"
     assert "Catalog total: 6 server records" in captured["message"]

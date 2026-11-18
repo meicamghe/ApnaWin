@@ -358,6 +358,149 @@ class _ApnaCatalogFileWorker(QThread):
             self.error = f"{type(exc).__name__}: {exc}"
 
 
+
+class _ApnaCatalogImportWorker(QThread):
+    """Build and persist APNA profiles off the UI thread in one atomic batch."""
+
+    progress = Signal(int, int)
+
+    def __init__(self, catalog: dict, existing_profiles, profile_store, parent=None) -> None:
+        super().__init__(parent)
+        from threading import Event
+        self.catalog = catalog
+        self.existing_profiles = tuple(existing_profiles)
+        self.profile_store = profile_store
+        self.cancel_event = Event()
+        self.imported = []
+        self.report = ""
+        self.error = None
+
+    def cancel(self) -> None:
+        self.cancel_event.set()
+
+    def run(self) -> None:
+        try:
+            sections = (
+                ("Free_servers", "Free"),
+                ("Premium_servers", "Premium"),
+                ("Vip_servers", "VIP"),
+                ("Private_servers", "Private"),
+            )
+            supported_categories = {"ocsws", "ocscf", "ocsnormal", "ocshttp"}
+            inventory_lines = []
+            record_inventory_lines = []
+            all_total = 0
+            supported_total = 0
+            for section, label in sections:
+                records = self.catalog.get(section, [])
+                if not isinstance(records, list):
+                    records = []
+                all_total += len(records)
+                category_counts = {}
+                for index, record in enumerate(records, start=1):
+                    if isinstance(record, dict):
+                        category = str(record.get("category", "unknown"))
+                        category_counts[category] = category_counts.get(category, 0) + 1
+                        name = str(record.get("server_name") or f"Server {index}")[:128]
+                        host = str(record.get("server_host") or "host unavailable")[:253]
+                        record_inventory_lines.append(f"{label} | {category} | {name} | {host}")
+                    else:
+                        record_inventory_lines.append(f"{label} | invalid record {index} | not importable")
+                ssh_count = sum(
+                    count for category, count in category_counts.items()
+                    if category in supported_categories
+                )
+                supported_total += ssh_count
+                category_text = ", ".join(
+                    f"{category}={count}" for category, count in sorted(category_counts.items())
+                ) or "no records"
+                inventory_lines.append(
+                    f"{label}: {len(records)} server records; "
+                    f"{ssh_count} SSH-compatible; categories: {category_text}"
+                )
+
+            servers = list_apna_lite_ssh_servers(self.catalog)
+            has_ssh_payloads = any(
+                list_apna_lite_ssh_payloads(self.catalog, str(server.get("category", "")))
+                for server in servers
+            )
+            credentials = None
+            credential_error = None
+            if has_ssh_payloads:
+                try:
+                    credentials = decode_apna_lite_catalog_credentials(self.catalog)
+                except (TypeError, ValueError) as exc:
+                    credential_error = f"{type(exc).__name__}: {exc}"
+
+            existing = {item.name.casefold() for item in self.existing_profiles}
+            candidates = []
+            skipped_duplicate = 0
+            skipped_unmappable = 0
+            total = len(servers)
+            for server_index, server in enumerate(servers, start=1):
+                if self.cancel_event.is_set():
+                    self.error = "APNA catalog import cancelled before profile storage."
+                    return
+                category = str(server.get("category", ""))
+                payloads = list_apna_lite_ssh_payloads(self.catalog, category)
+                mapped_any = False
+                for payload in payloads:
+                    if credentials is None:
+                        continue
+                    try:
+                        candidate = build_apna_lite_ssh_profile(
+                            self.catalog, server, payload, credentials=credentials
+                        )
+                    except (TypeError, ValueError):
+                        continue
+                    mapped_any = True
+                    key = candidate.profile.name.casefold()
+                    if key in existing:
+                        skipped_duplicate += 1
+                        continue
+                    candidates.append(candidate)
+                    existing.add(key)
+                if not mapped_any:
+                    skipped_unmappable += 1
+                self.progress.emit(server_index, total)
+
+            if self.cancel_event.is_set():
+                self.error = "APNA catalog import cancelled before profile storage."
+                return
+
+            skipped_storage = 0
+            if candidates:
+                try:
+                    self.profile_store.save_many([
+                        (item.profile, item.session_config) for item in candidates
+                    ])
+                    self.imported = [item.profile for item in candidates]
+                except (OSError, TypeError, ValueError) as exc:
+                    skipped_storage = len(candidates)
+                    self.error = f"{type(exc).__name__}: {exc}"
+
+            report_lines = [
+                f"Catalog total: {all_total} server records across all tiers",
+                f"SSH-compatible records: {supported_total}",
+                f"New profiles imported: {len(self.imported)}",
+                f"Existing/duplicate profiles skipped: {skipped_duplicate}",
+                f"Incomplete or unmappable SSH records skipped: {skipped_unmappable}",
+                f"Encrypted-store failures: {skipped_storage}",
+                *([f"SSH profile import unavailable because catalog credentials could not be decoded: {credential_error}"] if credential_error else []),
+                "",
+                *inventory_lines,
+                "",
+                "Complete server inventory (tier | category | name | host):",
+                *record_inventory_lines,
+                "",
+                "Only SSH-compatible categories are currently importable. Other categories are "
+                "listed for visibility but are not presented as connectable profiles.",
+            ]
+            self.report = "\n".join(report_lines)
+        except Exception as exc:
+            self.error = f"{type(exc).__name__}: {exc}"
+
+
 class _ConnectionWorker(QThread):
     operation_finished = Signal(bool, str)
 
@@ -403,6 +546,7 @@ class MainWindow(QMainWindow):
         self._connection_worker = None
         self._catalog_worker = None
         self._file_worker = None
+        self._catalog_import_worker = None
         self._close_after_disconnect = False
         self._close_after_catalog_fetch = False
         self.profiles: list[ConnectionProfile] = []
@@ -682,11 +826,12 @@ class MainWindow(QMainWindow):
         self._update_connection_controls()
 
     def closeEvent(self, event):
-        workers = (self._catalog_worker, self._file_worker)
+        workers = (self._catalog_worker, self._file_worker, self._catalog_import_worker)
         if any(worker is not None and worker.isRunning() for worker in workers):
             self._close_after_catalog_fetch = True
-            if self._catalog_worker is not None and self._catalog_worker.isRunning():
-                self._catalog_worker.cancel()
+            for worker in workers:
+                if worker is not None and worker.isRunning() and hasattr(worker, "cancel"):
+                    worker.cancel()
             event.ignore()
             return
         worker = self._connection_worker
@@ -1191,158 +1336,71 @@ class MainWindow(QMainWindow):
         self._import_apna_catalog(catalog, source_label=source_label)
 
     def _import_apna_catalog(self, catalog: dict, *, source_label: str) -> None:
-        """Import supported SSH servers and report the complete tier/category inventory."""
-        sections = (
-            ("Free_servers", "Free"),
-            ("Premium_servers", "Premium"),
-            ("Vip_servers", "VIP"),
-            ("Private_servers", "Private"),
-        )
-        supported_categories = {"ocsws", "ocscf", "ocsnormal", "ocshttp"}
-        inventory_lines = []
-        record_inventory_lines = []
-        all_total = 0
-        supported_total = 0
-        for section, label in sections:
-            records = catalog.get(section, [])
-            if not isinstance(records, list):
-                records = []
-            all_total += len(records)
-            category_counts = {}
-            for index, record in enumerate(records, start=1):
-                if isinstance(record, dict):
-                    category = str(record.get("category", "unknown"))
-                    category_counts[category] = category_counts.get(category, 0) + 1
-                    name = str(record.get("server_name") or f"Server {index}")[:128]
-                    host = str(record.get("server_host") or "host unavailable")[:253]
-                    record_inventory_lines.append(
-                        f"{label} | {category} | {name} | {host}"
-                    )
-                else:
-                    record_inventory_lines.append(
-                        f"{label} | invalid record {index} | not importable"
-                    )
-            ssh_count = sum(
-                count for category, count in category_counts.items()
-                if category in supported_categories
-            )
-            supported_total += ssh_count
-            category_text = ", ".join(
-                f"{category}={count}" for category, count in sorted(category_counts.items())
-            ) or "no records"
-            inventory_lines.append(
-                f"{label}: {len(records)} server records; "
-                f"{ssh_count} SSH-compatible; categories: {category_text}"
-            )
-
-        try:
-            servers = list_apna_lite_ssh_servers(catalog)
-        except (TypeError, ValueError) as exc:
-            show_copyable_error(
-                self,
-                "APNA catalog import failed",
-                f"Catalog structure is unsupported: {type(exc).__name__}: {exc}",
-            )
+        """Prepare the complete APNA inventory and profiles without blocking the UI."""
+        if self._catalog_import_worker is not None and self._catalog_import_worker.isRunning():
             return
-
-        # Catalog inventory is independent from connection credentials. A
-        # report-only catalog (or one containing only unsupported protocols)
-        # must still show every tier and server even when account fields are
-        # absent. Decode credentials once, and only when there is at least one
-        # SSH server/payload pair worth attempting to import.
-        has_ssh_payloads = any(
-            list_apna_lite_ssh_payloads(catalog, str(server.get("category", "")))
-            for server in servers
+        worker = _ApnaCatalogImportWorker(
+            catalog, self.profiles, self.apna_profile_store, self
         )
-        credentials = None
-        credential_error = None
-        if has_ssh_payloads:
-            try:
-                credentials = decode_apna_lite_catalog_credentials(catalog)
-            except (TypeError, ValueError) as exc:
-                credential_error = (
-                    f"{type(exc).__name__}: {exc}"
-                )
+        self._catalog_import_worker = worker
+        worker.progress.connect(self._apna_catalog_import_progress)
+        worker.finished.connect(
+            lambda source=source_label: self._apna_catalog_import_finished(source)
+        )
+        self.catalog_progress_label.setText("کاتالوگ رمزگشایی شد؛ در حال ساخت فهرست سرورها در پس‌زمینه…")
+        self.catalog_progress_label.show()
+        self.catalog_progress_bar.setRange(0, 0)
+        self.catalog_progress_bar.setFormat("در حال آماده‌سازی فهرست…")
+        self.catalog_progress_bar.show()
+        self.status_label.setText("Preparing APNA server inventory and profiles in the background…")
+        worker.start()
 
-        existing = {item.name.casefold() for item in self.profiles}
-        imported = []
-        skipped_duplicate = 0
-        skipped_unmappable = 0
-        skipped_storage = 0
-        for server in servers:
-            category = str(server.get("category", ""))
-            payloads = list_apna_lite_ssh_payloads(catalog, category)
-            mapped_any = False
-            # A server can expose several valid payload variants. Import every
-            # distinct server/payload combination instead of stopping at the
-            # first one; the previous break silently hid the remaining choices.
-            for payload in payloads:
-                if credentials is None:
-                    continue
-                try:
-                    candidate = build_apna_lite_ssh_profile(catalog, server, payload, credentials=credentials)
-                except (TypeError, ValueError):
-                    continue
-                mapped_any = True
-                key = candidate.profile.name.casefold()
-                if key in existing:
-                    skipped_duplicate += 1
-                    continue
-                try:
-                    self.apna_profile_store.save(candidate.profile, candidate.session_config)
-                except (OSError, TypeError, ValueError):
-                    skipped_storage += 1
-                    continue
-                imported.append(candidate.profile)
-                existing.add(key)
-            if not mapped_any:
-                skipped_unmappable += 1
+    def _apna_catalog_import_progress(self, current: int, total: int) -> None:
+        if total > 0:
+            self.catalog_progress_bar.setRange(0, total)
+            self.catalog_progress_bar.setValue(current)
+            self.catalog_progress_bar.setFormat(f"{current}/{total} servers")
 
-        report_lines = [
-            f"Source: {source_label}",
-            f"Catalog total: {all_total} server records across all tiers",
-            f"SSH-compatible records: {supported_total}",
-            f"New profiles imported: {len(imported)}",
-            f"Existing/duplicate profiles skipped: {skipped_duplicate}",
-            f"Incomplete or unmappable SSH records skipped: {skipped_unmappable}",
-            f"Encrypted-store failures: {skipped_storage}",
-            *(
-                [f"SSH profile import unavailable because catalog credentials could not be decoded: {credential_error}"]
-                if credential_error else []
-            ),
-            "",
-            *inventory_lines,
-            "",
-            "Complete server inventory (tier | category | name | host):",
-            *record_inventory_lines,
-            "",
-            "Only SSH-compatible categories are currently importable. Other categories are "
-            "listed for visibility but are not presented as connectable profiles.",
-        ]
-        report = "\n".join(report_lines)
+    def _apna_catalog_import_finished(self, source_label: str) -> None:
+        worker = self._catalog_import_worker
+        if not isinstance(worker, _ApnaCatalogImportWorker):
+            return
+        imported = worker.imported
+        report = worker.report
+        error = worker.error
+        self._catalog_import_worker = None
+        worker.deleteLater()
+        if self._close_after_catalog_fetch:
+            self._close_after_catalog_fetch = False
+            self.close()
+            return
+        self.catalog_progress_bar.setRange(0, 100)
+        self.catalog_progress_bar.setValue(100)
+        self.catalog_progress_bar.setFormat("100%")
+        if error:
+            report = (report + "\n\n" if report else "") + "Import error: " + error
         if imported:
             updated = [*self.profiles, *imported]
             if self._save_profiles(updated):
                 self._refresh_profiles(len(updated) - 1)
                 self.status_label.setText(
                     f"Imported {len(imported)} APNA SSH profiles. "
-                    f"Catalog contains {all_total} server records; "
-                    f"{supported_total} are SSH-compatible. "
-                    "Open the import report for tier/category counts."
+                    "The complete catalog inventory is in the import report."
                 )
             else:
-                for profile in imported:
-                    try:
-                        self.apna_profile_store.remove(profile.name)
-                    except (OSError, ValueError):
-                        pass
+                try:
+                    self.apna_profile_store.remove_many([profile.name for profile in imported])
+                except (OSError, TypeError, ValueError):
+                    report += "\n\nRollback warning: encrypted APNA records could not be fully removed."
                 report += "\n\nProfile metadata could not be saved; newly written encrypted records were rolled back."
         else:
             self.status_label.setText(
-                f"No new APNA profiles imported. Catalog contains {all_total} server records; "
-                f"{supported_total} are SSH-compatible."
+                "No new APNA SSH profiles imported. The catalog inventory is available in the report."
             )
-        show_copyable_error(self, "APNA catalog import report", report)
+        self.catalog_progress_label.setText("آماده‌سازی فهرست سرورها تمام شد.")
+        self.catalog_progress_label.show()
+        if report:
+            show_copyable_error(self, "APNA catalog import report", f"Source: {source_label}\n" + report)
 
     def _import_xray_config(self) -> None:
         """Import a full-tunnel Xray JSON config and encrypt it with current-user DPAPI."""
