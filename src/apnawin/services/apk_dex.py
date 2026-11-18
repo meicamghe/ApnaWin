@@ -246,6 +246,7 @@ def inspect_apk_dex(
     timeout: float = _MAX_TIMEOUT_SECONDS,
     manifest_services: list[str] | None = None,
     package_name: str | None = None,
+    manifest_application_class: str | None = None,
 ) -> dict[str, Any]:
     """Return DEX file counts and candidate VPN/network class names."""
     path = Path(apk_path)
