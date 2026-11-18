@@ -102,6 +102,7 @@ class ApnaTunnelSession:
         self._preflight_connector = preflight_connector
         self._ssh_session: ApnaSshSession | None = None
         self._gateway: Socks5Gateway | None = None
+        self._preflight_probe: socket.socket | None = None
         self._connected = False
 
     @property
@@ -152,7 +153,9 @@ class ApnaTunnelSession:
                         timeout=self.config.connect_timeout,
                     )
                 )
+                self._preflight_probe = probe
                 probe.close()
+                self._preflight_probe = None
 
             gateway_config = Socks5GatewayConfig(
                 ssh_proxy_host=ssh_host,
@@ -182,9 +185,16 @@ class ApnaTunnelSession:
                     self._gateway = None
                 except Exception as cleanup_exc:
                     cleanup_errors.append(cleanup_exc)
-            # Keep SSH alive if the gateway could not be closed; a listener
-            # that remains bound may still depend on its upstream transport.
-            if self._gateway is None and self._ssh_session is not None:
+            probe = self._preflight_probe
+            if probe is not None:
+                try:
+                    probe.close()
+                    self._preflight_probe = None
+                except Exception as cleanup_exc:
+                    cleanup_errors.append(cleanup_exc)
+            # Keep SSH alive while a gateway or preflight channel still owns
+            # resources that may depend on the authenticated transport.
+            if self._gateway is None and self._preflight_probe is None and self._ssh_session is not None:
                 try:
                     ssh_session.close()
                     self._ssh_session = None
@@ -213,6 +223,17 @@ class ApnaTunnelSession:
                     f"APNA SOCKS5 gateway cleanup failed; SSH ownership is retained: {exc}"
                 ) from exc
             self._gateway = None
+
+        probe = self._preflight_probe
+        if probe is not None:
+            try:
+                probe.close()
+            except Exception as exc:
+                self._connected = False
+                raise ApnaTunnelSessionError(
+                    f"APNA UDPGW preflight cleanup failed; SSH ownership is retained: {exc}"
+                ) from exc
+            self._preflight_probe = None
 
         ssh_session = self._ssh_session
         if ssh_session is not None:
