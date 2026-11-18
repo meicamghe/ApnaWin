@@ -139,6 +139,40 @@ def test_preflight_failure_closes_ssh_and_does_not_start_gateway():
     assert not session.is_connected
 
 
+
+def test_preflight_socket_close_failure_retains_socket_and_ssh_for_retry():
+    events = []
+
+    class FlakyProbe:
+        def __init__(self):
+            self.remaining_failures = 2
+
+        def close(self):
+            events.append("probe-close")
+            if self.remaining_failures:
+                self.remaining_failures -= 1
+                raise OSError("probe socket still open")
+
+    probe = FlakyProbe()
+    session = ApnaTunnelSession(
+        _config(),
+        ssh_session_factory=lambda *args: _FakeSshSession(*args, events=events),
+        gateway_factory=lambda config: pytest.fail("gateway must not start"),
+        preflight_connector=lambda config: probe,
+    )
+    with pytest.raises(ApnaTunnelSessionError, match="cleanup also failed"):
+        session.connect()
+
+    assert events == ["ssh-connect", "probe-close", "probe-close"]
+    assert session._preflight_probe is probe
+    assert session._ssh_session is not None
+
+    session.disconnect()
+    assert events[-2:] == ["probe-close", "ssh-close"]
+    assert session._preflight_probe is None
+    assert session._ssh_session is None
+
+
 def test_gateway_start_failure_closes_ssh_and_gateway():
     events = []
     session = ApnaTunnelSession(
