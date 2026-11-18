@@ -184,6 +184,11 @@ class ApnaCatalogImportDialog(QDialog):
         self.brand_edit.setPlaceholderText("Only required by payloads containing [brand]")
         self.user_agent_edit = QLineEdit()
         self.user_agent_edit.setPlaceholderText("Optional override")
+        self.ca_bundle_edit = QLineEdit()
+        self.ca_bundle_edit.setReadOnly(True)
+        self.ca_bundle_edit.setPlaceholderText("Optional provider-issued CA certificate bundle")
+        self.ca_bundle_button = QPushButton("Choose trusted CA file…")
+        self.ca_bundle_button.clicked.connect(self._choose_ca_bundle)
         self.transparent_dns_check = QCheckBox("Use APNA UDP gateway for transparent DNS")
         self.probe_button = QPushButton("Probe SSH host key (no authentication)")
         self.probe_button.clicked.connect(self._probe_host_key)
@@ -194,6 +199,8 @@ class ApnaCatalogImportDialog(QDialog):
         form.addRow("SSH host-key SHA-256", self.host_key_edit)
         form.addRow("Payload brand", self.brand_edit)
         form.addRow("User-Agent", self.user_agent_edit)
+        form.addRow("Trusted provider CA", self.ca_bundle_button)
+        form.addRow("CA bundle path", self.ca_bundle_edit)
         form.addRow("", self.transparent_dns_check)
 
         note = QLabel(
@@ -204,7 +211,9 @@ class ApnaCatalogImportDialog(QDialog):
         note.setWordWrap(True)
         warning = QLabel(
             "A scanned host-key fingerprint is not independently authenticated. "
-            "Compare it with a provider-published fingerprint before trusting it."
+            "Compare it with a provider-published fingerprint before trusting it. "
+            "Only add a TLS CA bundle obtained from the provider through a trusted channel; "
+            "system certificate verification remains enabled."
         )
         warning.setWordWrap(True)
 
@@ -228,6 +237,16 @@ class ApnaCatalogImportDialog(QDialog):
 
     def _invalidate_mapping(self, *_args) -> None:
         self._host_selections.clear()
+
+    def _choose_ca_bundle(self) -> None:
+        filename, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Select provider-issued TLS CA bundle",
+            "",
+            "Certificate bundles (*.pem *.crt *.cer);;All files (*)",
+        )
+        if filename:
+            self.ca_bundle_edit.setText(filename)
 
     def _choose_host(self, pool: list[str]) -> str:
         key = tuple(pool)
@@ -266,6 +285,7 @@ class ApnaCatalogImportDialog(QDialog):
             self.payloads[int(payload_index)],
             host_selector=self._choose_host,
             host_key_sha256=self.host_key_edit.text().strip() or None,
+            ca_bundle_file=self.ca_bundle_edit.text().strip() or None,
             brand=self.brand_edit.text().strip() or None,
             user_agent=self.user_agent_edit.text().strip() or None,
             transparent_dns=self.transparent_dns_check.isChecked(),
