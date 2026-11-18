@@ -341,6 +341,30 @@ class ApnaSshSession:
                     pass
             if isinstance(exc, (ApnaSshError, ValueError, TypeError)):
                 raise
+            if isinstance(exc, paramiko.BadHostKeyException):
+                raise ApnaSshError(
+                    "SSH host key does not match the previously trusted known_hosts entry"
+                ) from exc
+            if isinstance(exc, paramiko.AuthenticationException):
+                raise ApnaSshError(
+                    "SSH authentication was rejected; verify the username and provider-issued credentials"
+                ) from exc
+            if isinstance(exc, paramiko.SSHException):
+                detail = " ".join(str(exc).split())[:240]
+                if "banner" in detail.lower():
+                    raise ApnaSshError(
+                        "SSH protocol banner was not received. The endpoint may not be serving SSH "
+                        "on this route, the payload may not have opened an SSH stream, or the "
+                        "provider may have closed or delayed the connection."
+                    ) from exc
+                raise ApnaSshError(
+                    f"SSH protocol negotiation failed: {detail or type(exc).__name__}"
+                ) from exc
+            if isinstance(exc, (socket.timeout, TimeoutError)):
+                raise ApnaSshError(
+                    "SSH protocol banner, key exchange, or authentication timed out; "
+                    "check endpoint responsiveness and the configured stage timeouts."
+                ) from exc
             raise ApnaSshError(
                 "SSH transport or authentication failed; host-key verification is enforced"
             ) from exc
