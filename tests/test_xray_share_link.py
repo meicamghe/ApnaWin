@@ -85,6 +85,36 @@ def test_import_vmess_base64_json():
     assert outbound["streamSettings"]["tlsSettings"]["allowInsecure"] is False
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("port", True),
+        ("port", "443/tcp"),
+        ("aid", True),
+        ("aid", 1.5),
+        ("tls", "xtls"),
+        ("tls", True),
+    ],
+)
+def test_vmess_rejects_invalid_numeric_and_tls_fields(field, value):
+    payload = {
+        "v": "2",
+        "ps": "VMess invalid",
+        "add": "vmess.example.test",
+        "port": "443",
+        "id": UUID,
+        "aid": "0",
+        "scy": "auto",
+        "net": "tcp",
+        "tls": "tls",
+    }
+    payload[field] = value
+    encoded = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+
+    with pytest.raises(XrayShareLinkError):
+        import_xray_share_link(f"vmess://{encoded}")
+
+
 def test_import_trojan_tls_grpc():
     result = import_xray_share_link(
         "trojan://secret-pass@trojan.example.test:443"
