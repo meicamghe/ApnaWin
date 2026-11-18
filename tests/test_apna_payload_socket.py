@@ -378,6 +378,42 @@ def test_transport_errors_are_classified_with_endpoint_and_sni(error, expected):
         (502, "upstream service failed"),
     ],
 )
+def test_cloudfront_403_identifies_edge_denial_without_accepting_it():
+    def server(server_socket):
+        server_socket.recv(4096)
+        server_socket.sendall(
+            b"HTTP/1.1 403 Forbidden\\r\\n"
+            b"Content-Type: text/html\\r\\n"
+            b"Server: CloudFront\\r\\n"
+            b"Via: 1.1 edge-id.cloudfront.net (CloudFront)\\r\\n"
+            b"X-Cache: Error from cloudfront\\r\\n"
+            b"Content-Length: 0\\r\\n\\r\\n"
+        )
+        server_socket.close()
+
+    client, worker = _socket_pair_factory(server)
+    connector = ApnaPayloadSocketConnector(
+        socket_factory=lambda address, timeout: client
+    )
+    config = PayloadSocketConfig(
+        mode=PayloadSocketMode.HTTP_PROXY,
+        connect_host="d7xhi9ly8dk8w.cloudfront.net",
+        connect_port=1194,
+        target_host="ssh.example.test",
+        target_port=1194,
+        payload="CONNECT [host_port] [protocol][crlf][crlf]",
+    )
+    with pytest.raises(PayloadTransportError) as caught:
+        connector.connect(config)
+    message = str(caught.value)
+    assert "CloudFront returned an edge-level HTTP denial" in message
+    assert "no SSH stream was established" in message
+    assert "server=CloudFront" in message
+    assert "x-cache=Error from cloudfront" in message
+    worker.join(timeout=1)
+    assert client.fileno() == -1
+
+
 def test_http_failures_have_actionable_status_specific_diagnostics(status, diagnosis):
     def server(server_socket):
         server_socket.recv(4096)
