@@ -150,7 +150,7 @@ def _read_http_connect_response(
         raise PayloadTransportError("Proxy returned an invalid HTTP status line") from exc
     if status not in expected_statuses:
         expected = ", ".join(str(value) for value in expected_statuses)
-        header_lines = bytes(response).decode("iso-8859-1").split("\\r\\n")[1:]
+        header_lines = bytes(response).decode("iso-8859-1").split("\r\n")[1:]
         headers: dict[str, str] = {}
         for line in header_lines:
             if not line:
