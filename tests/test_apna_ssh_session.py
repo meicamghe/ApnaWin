@@ -182,6 +182,70 @@ def test_local_socks5_connect_is_forwarded_over_authenticated_ssh_channel() -> N
         peer.close()
 
 
+def test_session_can_reconnect_after_close_and_close_new_resources() -> None:
+    peers = []
+    clients = []
+
+    class FakeTransport:
+        def is_active(self):
+            return True
+
+        def is_authenticated(self):
+            return True
+
+    class FakeSshClient:
+        def __init__(self):
+            self.closed = False
+            clients.append(self)
+
+        def load_system_host_keys(self):
+            return None
+
+        def set_missing_host_key_policy(self, policy):
+            return None
+
+        def connect(self, **kwargs):
+            return None
+
+        def get_transport(self):
+            return FakeTransport()
+
+        def close(self):
+            self.closed = True
+
+    class Connector:
+        def connect(self, config):
+            endpoint, peer = socket.socketpair()
+            peers.append(peer)
+            return endpoint
+
+    session = ApnaSshSession(
+        ApnaSshConfig("ssh.example.test", 22, "user", password="secret"),
+        _payload_config(),
+        connector=Connector(),
+        ssh_client_factory=FakeSshClient,
+    )
+    try:
+        first_address = session.connect()
+        session.close()
+        assert clients[-1].closed
+        assert peers[-1].fileno() == -1
+
+        second_address = session.connect()
+        assert second_address[0] == "127.0.0.1"
+        assert second_address[1] > 0
+        assert session.is_authenticated
+        session.close()
+        assert clients[-1].closed
+        assert peers[-1].fileno() == -1
+        assert len(clients) == 2
+        assert first_address[0] == second_address[0]
+    finally:
+        session.close()
+        for peer in peers:
+            peer.close()
+
+
 def test_close_is_idempotent() -> None:
     session = ApnaSshSession(
         ApnaSshConfig("ssh.example.test", 22, "user", password="secret"),
