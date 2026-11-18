@@ -334,7 +334,13 @@ class ApnaPayloadSocketConnector:
                     # Add a provider-supplied CA to the normal system trust store.
                     # Certificate verification remains enabled.
                     tls_context = ssl.create_default_context()
-                    tls_context.load_verify_locations(cafile=config.ca_bundle_file)
+                    try:
+                        tls_context.load_verify_locations(cafile=config.ca_bundle_file)
+                    except (OSError, ssl.SSLError) as exc:
+                        raise PayloadTransportError(
+                            "Configured provider CA bundle could not be loaded; verify that "
+                            "the file exists, is readable, and was obtained from a trusted provider source"
+                        ) from exc
                 active_socket = tls_context.wrap_socket(
                     raw_socket,
                     server_hostname=config.sni or default_sni,
@@ -391,7 +397,10 @@ class ApnaPayloadSocketConnector:
                 else config.target_host
             )
             if isinstance(exc, socket.gaierror):
-                diagnosis = "DNS resolution failed"
+                diagnosis = (
+                    "DNS resolution failed before TCP connection; check the system resolver "
+                    "and whether this endpoint hostname is currently resolvable"
+                )
             elif isinstance(exc, ssl.SSLCertVerificationError):
                 diagnosis = _tls_certificate_diagnosis(exc)
             elif isinstance(exc, ssl.SSLError):
