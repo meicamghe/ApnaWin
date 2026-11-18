@@ -71,6 +71,7 @@ def _serialize_config(config: ApnaTunnelSessionConfig) -> bytes:
             "target_port": payload.target_port,
             "payload": payload.payload,
             "sni": payload.sni,
+            "ca_bundle_file": payload.ca_bundle_file,
             "cf_host": payload.cf_host,
             "brand": payload.brand,
             "user_agent": payload.user_agent,
@@ -128,7 +129,15 @@ def _deserialize_config(raw: bytes) -> ApnaTunnelSessionConfig:
         "validate_http_response", "expected_http_statuses", "connect_timeout",
         "read_timeout", "max_response_header_bytes",
     }
-    if set(ssh_raw) != ssh_expected or set(payload_raw) != payload_expected:
+    legacy_payload_expected = payload_expected
+    payload_expected = payload_expected | {"ca_bundle_file"}
+    if (
+        set(ssh_raw) != ssh_expected
+        or (
+            set(payload_raw) != legacy_payload_expected
+            and set(payload_raw) != payload_expected
+        )
+    ):
         raise ApnaProfileStoreError("APNA SSH or payload schema has missing or unknown fields")
     try:
         ssh = ApnaSshConfig(
@@ -153,6 +162,7 @@ def _deserialize_config(raw: bytes) -> ApnaTunnelSessionConfig:
             target_port=payload_raw["target_port"],
             payload=payload_raw["payload"],
             sni=payload_raw["sni"],
+            ca_bundle_file=payload_raw.get("ca_bundle_file"),
             cf_host=payload_raw["cf_host"],
             brand=payload_raw["brand"],
             user_agent=payload_raw["user_agent"],
