@@ -192,11 +192,13 @@ def _socks_reply(sock: socket.socket, code: int) -> None:
 
 
 def _relay_tcp(client: socket.socket, channel) -> None:
-    finished = threading.Event()
+    remote_done = threading.Event()
 
     def channel_to_client() -> None:
         try:
-            while not finished.is_set():
+            # A client-side TCP half-close must not stop this direction: the
+            # remote SSH channel may still have a response to send.
+            while True:
                 data = channel.recv(32768)
                 if not data:
                     break
@@ -204,7 +206,7 @@ def _relay_tcp(client: socket.socket, channel) -> None:
         except (OSError, EOFError):
             pass
         finally:
-            finished.set()
+            remote_done.set()
             try:
                 client.shutdown(socket.SHUT_WR)
             except OSError:
@@ -214,12 +216,14 @@ def _relay_tcp(client: socket.socket, channel) -> None:
     worker.start()
     client.settimeout(0.5)
     try:
-        while not finished.is_set():
+        while not remote_done.is_set():
             try:
                 data = client.recv(32768)
             except socket.timeout:
                 continue
             if not data:
+                # Propagate FIN to the SSH channel, but keep receiving until
+                # the remote side closes its own write direction.
                 break
             channel.sendall(data)
     finally:
@@ -227,7 +231,6 @@ def _relay_tcp(client: socket.socket, channel) -> None:
             channel.shutdown_write()
         except (OSError, EOFError):
             pass
-        finished.set()
         worker.join(timeout=2)
 
 
