@@ -649,6 +649,40 @@ def test_clear_all_profiles_requires_confirmation_and_persists_empty_list(tmp_pa
     window.close()
 
 
+def test_clear_all_profiles_uses_one_batch_cleanup_per_store(tmp_path, qapp, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    import apnawin.app as app_module
+
+    profiles = [
+        ConnectionProfile(f"Imported {index}", Transport.SOCKS, "localhost", 1080)
+        for index in range(250)
+    ]
+    path = tmp_path / "profiles.json"
+    save_profiles(path, profiles)
+    monkeypatch.setattr(
+        app_module.QMessageBox, "question",
+        lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes,
+    )
+    window = MainWindow(profiles_path=path)
+    calls = {"xray": [], "apna": []}
+    monkeypatch.setattr(
+        window.xray_config_store, "remove_many",
+        lambda names: calls["xray"].append(list(names)),
+    )
+    monkeypatch.setattr(
+        window.apna_profile_store, "remove_many",
+        lambda names: calls["apna"].append(list(names)),
+    )
+
+    window._clear_all_profiles()
+
+    expected_names = [profile.name for profile in profiles]
+    assert calls == {"xray": [expected_names], "apna": [expected_names]}
+    assert window.profiles == []
+    assert window.profile_list.count() == 0
+    window.close()
+
+
 def test_clear_all_profiles_cancel_preserves_profiles(tmp_path, qapp, monkeypatch):
     from PySide6.QtWidgets import QMessageBox
     import apnawin.app as app_module
