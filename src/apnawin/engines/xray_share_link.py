@@ -23,7 +23,7 @@ _DEFAULT_DNS = ("1.1.1.1", "2606:4700:4700::1111")
 _SUPPORTED_SCHEMES = frozenset({"vless", "vmess", "trojan", "ss"})
 _SUPPORTED_NETWORKS = frozenset({"tcp", "ws", "grpc", "httpupgrade"})
 _SUPPORTED_SECURITY = frozenset({"none", "tls", "reality"})
-_NAME_RE = re.compile(r"[^\\w .()\\[\\]-]+", re.UNICODE)
+_NAME_RE = re.compile(r"[^\w .()\[\]-]+", re.UNICODE)
 
 
 class XrayShareLinkError(ValueError):
