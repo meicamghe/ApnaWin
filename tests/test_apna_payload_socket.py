@@ -577,5 +577,5 @@ def test_payload_socket_config_rejects_invalid_provider_ca_path():
             connect_port=443,
             target_host="ssh.example.test",
             target_port=1194,
-            ca_bundle_file="bad\\npath",
+            ca_bundle_file="bad\npath",
         )
