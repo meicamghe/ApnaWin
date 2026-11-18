@@ -1,48 +1,43 @@
-# Current active state — 2026-11-16
+# Current active state — 2026-11-18
 
 **Repository:** `meicamghe/ApnaWin`  
 **Branch:** `vpn/dual-stack-egress-readiness`  
 **PR:** [#6](https://github.com/meicamghe/ApnaWin/pull/6), open Draft, not merged.  
-**Last observed code HEAD:** `bdd01444a69f99f1811345fcee580e1e237a27a3`.
+**Latest observed HEAD:** `851e6ca17212fa01b904c910360c17f84ea005f1` (subsequent documentation commits may advance this).
 
 ## Acceptance target
 
-A real Windows 10/11 connection to APNA TUNNEL LITE (`com.apnatunnel.lite`): verified SSH host key, successful authentication, SSH-carried UDPGW, and routed TCP/UDP/DNS traffic through Xray/Wintun. Unit tests, mocked sockets, packaging, and catalog decoding do not prove APNA connectivity.
+A real Windows 10/11 connection to APNA TUNNEL LITE (`com.apnatunnel.lite`): independently verified SSH host key, successful authentication, SSH-carried UDPGW, and routed TCP/UDP/DNS traffic through Xray/Wintun. Unit tests, mocked sockets, package builds and catalog decoding do not prove provider connectivity.
 
 ## Current implementation
 
-- **Catalog:** bounded Base64/modified-XXTEA decoder, APK asset import, live HTTPS source with Dalvik User-Agent and identity encoding, bounded retries, and Content-Length-validated HTTP Range resumption for truncated downloads. Windows UI now has both `Import APNA APK` and asynchronous `Fetch live APNA catalog` actions. The live fetch decodes in memory and persists only selected profile settings encrypted with current-user DPAPI.
-- **Live catalog evidence:** supplied APK `assets/janur.json` is Version 580 (44 free servers, 623 payloads). An independent public reverse-engineering repository reported Version 850 (50 free servers, 644 payloads), validated 2026-11-13; this is a third-party observation, not provider documentation: [manifest](https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM/blob/b66fd18dce1a51d932a32776696ca4a190a3eaac/decoders/Python/apps/APNA_Tunnel_Lite/manifest.json). A non-blocking Windows CI probe now checks live endpoint reachability and prints counts only.
-- **Payload:** primary DEX confirms ordered placeholder substitution, ISO-8859-1, Java split semantics, `[instant_split]`, `[delay_split]` and exactly 1000 ms delayed splitting. The mapper accepts HTTP 200 and HTTP 101 for Upgrade payloads; ordinary HTTP payloads require 200.
-- **SSH:** direct/TLS/HTTP payload socket connector, Paramiko SSH password/private-key authentication, strict known-hosts rejection or explicit SHA-256 pin, and loopback-only dynamic SOCKS5 TCP forwarding.
-- **UDP:** BadVPN-compatible PacketProto/UDPGW framing, flow-ID/LRU tracking, SSH direct-tcpip stream, and local SOCKS5 UDP ASSOCIATE gateway. The configured UDPGW endpoint is preflighted through the authenticated SSH SOCKS endpoint.
-- **TUN:** `ApnaTunnelEngine` routes the local SOCKS5 gateway through a strict dual-stack Xray native TUN inbound using Wintun. DNS UDP egress is probed before reporting connected. Session health now monitors both the Paramiko authenticated transport and local SOCKS5 listener; a dead SSH transport changes engine state to ERROR.
-- **Desktop:** APNA APK/live-catalog selection is wired to `ApnaTunnelEngine`; credentials and payload settings are stored with DPAPI, and profile exports omit them.
+- **APNA catalog:** bounded Base64/modified-XXTEA decoder, APK asset import, live HTTPS catalog fetch with observed Android request headers, bounded retries and range-resume handling. Catalog fetching is lower priority than transport reliability; manual APK import remains available.
+- **APNA profile mapping:** only the verified SSH-family categories `ocsws`, `ocscf`, `ocsnormal`, and `ocshttp` are mapped. Unsupported category names are not guessed into Xray, Trojan, Shadowsocks or UDP protocols.
+- **Payload:** ordered placeholder substitution, ISO-8859-1 encoding, Java split semantics, instant/delayed split handling, and HTTP 200/101 handling for Upgrade payloads.
+- **SSH:** direct/TLS/HTTP payload socket connector, Paramiko authentication, strict known-hosts rejection or explicit SHA-256 host-key pinning, loopback-only SOCKS5 TCP forwarding, and stage-specific diagnostics.
+- **SSH relay lifecycle:** reconnect-after-close is supported. A TCP half-close now propagates FIN to the remote SSH channel while continuing to drain the remote response; a regression test covers this behavior.
+- **UDP:** BadVPN-compatible PacketProto/UDPGW framing and flow tracking, carried over SSH `direct-tcpip`, exposed through local SOCKS5 UDP ASSOCIATE. UDPGW preflight is performed through the authenticated SSH SOCKS endpoint.
+- **APNA TUN:** `ApnaTunnelEngine` routes the local SOCKS5/UDPGW gateway through a strict dual-stack Xray TUN on Wintun. Startup requires UDP DNS plus certificate-validated IPv4 and IPv6 TLS egress checks; failed startup rolls back resources and preserves ownership if cleanup cannot be confirmed.
+- **Other protocols:** the desktop engine registry currently registers APNA SSH and Xray. The Xray importer supports VLESS, VMess, Trojan and Shadowsocks share links using Xray-core. These are protocol outbounds inside the Xray engine, not independent engine executables. OpenVPN and standalone SOCKS enum values do not yet have production engine registrations.
+- **Windows packaging:** x64 portable app build, helper/runtime security checks, smoke test and BadVPN native build are automated. The BadVPN artifact is research-only and not integrated because its upstream Windows TUN backend targets TAP-Windows, not the product's Wintun path.
 
-## APK and reverse-engineering boundary
+## Latest CI findings and work
 
-- Supplied base APK SHA-256: `b1f650b168665b0728b1be0e25a0c722cd77ec873e1a1c7e2711a78aa1012a6d`.
-- Base APK has no embedded ELF/.so entry; the exact native tun2socks library may be in an ABI split.
-- `assets/.bxdtcxfzx.dex` is a LIAPP stub: declared DEX size 428 bytes, one `com.liapp` loader class, plus 98,907 appended protected bytes. `assets/LIAPP.ini` identifies LIAPP 5.1.1.190. The protected `SalamanderService` implementation is not present as ordinary readable classes in the visible secondary DEX.
-- Four SSH-compatible categories in the embedded catalog snapshot: `ocsws` (8 servers/469 payloads), `ocscf` (2/118), `ocsnormal` (2/1), `ocshttp` (4/1). Snapshot server fields show ports 1194/443/53 for SSH/SSL/UDPGW; these values are not guaranteed for live catalog updates.
-- Exact protected service-mode selection and all field semantics remain partly inferred. Do not treat every catalog method/category as provider-certified.
+- Windows run [44275436929](https://github.com/meicamghe/ApnaWin/actions/runs/44275436929) on `64a41d7`: Ruff, packaging, installer/runtime security and VPN readiness/egress jobs passed; unit/integration had **1 test failure, 1226 passed, 1 skipped**. The sole failure was an incorrect test assertion that expected the peer end of a socketpair to be closed by the SSH session. The test now checks the owned endpoint.
+- BadVPN build [44275436880](https://github.com/meicamghe/ApnaWin/actions/runs/44275436880) on `64a41d7` succeeded.
+- Added a regression test and implementation fix for SSH TCP half-close response handling.
+- Latest full Windows test/build and BadVPN workflows for `851e6ca` were in progress at the time of this handoff; check their current status before claiming success.
+- The README and this handoff are being synchronized with the current implementation and its support boundary.
 
-## Validation and live-connection status
+## Release gates still open
 
-- Earlier run [43888817991](https://github.com/meicamghe/ApnaWin/actions/runs/43888817991) passed Ruff, the full test suite, VPN readiness/egress, security tests, Windows x64 packaging, and published a portable artifact. That artifact predates the latest live-catalog and session-health changes.
-- Run [43890182547](https://github.com/meicamghe/ApnaWin/actions/runs/43890182547) passed Ruff, VPN readiness/egress, security tests and Windows packaging. Its full suite reported 1129 passed, 1 skipped, 1 failed due only to an outdated empty-response assertion; the assertion was corrected in the current HEAD. Re-run is still required.
-- No real APNA SSH authentication, UDPGW datagram round-trip, or Windows application traffic has yet been demonstrated. The current container cannot resolve the embedded APNA hostnames, so it cannot perform live endpoint checks. The new non-blocking CI probe may provide a different network vantage point; it is not a substitute for authenticated Windows traffic.
+1. Verify a live APNA SSH host key against an independent provider-controlled source.
+2. Authenticate to an authorized APNA server.
+3. Verify a real UDPGW datagram round-trip and routed TCP, UDP and DNS traffic over that server on Windows 10/11.
+4. Verify IPv4/IPv6 egress, DNS leak behavior, disconnect and crash cleanup on clean Windows hosts.
+5. Confirm final Windows x64 package integrity from a successful current-head CI run.
 
-## Next gates
-
-1. Confirm the corrected full test suite and Windows package on the current HEAD.
-2. Inspect the non-blocking live catalog probe output; if it succeeds, use the newest catalog version and safe counts.
-3. Run a real SSH host-key probe against a selected live server, compare the fingerprint with an independent trusted source, then authenticate and capture redacted results.
-4. Verify UDPGW stream framing and DNS request/response over that server.
-5. Run the packaged app on a clean Windows 10/11 machine; verify IPv4/IPv6 TCP, UDP, DNS, disconnect and crash cleanup.
-6. Obtain the installed APNA split APKs if native tun2socks ABI/version verification remains necessary.
-
-Keep PR #6 Draft and unmerged. Never claim APNA connectivity from mocked tests or a successful package build.
+Keep PR #6 Draft and unmerged. Never claim APNA connectivity from mocked tests, a green CI suite, a live catalog fetch, or a successful package build.
 
 ---
 
