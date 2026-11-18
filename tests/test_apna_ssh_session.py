@@ -14,6 +14,7 @@ from apnawin.engines.apna_ssh_session import (
     ApnaSshError,
     ApnaSshSession,
     _PinnedHostKeyPolicy,
+    _relay_tcp,
 )
 
 
@@ -401,3 +402,47 @@ def test_connect_preserves_actionable_ssh_stage_errors(failure, message):
         assert client_socket.fileno() == -1
     finally:
         peer.close()
+
+
+def test_tcp_relay_preserves_remote_response_after_client_half_close() -> None:
+    client, relay_peer = socket.socketpair()
+    response_ready = threading.Event()
+
+    class HalfCloseChannel:
+        def __init__(self):
+            self.received = bytearray()
+            self.reply_sent = False
+
+        def recv(self, _size):
+            if not response_ready.wait(2):
+                return b""
+            if not self.reply_sent:
+                self.reply_sent = True
+                return b"server-response"
+            return b""
+
+        def sendall(self, data):
+            self.received.extend(data)
+
+        def shutdown_write(self):
+            response_ready.set()
+
+    channel = HalfCloseChannel()
+    worker = threading.Thread(target=_relay_tcp, args=(relay_peer, channel), daemon=True)
+    worker.start()
+    try:
+        client.sendall(b"client-request")
+        client.shutdown(socket.SHUT_WR)
+        received = bytearray()
+        while len(received) < len(b"server-response"):
+            chunk = client.recv(64)
+            if not chunk:
+                break
+            received.extend(chunk)
+        assert bytes(channel.received) == b"client-request"
+        assert bytes(received) == b"server-response"
+        worker.join(timeout=2)
+        assert not worker.is_alive()
+    finally:
+        client.close()
+        relay_peer.close()
