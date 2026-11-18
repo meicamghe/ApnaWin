@@ -351,7 +351,12 @@ class ApnaSshSession:
                 ) from exc
             if isinstance(exc, paramiko.SSHException):
                 detail = " ".join(str(exc).split())[:240]
-                if "banner" in detail.lower():
+                lowered = detail.lower()
+                if "not found in known_hosts" in lowered or "host key" in lowered:
+                    raise ApnaSshError(
+                        "SSH host identity could not be verified against known_hosts or the configured SHA-256 pin"
+                    ) from exc
+                if "banner" in lowered:
                     raise ApnaSshError(
                         "SSH protocol banner was not received. The endpoint may not be serving SSH "
                         "on this route, the payload may not have opened an SSH stream, or the "
