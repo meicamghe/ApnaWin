@@ -184,6 +184,7 @@ def test_local_socks5_connect_is_forwarded_over_authenticated_ssh_channel() -> N
 
 def test_session_can_reconnect_after_close_and_close_new_resources() -> None:
     peers = []
+    endpoints = []
     clients = []
 
     class FakeTransport:
@@ -216,6 +217,7 @@ def test_session_can_reconnect_after_close_and_close_new_resources() -> None:
     class Connector:
         def connect(self, config):
             endpoint, peer = socket.socketpair()
+            endpoints.append(endpoint)
             peers.append(peer)
             return endpoint
 
@@ -229,7 +231,7 @@ def test_session_can_reconnect_after_close_and_close_new_resources() -> None:
         first_address = session.connect()
         session.close()
         assert clients[-1].closed
-        assert peers[-1].fileno() == -1
+        assert endpoints[-1].fileno() == -1
 
         second_address = session.connect()
         assert second_address[0] == "127.0.0.1"
