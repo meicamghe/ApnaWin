@@ -444,6 +444,7 @@ def test_cloudflare_403_identifies_edge_denial_and_cf_ray():
     [
         (400, "malformed"),
         (403, "denied"),
+        (409, "conflict"),
         (429, "rate-limited"),
         (502, "upstream service failed"),
     ],
@@ -524,3 +525,57 @@ def test_tls_certificate_failures_have_specific_safe_diagnostics(error, expected
     assert "SNI 104.17.208.5" in message
     assert "SNI is an IP literal while the endpoint is a DNS hostname" in message
     assert "disable" not in message.lower()
+
+
+
+def test_tls_direct_can_add_only_an_explicit_provider_ca_without_disabling_system_trust(monkeypatch):
+    client, peer = socket.socketpair()
+    observed = {}
+
+    class TrustedContext:
+        def load_verify_locations(self, *, cafile):
+            observed["cafile"] = cafile
+
+        def wrap_socket(self, sock, *, server_hostname):
+            observed["sni"] = server_hostname
+            return sock
+
+    def create_default_context():
+        observed["default_context"] = True
+        return TrustedContext()
+
+    monkeypatch.setattr(ssl, "create_default_context", create_default_context)
+    connector = ApnaPayloadSocketConnector(
+        socket_factory=lambda *_args, **_kwargs: client,
+        tls_context=TrustedContext(),
+    )
+    config = PayloadSocketConfig(
+        mode=PayloadSocketMode.TLS_DIRECT,
+        connect_host="front.example.test",
+        connect_port=443,
+        target_host="ssh.example.test",
+        target_port=1194,
+        sni="front.example.test",
+        ca_bundle_file="trusted-provider-ca.pem",
+    )
+    connected = connector.connect(config)
+    assert connected is client
+    assert observed == {
+        "default_context": True,
+        "cafile": "trusted-provider-ca.pem",
+        "sni": "front.example.test",
+    }
+    connected.close()
+    peer.close()
+
+
+def test_payload_socket_config_rejects_invalid_provider_ca_path():
+    with pytest.raises(ValueError, match="trusted CA bundle path"):
+        PayloadSocketConfig(
+            mode=PayloadSocketMode.TLS_DIRECT,
+            connect_host="front.example.test",
+            connect_port=443,
+            target_host="ssh.example.test",
+            target_port=1194,
+            ca_bundle_file="bad\\npath",
+        )
