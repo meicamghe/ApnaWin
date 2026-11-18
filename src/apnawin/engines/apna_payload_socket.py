@@ -204,6 +204,10 @@ def _read_http_connect_response(
                 or "cloudfront" in headers.get("via", "").lower()
                 or "error from cloudfront" in headers.get("x-cache", "").lower()
             )
+            cloudflare_edge = (
+                headers.get("server", "").lower() == "cloudflare"
+                or bool(headers.get("cf-ray"))
+            )
             if cloudfront_edge:
                 diagnosis = (
                     "CloudFront returned an edge-level HTTP denial. The request reached "
@@ -211,6 +215,15 @@ def _read_http_connect_response(
                     "catalog payload method/path, Host header, viewer port, SNI and the "
                     "provider's CloudFront behavior/origin policy; do not substitute another "
                     "profile's values."
+                )
+            elif cloudflare_edge:
+                diagnosis = (
+                    "Cloudflare returned an HTTP 403 at its edge or proxy layer. The request "
+                    "reached Cloudflare, but no SSH stream was established. The cf-ray value "
+                    "identifies the edge request for the provider. Verify this profile's "
+                    "payload method/path, Host header, endpoint port, SNI and whether the "
+                    "provider's Cloudflare rules/origin policy allow this tunnel; do not "
+                    "disable TLS checks or blindly change Host/SNI."
                 )
             else:
                 diagnosis = (
