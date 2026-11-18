@@ -162,6 +162,68 @@ def _parse_native_method_count(output: str) -> int:
     return count
 
 
+def _parse_native_library_loads(output: str) -> list[str]:
+    """Extract literal System.loadLibrary/ load call arguments from one smali class.
+
+    Only literal constants passed directly to a recognized Android/JVM loader
+    are reported. Dynamic values, reflection, JNI registration and process
+    launches are intentionally not guessed.
+    """
+    if len(output.encode("utf-8")) > _MAX_OUTPUT_BYTES:
+        raise ValueError("DEX class code exceeds the allowed size")
+    registers: dict[str, str] = {}
+    libraries: set[str] = set()
+    in_method = False
+    const_pattern = re.compile(
+        r'^\s*const-string(?:/jumbo)?\s+([vp][0-9]+),\s+"([^"\r\n]{1,512})"'
+    )
+    invoke_pattern = re.compile(r"^\s*invoke-(?:static|virtual)(?:/range)?\s+\{([^}]*)\}.*")
+    for line in output.splitlines():
+        if len(line) > 16_384:
+            raise ValueError("DEX class code contains an oversized line")
+        if line.startswith(".method "):
+            in_method = True
+            registers.clear()
+            continue
+        if line == ".end method":
+            in_method = False
+            registers.clear()
+            continue
+        if not in_method:
+            continue
+        const_match = const_pattern.match(line)
+        if const_match:
+            registers[const_match.group(1)] = const_match.group(2)
+            continue
+        invoke_match = invoke_pattern.match(line)
+        if invoke_match:
+            operands = [item.strip() for item in invoke_match.group(1).split(",")]
+            target = line.split("->", 1)[1] if "->" in line else ""
+            argument_register = None
+            if target.startswith("loadLibrary(Ljava/lang/String;)V") or target.startswith(
+                "load(Ljava/lang/String;)V"
+            ):
+                argument_index = 1 if "Ljava/lang/Runtime;" in line else 0
+                if len(operands) > argument_index:
+                    argument_register = operands[argument_index]
+            if argument_register in registers:
+                value = registers[argument_register]
+                if target.startswith("loadLibrary("):
+                    if re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", value):
+                        libraries.add(value)
+                elif target.startswith("load("):
+                    match = re.search(r"(?:^|[/\\])(lib[A-Za-z0-9_.-]+\.so)$", value)
+                    if match:
+                        libraries.add(match.group(1))
+            continue
+        # A write to a tracked destination invalidates the previous literal.
+        fields = line.strip().split(None, 1)
+        if len(fields) == 2 and fields[0].startswith(("move", "const", "new-", "iget", "sget", "aget")):
+            destination = fields[1].split(",", 1)[0].strip()
+            registers.pop(destination, None)
+    return sorted(libraries)
+
+
 def parse_reference_counts(output: str) -> dict[str, int]:
     if len(output.encode("utf-8")) > _MAX_OUTPUT_BYTES:
         raise ValueError("DEX reference listing exceeds the allowed size")
@@ -220,6 +282,13 @@ def inspect_apk_dex(
                 }
                 for service in (manifest_services or [])
             ],
+            "manifest_application_class": {
+                "resolved_class_name": _resolve_manifest_class(manifest_application_class, package_name)
+                if manifest_application_class else None,
+                "defined_in_dex": False,
+                "native_library_loads": [],
+                "inspection_completed": False,
+            },
             "source": "apkanalyzer",
             "raw_dex_output_included": False,
         }
@@ -253,6 +322,20 @@ def inspect_apk_dex(
             "native_method_count": native_count,
             "native_method_inspection_completed": inspection_completed,
         })
+    application_name = (
+        _resolve_manifest_class(manifest_application_class, package_name)
+        if manifest_application_class else None
+    )
+    application_evidence = class_metadata.get(application_name) if application_name else None
+    application_loads: list[str] = []
+    application_inspection_completed = False
+    if application_evidence is not None and application_name is not None:
+        application_code = _run(
+            resolved, ["dex", "code", "--class", application_name, apk], timeout
+        )
+        application_loads = _parse_native_library_loads(application_code)
+        application_inspection_completed = True
+
     reference_output = _run(resolved, ["dex", "references", apk], timeout)
     references = parse_reference_counts(reference_output)
     if set(references) - set(dex_files):
@@ -265,6 +348,12 @@ def inspect_apk_dex(
         "method_references": references,
         "candidate_classes": candidates,
         "manifest_service_classes": service_matches,
+        "manifest_application_class": {
+            "resolved_class_name": application_name,
+            "defined_in_dex": application_evidence is not None,
+            "native_library_loads": application_loads,
+            "inspection_completed": application_inspection_completed,
+        },
         "source": "apkanalyzer",
         "raw_dex_output_included": False,
     }
