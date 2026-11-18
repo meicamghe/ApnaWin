@@ -223,3 +223,11 @@ The separate Python Wintun packet engine and route/DNS transaction path are not 
 - While connected, the helper rechecks adapter/routes/DNS every two seconds. This update adds periodic independent TLS egress checks every 15 seconds; three consecutive failed egress checks request graceful shutdown.
 - CI run 43812584700 (run 350) passed all five parallel validation tracks and published the portable artifact. This is component/CI validation, not a live APNA provider acceptance test.
 - APNA server catalog endpoint, authentication, response schema and an authorized APNA Xray config remain unverified. Do not claim APNA compatibility or fabricate endpoints. Live tests must still cover provider-specific traffic, DNS and IPv4/IPv6 leaks, WFP behavior, clean disconnect, helper/desktop crash and reboot cleanup.
+
+
+
+## UDP DNS readiness validation — 2026-11-18
+
+The APNA full-tunnel startup path runs a UDP DNS probe after Xray/Wintun has installed the TUN routes and before the engine reports CONNECTED. The probe uses the configured resolver IP literals, verifies the response source and transaction ID, requires an exact matching question and NOERROR response, and now parses every declared answer record to reject truncated or malformed DNS packets. Configured IPv4 and IPv6 resolver families must each pass. Regression coverage includes malformed compression pointers, truncated RDATA, invalid flags, wrong questions, duplicate resolvers, timeout validation and IPv6 failure.
+
+This remains automated protocol validation, not a substitute for provider-side Windows acceptance. Validate actual DNS and leak behavior on clean Windows 10/11 hosts before changing PR #6 from Draft.
