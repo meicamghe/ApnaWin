@@ -12,7 +12,7 @@ class UdpDnsProbeError(ConnectionError):
     """UDP DNS traffic did not complete through the active tunnel."""
 
 
-_QUESTION = b"\\x07example\\x03com\\x00" + struct.pack("!HH", 1, 1)
+_QUESTION = b"\x07example\x03com\x00" + struct.pack("!HH", 1, 1)
 
 
 def _query_bytes(transaction_id: int) -> bytes:
