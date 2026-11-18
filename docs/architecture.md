@@ -24,33 +24,28 @@ Build a native Windows 10/11 client that offers a clear desktop workflow for tun
 
 ## Current implementation
 
-- Native PySide6 application shell.
-- Add, edit, select and remove connection profiles.
-- Profile metadata is stored as UTF-8 JSON under the current user's application-data directory.
-- The profile format stores only name, transport, endpoint host and port. It does not store credentials or private keys.
-- Profile loading validates strict JSON/schema types, rejects duplicate JSON keys and duplicate case-insensitive profile names, and rejects unsupported format versions or unexpected fields.
-- Profile writes use unique same-directory temporary files, flush/fsync before atomic replacement, and clean up temporary files on failure.
-- Xray configuration parsing rejects duplicate JSON object keys and non-standard non-finite constants before any executable validation or launch.
-- Windows process-tree containment uses Job Objects and creation-time job assignment; the Xray runner fails closed rather than launching an uncontained Windows child process.
-- Remote catalog documents have a strict, bounded, provider-neutral schema; the local last-known-good cache uses atomic replacement and revalidation on load.
-- Remote refresh orchestration provides generation-specific single-flight results, bounded exponential backoff, forced refresh, cache fallback and redacted failure results. Waiting callers cannot accidentally receive a later refresh generation's result.
-- A reusable HTTPS catalog transport accepts an explicitly configured URL, uses the platform's default certificate validation, rejects redirects and bounds response reads. It does not assume an APNA endpoint or authentication scheme.
-- Connect remains disabled: no real Windows tunnel engine is integrated.
+- Native PySide6 desktop UI, profile lifecycle, diagnostics, and a fixed-path elevated Windows helper.
+- Current production engine registry: `Transport.XRAY` and `Transport.APNA_SSH`. `OPENVPN` and `SOCKS` enum values are not yet backed by production engine adapters.
+- Xray share-link importer supports VLESS, VMess, Trojan and Shadowsocks outbounds with validated supported stream transports. These protocol implementations are supplied by the pinned Xray-core runtime through one Xray/Wintun engine.
+- APNA Lite catalog decoding/import and bounded live catalog retrieval; only four observed SSH-compatible catalog categories are mapped. Other catalog categories remain unsupported until the protected Android runtime's exact configuration mapping is verified.
+- APNA SSH/Payload connector with direct, TLS-direct, HTTP-proxy and TLS-HTTP-proxy modes; payload expansion/split behavior; Paramiko authentication; known-hosts or explicit SHA-256 host-key verification; loopback-only SOCKS5 TCP forwarding.
+- APNA UDPGW framing/flow tracking over an SSH direct-tcpip stream and a local SOCKS5 UDP ASSOCIATE gateway.
+- APNA full-tunnel adapter routes the local SOCKS5 gateway through a strict dual-stack Xray TUN/Wintun configuration. UDP DNS and certificate-validated IPv4/IPv6 TLS egress checks are required before CONNECTED.
+- SSH relay supports TCP half-close semantics: a client FIN does not discard a pending remote response.
+- Credentials and Xray configurations are protected with current-user Windows DPAPI; profile metadata exports exclude secrets.
+- Windows CI runs Ruff, unit/integration tests, installer/runtime security tests, VPN readiness/egress checks, x64 packaging and packaged-app smoke tests. A separate pinned BadVPN Windows x64 build is research-only and is not integrated because its upstream TUN backend targets TAP-Windows.
 
 ## Milestones
 
 - M0: repository skeleton, coding conventions and architecture record — complete.
-- M1: inspect APK metadata/resources and document observable features and protocols — preliminary; reproducible verification remains.
-- M2: define profile schema, persistence, mock engine contract and desktop profile workflow — core implementation and security/failure-path coverage present.
-- M2a: add a safe Xray process runner and automated process-supervision tests — implemented.
-- M2b: Windows Job Object process-tree launcher and Xray runner integration — implemented and verified in Windows CI.
-- M2c: document the remote server/config refresh evidence plan and provider-neutral security architecture — implemented.
-- M2d: strict remote catalog model, atomic last-known-good cache and provider-neutral refresh coordinator — implemented and verified.
-- M2e: bounded HTTPS transport for an explicitly configured catalog provider — implemented; APNA endpoint, authentication and upstream schema remain unverified.
-- M2f: preserve exact refresh-generation results for concurrent waiters and cover result lifecycle — implemented; Windows CI verification pending.
-- M3: integrate one Windows engine end-to-end using an authorized test server and documented configuration. This is currently blocked on obtaining a compatible, authorized test configuration; no private server details or credentials will be inferred.
-- M4: implement elevation/service and TUN adapter lifecycle with rollback and cleanup.
-- M5: package, sign where possible, test on clean Windows 10/11 VMs and publish releases.
+- M1: inspect APK metadata/resources and document observable features/protocols — partial; protected runtime and exact native split-library behavior remain unknown.
+- M2: profile schema, persistence, mock engine contract and desktop profile workflow — implemented.
+- M2a/M2b: Xray process runner, Windows Job Object containment and elevated helper lifecycle — implemented with Windows CI coverage.
+- M2c–M2e: remote catalog evidence, strict catalog model/cache and bounded HTTPS transport — implemented; live catalog fetch is available but remains lower priority than tunnel reliability.
+- M3a: Xray/Wintun engine and VLESS/VMess/Trojan/Shadowsocks share-link import — implemented; clean-host live provider acceptance remains.
+- M3b: APNA SSH/Payload/UDPGW session and APNA Wintun full-tunnel adapter — implemented with mocked/unit-level coverage; real APNA provider authentication and traffic acceptance remain open.
+- M4: Windows helper, TUN lifecycle, rollback and cleanup — implemented at component level; clean Windows 10/11 crash/reboot acceptance remains.
+- M5: portable x64 packaging and CI artifact publication — implemented; code signing and final release acceptance remain.
 
 ## Security and compatibility boundaries
 
