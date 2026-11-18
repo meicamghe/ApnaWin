@@ -27,6 +27,8 @@ class MultiTransportTunnelEngine:
     @property
     def state(self) -> ConnectionState:
         if self._active is not None:
+            if self._state is ConnectionState.ERROR:
+                return self._state
             return self._active.state
         return self._state
 

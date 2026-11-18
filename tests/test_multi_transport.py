@@ -111,7 +111,7 @@ def test_refresh_rejects_invalid_state_without_releasing_engine_ownership():
     with pytest.raises(TypeError, match="refresh\\(\\).*ConnectionState"):
         engine.refresh()
 
-    assert engine.state is ConnectionState.CONNECTED
+    assert engine.state is ConnectionState.ERROR
     selected.refresh = lambda: ConnectionState.CONNECTED
     assert engine.refresh() is ConnectionState.CONNECTED
     engine.disconnect()
