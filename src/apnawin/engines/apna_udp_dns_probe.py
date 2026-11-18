@@ -19,6 +19,71 @@ def _query_bytes(transaction_id: int) -> bytes:
     return struct.pack("!HHHHHH", transaction_id, 0x0100, 1, 0, 0, 0) + _QUESTION
 
 
+def _skip_dns_name(packet: bytes, offset: int) -> int | None:
+    """Return the byte after a DNS name, validating labels and compression."""
+    cursor = offset
+    visited: set[int] = set()
+    jumped = False
+    wire_length = 0
+    while cursor < len(packet):
+        length = packet[cursor]
+        if length == 0:
+            return cursor + 1 if not jumped else offset + 2
+        if length & 0xC0 == 0xC0:
+            if cursor + 1 >= len(packet):
+                return None
+            pointer = ((length & 0x3F) << 8) | packet[cursor + 1]
+            if pointer >= len(packet) or pointer in visited or pointer == cursor:
+                return None
+            visited.add(pointer)
+            # A compression pointer terminates this name in the current RR.
+            # Validate its target chain without changing the caller's offset.
+            target = pointer
+            for _ in range(len(packet)):
+                if target >= len(packet):
+                    return None
+                part = packet[target]
+                if part == 0:
+                    break
+                if part & 0xC0 == 0xC0:
+                    if target + 1 >= len(packet):
+                        return None
+                    next_target = ((part & 0x3F) << 8) | packet[target + 1]
+                    if next_target in visited or next_target >= len(packet):
+                        return None
+                    visited.add(next_target)
+                    target = next_target
+                    continue
+                if part & 0xC0 or part > 63 or target + 1 + part > len(packet):
+                    return None
+                target += 1 + part
+            else:
+                return None
+            return cursor + 2
+        if length & 0xC0 or length > 63 or cursor + 1 + length > len(packet):
+            return None
+        wire_length += length + 1
+        if wire_length > 255:
+            return None
+        cursor += 1 + length
+    return None
+
+
+def _has_complete_answer(packet: bytes, offset: int, answer_count: int) -> bool:
+    """Validate every declared answer RR is present and structurally complete."""
+    for _ in range(answer_count):
+        next_name = _skip_dns_name(packet, offset)
+        if next_name is None or next_name + 10 > len(packet):
+            return False
+        _rtype, _rclass, _ttl, rdlength = struct.unpack(
+            "!HHIH", packet[next_name : next_name + 10]
+        )
+        offset = next_name + 10 + rdlength
+        if offset > len(packet):
+            return False
+    return True
+
+
 def _validate_response(response: bytes, transaction_id: int) -> bool:
     """Accept only a matching, complete standard DNS response with an answer."""
     if not isinstance(response, bytes) or len(response) < 12 + len(_QUESTION):
@@ -38,7 +103,10 @@ def _validate_response(response: bytes, transaction_id: int) -> bool:
         or answers == 0
     ):
         return False
-    return response[12 : 12 + len(_QUESTION)] == _QUESTION
+    question_end = 12 + len(_QUESTION)
+    if response[12:question_end] != _QUESTION:
+        return False
+    return _has_complete_answer(response, question_end, answers)
 
 
 def probe_udp_dns(
@@ -88,7 +156,7 @@ def probe_udp_dns(
                 with socket.socket(socket_family, socket.SOCK_DGRAM) as client:
                     client.settimeout(timeout)
                     client.sendto(query, destination)
-                    response, peer = client.recvfrom(4096)
+                    response, peer = client.recvfrom(65535)
                 if (
                     not isinstance(peer, tuple)
                     or len(peer) < 2
