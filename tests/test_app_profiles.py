@@ -807,3 +807,27 @@ def test_close_requested_during_apna_file_decode_closes_after_worker_finishes(
     assert window._file_worker is None
     window._connection_timer.stop()
 
+
+
+
+def test_connection_worker_error_identifies_the_failing_profile():
+    from apnawin.app import _ConnectionWorker
+
+    class FailingController:
+        def connect(self, profile):
+            raise ConnectionError("TLS certificate verification failed")
+
+    profile = ConnectionProfile(
+        "Free · SSH profile 17", Transport.APNA_SSH, "ssh17.example.test", 443
+    )
+    worker = _ConnectionWorker(FailingController(), "connect", profile)
+    results = []
+    worker.operation_finished.connect(lambda success, detail: results.append((success, detail)))
+
+    worker.run()
+
+    assert len(results) == 1
+    success, detail = results[0]
+    assert success is False
+    assert "Profile: Free · SSH profile 17 (apna_ssh) at ssh17.example.test:443" in detail
+    assert "ConnectionError: TLS certificate verification failed" in detail
