@@ -166,6 +166,32 @@ def parse_socks5_udp_datagram(data: bytes) -> tuple[str, int, bytes]:
     return host, port, data[offset:]
 
 
+def _validate_udp_client_endpoint(
+    requested_host: str,
+    requested_port: int,
+    peer_ip: str,
+) -> tuple[str, int] | None:
+    """Validate the UDP endpoint declared by a SOCKS5 UDP ASSOCIATE request."""
+    try:
+        peer = ipaddress.ip_address(peer_ip)
+        requested = ipaddress.ip_address(requested_host)
+    except ValueError as exc:
+        raise ValueError("UDP ASSOCIATE client address must be an IP literal") from exc
+    if requested.version != peer.version:
+        raise ValueError("UDP ASSOCIATE client address family does not match its TCP peer")
+    if not requested.is_unspecified and requested != peer:
+        raise ValueError("UDP ASSOCIATE client address does not match its TCP peer")
+    if (
+        isinstance(requested_port, bool)
+        or not isinstance(requested_port, int)
+        or not 0 <= requested_port <= 65535
+    ):
+        raise ValueError("UDP ASSOCIATE client port is invalid")
+    if requested_port == 0:
+        return None
+    return str(peer), requested_port
+
+
 def encode_socks5_udp_datagram(address: str, port: int, payload: bytes) -> bytes:
     try:
         ip = ipaddress.ip_address(address)
@@ -225,6 +251,8 @@ class _GatewayHandler(socketserver.BaseRequestHandler):
                 gateway._handle_udp_associate(
                     self.request,
                     self.client_address[0],
+                    target_host,
+                    target_port,
                 )
             else:
                 self.request.sendall(_socks5_reply(7))
@@ -334,7 +362,20 @@ class Socks5Gateway:
                     continue
                 destination.sendall(data)
 
-    def _handle_udp_associate(self, control: socket.socket, peer_ip: str) -> None:
+    def _handle_udp_associate(
+        self,
+        control: socket.socket,
+        peer_ip: str,
+        requested_host: str,
+        requested_port: int,
+    ) -> None:
+        try:
+            requested_endpoint = _validate_udp_client_endpoint(
+                requested_host, requested_port, peer_ip
+            )
+        except ValueError:
+            control.sendall(_socks5_reply(2))
+            return
         if self.config.udpgw_host is None or self.config.udpgw_port is None:
             control.sendall(_socks5_reply(7))
             return
@@ -356,7 +397,9 @@ class Socks5Gateway:
             relay_host, relay_port = relay.getsockname()
             control.sendall(_socks5_reply(0, str(relay_host), int(relay_port)))
             replied = True
-            self._run_udp_relay(control, relay, stream, peer_ip)
+            self._run_udp_relay(
+                control, relay, stream, peer_ip, requested_endpoint
+            )
         except (OSError, UdpGwTransportError, Socks5GatewayError):
             if not replied:
                 try:
@@ -374,9 +417,13 @@ class Socks5Gateway:
         relay: socket.socket,
         stream: UdpGwStreamClient,
         peer_ip: str,
+        requested_endpoint: tuple[str, int] | None = None,
     ) -> None:
         flows = UdpGwFlowTable(max_connections=self.config.max_udp_flows)
-        allowed_endpoint: tuple[str, int] | None = None
+        # RFC 1928 lets the client declare its UDP source endpoint. Honor a
+        # concrete port immediately; only wildcard port zero is learned from
+        # the first datagram.
+        allowed_endpoint = requested_endpoint
         last_activity = time.monotonic()
         last_keepalive = last_activity
 

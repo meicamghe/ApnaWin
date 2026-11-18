@@ -407,3 +407,40 @@ def test_udp_response_uses_the_flow_bound_source_endpoint() -> None:
     payload, destination = relay.sent[0]
     assert destination == ("127.0.0.1", 42000)
     assert parse_socks5_udp_datagram(payload) == ("8.8.8.8", 53, b"dns-reply")
+
+
+
+@pytest.mark.parametrize(
+    ("requested_host", "requested_port", "peer_ip", "expected"),
+    [
+        ("0.0.0.0", 0, "127.0.0.1", None),
+        ("127.0.0.1", 43000, "127.0.0.1", ("127.0.0.1", 43000)),
+    ],
+)
+def test_udp_associate_validates_declared_client_endpoint(
+    requested_host, requested_port, peer_ip, expected
+) -> None:
+    from apnawin.engines.socks5_gateway import _validate_udp_client_endpoint
+
+    assert _validate_udp_client_endpoint(
+        requested_host, requested_port, peer_ip
+    ) == expected
+
+
+@pytest.mark.parametrize(
+    ("requested_host", "requested_port", "peer_ip"),
+    [
+        ("192.0.2.10", 43000, "127.0.0.1"),
+        ("client.example", 43000, "127.0.0.1"),
+        ("::", 43000, "127.0.0.1"),
+        ("127.0.0.1", -1, "127.0.0.1"),
+        ("127.0.0.1", 65536, "127.0.0.1"),
+    ],
+)
+def test_udp_associate_rejects_mismatched_or_invalid_client_endpoint(
+    requested_host, requested_port, peer_ip
+) -> None:
+    from apnawin.engines.socks5_gateway import _validate_udp_client_endpoint
+
+    with pytest.raises(ValueError):
+        _validate_udp_client_endpoint(requested_host, requested_port, peer_ip)
