@@ -268,3 +268,66 @@ def test_ssh_session_rejects_invalid_channel_timeout(value):
             _payload_config(),
             channel_timeout=value,
         )
+
+
+
+@pytest.mark.parametrize(
+    ("failure", "message"),
+    [
+        (
+            paramiko.SSHException("Error reading SSH protocol banner"),
+            "SSH protocol banner was not received",
+        ),
+        (
+            paramiko.AuthenticationException("Authentication failed"),
+            "SSH authentication was rejected",
+        ),
+        (
+            paramiko.SSHException("Incompatible ssh peer"),
+            "SSH protocol negotiation failed: Incompatible ssh peer",
+        ),
+    ],
+)
+def test_connect_preserves_actionable_ssh_stage_errors(failure, message):
+    client_socket, peer = socket.socketpair()
+
+    class RaisingSshClient:
+        def load_system_host_keys(self):
+            return None
+
+        def load_host_keys(self, _path):
+            return None
+
+        def set_missing_host_key_policy(self, _policy):
+            return None
+
+        def connect(self, **_kwargs):
+            raise failure
+
+        def close(self):
+            return None
+
+    session = ApnaSshSession(
+        ApnaSshConfig(
+            "ssh.example.test",
+            22,
+            "user",
+            password="secret",
+            host_key_sha256=(
+                "SHA256:" + base64.b64encode(b"x" * 32).decode("ascii").rstrip("=")
+            ),
+        ),
+        _payload_config(),
+        connector=type(
+            "Connector",
+            (),
+            {"connect": lambda self, config: client_socket},
+        )(),
+        ssh_client_factory=RaisingSshClient,
+    )
+    try:
+        with pytest.raises(ApnaSshError, match=message):
+            session.connect()
+        assert client_socket.fileno() == -1
+    finally:
+        peer.close()
