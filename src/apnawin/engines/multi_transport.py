@@ -79,7 +79,10 @@ class MultiTransportTunnelEngine:
         refresh = getattr(self._active, "refresh", None)
         if callable(refresh):
             try:
-                self._state = refresh()
+                observed = refresh()
+                if not isinstance(observed, ConnectionState):
+                    raise TypeError("engine refresh() must return a ConnectionState")
+                self._state = observed
             except Exception as exc:
                 self._state = ConnectionState.ERROR
                 self.last_error = f"{type(exc).__name__}: {exc}"
