@@ -4,6 +4,20 @@
 
 **Target application:** APNA TUNNEL LITE, Android package `com.apnatunnel.lite`.
 
+## Alternative Xray protocol profiles — 2026-11-18
+
+The Windows UI now accepts standard Xray share links and creates encrypted, full-tunnel profiles using the existing Xray/Wintun supervisor:
+
+- VLESS (TCP, WebSocket, gRPC and HTTPUpgrade; TLS and Reality security).
+- VMess (standard Base64 JSON links; TCP, WebSocket, gRPC and HTTPUpgrade; TLS).
+- Trojan (TLS/Reality with the supported stream transports).
+- Shadowsocks (SIP002/legacy links for supported AEAD and 2022 cipher identifiers; SIP003 plugins are explicitly rejected).
+
+Credentials are held in memory only during import and saved through the existing current-user DPAPI Xray config store. Profile metadata exports do not contain credentials. TLS verification is forced on; insecure TLS options are rejected. The importer validates the generated dual-stack TUN config and routes traffic only through the selected remote Xray outbound.
+
+This is a real share-link import/configuration path, not yet evidence of a live provider connection. APNA catalog categories `ocsv2ray`, `ocsxray`, `ocstrojan`, and `ocsshadow` are still not auto-mapped: the protected v51 runtime's exact field-to-engine mapping is not available from the supplied base APK. The next step is to verify those categories against authorized, redacted sample records or the complete installed split APKs before enabling automatic catalog conversion. Xray's existing binary acts as the multi-protocol runtime; VLESS/VMess/Trojan/Shadowsocks are distinct outbound protocol adapters, not four separate executables.
+
+
 ## Current implementation snapshot — 2026-11-16
 
 This snapshot supersedes any older checklist statements below that describe the APNA source as discovery-only or the SSH/TUN integration as unwired.
