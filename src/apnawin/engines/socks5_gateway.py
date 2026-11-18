@@ -301,13 +301,22 @@ class Socks5Gateway:
         return self
 
     def close(self) -> None:
-        server, self._server = self._server, None
+        # Keep ownership until shutdown and the serving thread are confirmed
+        # stopped. If cleanup fails, callers can retry instead of losing the
+        # only handles to a still-running listener.
+        server = self._server
         if server is None:
             return
         server.shutdown()
         server.server_close()
-        if self._thread is not None:
-            self._thread.join(timeout=2)
+        thread = self._thread
+        if thread is not None:
+            thread.join(timeout=2)
+            if thread.is_alive():
+                raise Socks5GatewayError(
+                    "SOCKS5 gateway thread did not stop; resource ownership is retained"
+                )
+        self._server = None
         self._thread = None
 
     def _handle_connect(

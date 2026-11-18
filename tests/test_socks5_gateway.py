@@ -444,3 +444,83 @@ def test_udp_associate_rejects_mismatched_or_invalid_client_endpoint(
 
     with pytest.raises(ValueError):
         _validate_udp_client_endpoint(requested_host, requested_port, peer_ip)
+
+
+
+def test_gateway_close_retains_resource_ownership_when_shutdown_fails() -> None:
+    gateway = Socks5Gateway(
+        Socks5GatewayConfig(ssh_proxy_host="127.0.0.1", ssh_proxy_port=1080)
+    )
+
+    class FakeServer:
+        def __init__(self):
+            self.shutdown_calls = 0
+            self.close_calls = 0
+
+        def shutdown(self):
+            self.shutdown_calls += 1
+            if self.shutdown_calls == 1:
+                raise OSError("simulated shutdown failure")
+
+        def server_close(self):
+            self.close_calls += 1
+
+    class FakeThread:
+        def __init__(self):
+            self.join_calls = 0
+
+        def join(self, timeout):
+            self.join_calls += 1
+
+        def is_alive(self):
+            return False
+
+    server = FakeServer()
+    thread = FakeThread()
+    gateway._server = server
+    gateway._thread = thread
+
+    with pytest.raises(OSError, match="simulated shutdown failure"):
+        gateway.close()
+
+    assert gateway._server is server
+    assert gateway._thread is thread
+    assert server.close_calls == 0
+
+    gateway.close()
+    assert gateway._server is None
+    assert gateway._thread is None
+    assert server.shutdown_calls == 2
+    assert server.close_calls == 1
+    assert thread.join_calls == 1
+
+
+def test_gateway_close_retains_ownership_if_serving_thread_does_not_stop() -> None:
+    gateway = Socks5Gateway(
+        Socks5GatewayConfig(ssh_proxy_host="127.0.0.1", ssh_proxy_port=1080)
+    )
+
+    class FakeServer:
+        def shutdown(self):
+            return None
+
+        def server_close(self):
+            return None
+
+    class StuckThread:
+        def join(self, timeout):
+            return None
+
+        def is_alive(self):
+            return True
+
+    server = FakeServer()
+    thread = StuckThread()
+    gateway._server = server
+    gateway._thread = thread
+
+    with pytest.raises(Socks5GatewayError, match="ownership is retained"):
+        gateway.close()
+
+    assert gateway._server is server
+    assert gateway._thread is thread
