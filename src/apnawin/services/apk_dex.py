@@ -18,6 +18,7 @@ _MAX_TIMEOUT_SECONDS = 30
 _MAX_DEX_FILES = 128
 _MAX_CLASSES = 100_000
 _MAX_RELEVANT_CLASSES = 2_000
+_MAX_MANIFEST_SERVICE_COMPONENTS = 128
 _DEX_NAME = re.compile(r"classes(?:[2-9]|[1-9][0-9]+)?\.dex\Z")
 _CLASS_NAME = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*\Z")
 _PACKAGE_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)*\Z")
@@ -247,6 +248,7 @@ def inspect_apk_dex(
     manifest_services: list[str] | None = None,
     package_name: str | None = None,
     manifest_application_class: str | None = None,
+    manifest_service_components: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Return DEX file counts and candidate VPN/network class names."""
     path = Path(apk_path)
@@ -259,6 +261,17 @@ def inspect_apk_dex(
         resolved = str(Path(executable).resolve())
     if resolved is None:
         raise RuntimeError("Android SDK apkanalyzer was not found on PATH")
+
+    components = manifest_service_components or []
+    if not isinstance(components, list) or len(components) > _MAX_MANIFEST_SERVICE_COMPONENTS:
+        raise ValueError("manifest contains too many service components for DEX inspection")
+    for component in components:
+        if (
+            not isinstance(component, dict)
+            or component.get("type") != "service"
+            or not isinstance(component.get("name"), str)
+        ):
+            raise ValueError("manifest service component metadata is invalid")
 
     apk = str(path.resolve())
     dex_files = parse_dex_file_list(_run(resolved, ["dex", "list", apk], timeout))
@@ -290,6 +303,17 @@ def inspect_apk_dex(
                 "native_library_loads": [],
                 "inspection_completed": False,
             },
+            "manifest_service_component_classes": [
+                {
+                    "manifest_name": component["name"],
+                    "resolved_class_name": _resolve_manifest_class(component["name"], package_name),
+                    "defined_in_dex": False,
+                    "native_method_count": None,
+                    "native_library_loads": [],
+                    "inspection_completed": False,
+                }
+                for component in components
+            ],
             "source": "apkanalyzer",
             "raw_dex_output_included": False,
         }
@@ -298,6 +322,7 @@ def inspect_apk_dex(
     class_count, candidates, class_metadata = _parse_defined_class_metadata(class_output)
     service_matches = []
     native_method_counts: dict[str, int] = {}
+    class_code_cache: dict[str, str] = {}
     for service in manifest_services or []:
         resolved_name = _resolve_manifest_class(service, package_name)
         evidence = class_metadata.get(resolved_name) if resolved_name else None
@@ -310,6 +335,7 @@ def inspect_apk_dex(
                     ["dex", "code", "--class", resolved_name, apk],
                     timeout,
                 )
+                class_code_cache[resolved_name] = code_output
                 native_method_counts[resolved_name] = _parse_native_method_count(code_output)
             native_count = native_method_counts[resolved_name]
             inspection_completed = True
@@ -323,6 +349,36 @@ def inspect_apk_dex(
             "native_method_count": native_count,
             "native_method_inspection_completed": inspection_completed,
         })
+    service_component_matches = []
+    for component in components:
+        manifest_name = component["name"]
+        resolved_name = _resolve_manifest_class(manifest_name, package_name)
+        evidence = class_metadata.get(resolved_name) if resolved_name else None
+        native_count = None
+        loads: list[str] = []
+        inspection_completed = False
+        if evidence is not None and resolved_name is not None:
+            code_output = class_code_cache.get(resolved_name)
+            if code_output is None:
+                code_output = _run(
+                    resolved, ["dex", "code", "--class", resolved_name, apk], timeout
+                )
+                class_code_cache[resolved_name] = code_output
+            native_count = native_method_counts.get(resolved_name)
+            if native_count is None:
+                native_count = _parse_native_method_count(code_output)
+                native_method_counts[resolved_name] = native_count
+            loads = _parse_native_library_loads(code_output)
+            inspection_completed = True
+        service_component_matches.append({
+            "manifest_name": manifest_name,
+            "resolved_class_name": resolved_name,
+            "defined_in_dex": evidence is not None,
+            "native_method_count": native_count,
+            "native_library_loads": loads,
+            "inspection_completed": inspection_completed,
+        })
+
     application_name = (
         _resolve_manifest_class(manifest_application_class, package_name)
         if manifest_application_class else None
@@ -331,9 +387,12 @@ def inspect_apk_dex(
     application_loads: list[str] = []
     application_inspection_completed = False
     if application_evidence is not None and application_name is not None:
-        application_code = _run(
-            resolved, ["dex", "code", "--class", application_name, apk], timeout
-        )
+        application_code = class_code_cache.get(application_name)
+        if application_code is None:
+            application_code = _run(
+                resolved, ["dex", "code", "--class", application_name, apk], timeout
+            )
+            class_code_cache[application_name] = application_code
         application_loads = _parse_native_library_loads(application_code)
         application_inspection_completed = True
 
@@ -349,6 +408,7 @@ def inspect_apk_dex(
         "method_references": references,
         "candidate_classes": candidates,
         "manifest_service_classes": service_matches,
+        "manifest_service_component_classes": service_component_matches,
         "manifest_application_class": {
             "resolved_class_name": application_name,
             "defined_in_dex": application_evidence is not None,

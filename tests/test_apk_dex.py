@@ -398,3 +398,77 @@ def test_inspector_scans_manifest_application_class_for_native_loads(tmp_path, m
         ["dex", "code", "--class", "com.example.Loader"],
         ["dex", "references"],
     ]
+
+
+def test_inspector_scans_manifest_service_components_for_native_loads(tmp_path, monkeypatch):
+    apk = tmp_path / "service-native-loader.apk"
+    apk.write_bytes(b"placeholder")
+    commands = []
+    outputs = iter([
+        b"classes.dex\\n",
+        b"C d 2 3 80 com.example.SalamanderService\\nC d 1 1 30 com.example.OtherService\\n",
+        b".class public Lcom/example/SalamanderService;\\n.method public start()V\\n"
+        b'const-string v0, "salamander"\\n'
+        b"invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\\n"
+        b".end method\\n",
+        b".class public Lcom/example/OtherService;\\n.end class\\n",
+        b"classes.dex 100\\n",
+    ])
+
+    def fake_run(executable, args, timeout, limit, failure, timed_out, overflow):
+        commands.append(args[:-1])
+        return next(outputs)
+
+    monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
+    monkeypatch.setattr(apk_dex, "run_apkanalyzer", fake_run)
+    report = apk_dex.inspect_apk_dex(
+        apk,
+        package_name="com.example",
+        manifest_service_components=[
+            {"type": "service", "name": ".SalamanderService"},
+            {"type": "service", "name": ".OtherService"},
+        ],
+    )
+    assert report["manifest_service_component_classes"] == [
+        {
+            "manifest_name": ".SalamanderService",
+            "resolved_class_name": "com.example.SalamanderService",
+            "defined_in_dex": True,
+            "native_method_count": 0,
+            "native_library_loads": ["salamander"],
+            "inspection_completed": True,
+        },
+        {
+            "manifest_name": ".OtherService",
+            "resolved_class_name": "com.example.OtherService",
+            "defined_in_dex": True,
+            "native_method_count": 0,
+            "native_library_loads": [],
+            "inspection_completed": True,
+        },
+    ]
+    assert commands == [
+        ["dex", "list"],
+        ["dex", "packages", "--defined-only"],
+        ["dex", "code", "--class", "com.example.SalamanderService"],
+        ["dex", "code", "--class", "com.example.OtherService"],
+        ["dex", "references"],
+    ]
+
+
+def test_inspector_rejects_excessive_or_invalid_manifest_service_components(tmp_path, monkeypatch):
+    apk = tmp_path / "invalid-components.apk"
+    apk.write_bytes(b"placeholder")
+    monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
+    with pytest.raises(ValueError, match="too many service components"):
+        apk_dex.inspect_apk_dex(
+            apk,
+            manifest_service_components=[
+                {"type": "service", "name": f".S{i}"}
+                for i in range(apk_dex._MAX_MANIFEST_SERVICE_COMPONENTS + 1)
+            ],
+        )
+    with pytest.raises(ValueError, match="metadata is invalid"):
+        apk_dex.inspect_apk_dex(
+            apk, manifest_service_components=[{"type": "activity", "name": ".Main"}]
+        )

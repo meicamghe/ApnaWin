@@ -79,6 +79,9 @@ def inspect_apk_report(
         manifest_services=manifest["vpn_services"],
         package_name=manifest["package_name"],
         manifest_application_class=manifest["application_class"],
+        manifest_service_components=[
+            item for item in manifest["components"] if item["type"] == "service"
+        ],
     )
     if inventory["dex_file_count"] != dex["dex_file_count"]:
         raise ValueError("APK inventory and Android SDK disagree on DEX file count")

@@ -128,6 +128,7 @@ def test_combined_report_correlates_evidence_and_summarizes_abis():
         manifest_services=[".TunnelService"],
         package_name="org.example.app",
         manifest_application_class=".ApnaApplication",
+        manifest_service_components=[{"type": "service", "name": ".TunnelService"}],
     )
     assert report["native"]["library_count"] == 3
     assert report["native"]["abi_library_counts"] == {

@@ -34,12 +34,12 @@ The recovery worksheet is therefore:
 ### Safe analysis sequence
 
 1. Inspect ELF program headers, dynamic symbols, relocations, Go build metadata and all exported symbols; record exact tool versions and hashes.
-2. Extract the manifest `application android:name` and inspect that exact defined DEX class for literal `System.loadLibrary` and `Runtime.load` arguments. The combined APK report now wires this field into DEX analysis. This remains a narrow entrypoint: it does not scan every class or discover reflection, dynamic strings, `dlopen`, JNI registration, or process launches. Search DEX references to those paths and service launch extras/Binder calls separately; do not assume the filename is the library's load name.
+2. Extract the manifest `application android:name` and every declared service class, then inspect those exact defined DEX classes for native method declarations and literal `System.loadLibrary`/`Runtime.load` arguments. The combined APK report wires both component lists into DEX analysis with a 128-service bound and class-code caching. This remains a targeted scan: it does not discover reflection, dynamic strings, `dlopen`, JNI registration, or process launches. Search DEX references to those paths and service launch extras/Binder calls separately; do not assume the filename is the library's load name.
 3. Correlate service lifecycle events with library load and socket creation using an authorized test device and redacted logs.
 4. Capture only metadata and protocol boundaries: argument types/lengths, socket endpoints, SSH banner/key-exchange milestones, listener lifecycle and exit codes. Never collect passwords, private keys, session tokens or decrypted private payloads.
 5. Compare the observed behavior with ApnaWin's Paramiko implementation and add compatibility tests for confirmed semantics only.
 
-The report exposes the resolved application class, whether it is defined in DEX, and only literal native-library load arguments found in that class. It does not establish which service owns a loaded library. Static string extraction alone cannot answer the input/output question. If no JNI or dynamic loader call is found, investigate whether the library is launched as a process or loaded by a protected component rather than inventing an ABI.
+The report exposes each declared service's resolved class, whether it is defined in DEX, its native-method count, and literal native-library load arguments found in that service class; the Application class is reported separately. A service declaring or loading a library is stronger static evidence, but does not by itself prove runtime ownership or invocation. Static string extraction alone cannot answer the input/output question. If no JNI or dynamic loader call is found, investigate whether the library is launched as a process or loaded by a protected component rather than inventing an ABI.
 
 ## 3. `libudpqtwo.so`: role and Android service ownership
 
