@@ -80,7 +80,7 @@ def inspect_apk_report(
         package_name=manifest["package_name"],
         manifest_application_class=manifest["application_class"],
         manifest_service_components=[
-            item for item in manifest["components"] if item["type"] == "service"
+            item for item in manifest.get("components", []) if item["type"] == "service"
         ],
     )
     if inventory["dex_file_count"] != dex["dex_file_count"]:

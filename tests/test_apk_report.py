@@ -85,7 +85,7 @@ def _report_fixtures(dex_count=2):
             {"abi": "x86_64", "library_name": "libordinary2.so", "file_size_bytes": 30},
         ],
     }
-    manifest = {"package_name": "org.example.app", "application_class": ".ApnaApplication", "vpn_services": [".TunnelService"]}
+    manifest = {"package_name": "org.example.app", "application_class": ".ApnaApplication", "vpn_services": [".TunnelService"], "components": [{"type": "service", "name": ".TunnelService"}]}
     dex = {
         "dex_file_count": dex_count,
         "manifest_service_classes": [

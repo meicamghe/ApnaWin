@@ -405,14 +405,14 @@ def test_inspector_scans_manifest_service_components_for_native_loads(tmp_path, 
     apk.write_bytes(b"placeholder")
     commands = []
     outputs = iter([
-        b"classes.dex\\n",
-        b"C d 2 3 80 com.example.SalamanderService\\nC d 1 1 30 com.example.OtherService\\n",
-        b".class public Lcom/example/SalamanderService;\\n.method public start()V\\n"
-        b'const-string v0, "salamander"\\n'
-        b"invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\\n"
-        b".end method\\n",
-        b".class public Lcom/example/OtherService;\\n.end class\\n",
-        b"classes.dex 100\\n",
+        b"classes.dex\n",
+        b"C d 2 3 80 com.example.SalamanderService\nC d 1 1 30 com.example.OtherService\n",
+        b".class public Lcom/example/SalamanderService;\n.method public start()V\n"
+        b'const-string v0, "salamander"\n'
+        b"invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        b".end method\n",
+        b".class public Lcom/example/OtherService;\n.end class\n",
+        b"classes.dex 100\n",
     ])
 
     def fake_run(executable, args, timeout, limit, failure, timed_out, overflow):
