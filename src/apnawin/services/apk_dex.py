@@ -199,14 +199,19 @@ def _parse_native_library_loads(output: str) -> list[str]:
         invoke_match = invoke_pattern.match(line)
         if invoke_match:
             operands = [item.strip() for item in invoke_match.group(1).split(",")]
-            target = line.split("->", 1)[1] if "->" in line else ""
+            owner, separator, target = line.partition("->")
+            owner = owner.strip().rsplit(",", 1)[-1].strip() if separator else ""
             argument_register = None
-            if target.startswith("loadLibrary(Ljava/lang/String;)V") or target.startswith(
+            if owner == "Ljava/lang/System;" and target.startswith(
+                "loadLibrary(Ljava/lang/String;)V"
+            ):
+                if operands:
+                    argument_register = operands[0]
+            elif owner == "Ljava/lang/Runtime;" and target.startswith(
                 "load(Ljava/lang/String;)V"
             ):
-                argument_index = 1 if "Ljava/lang/Runtime;" in line else 0
-                if len(operands) > argument_index:
-                    argument_register = operands[argument_index]
+                if len(operands) > 1:
+                    argument_register = operands[1]
             if argument_register in registers:
                 value = registers[argument_register]
                 if target.startswith("loadLibrary("):
