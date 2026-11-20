@@ -64,6 +64,37 @@ def _native_engine_candidates(libraries: list[dict[str, Any]]) -> list[dict[str,
     return candidates
 
 
+def _loaded_library_filename(argument: str) -> str | None:
+    """Resolve only literal System.loadLibrary names or absolute .so basenames."""
+    if not isinstance(argument, str) or not argument or len(argument) > 512:
+        return None
+    if "/" in argument:
+        name = argument.rsplit("/", 1)[-1]
+        return name if name.startswith("lib") and name.endswith(".so") else None
+    if all(char.isalnum() or char in "._+-" for char in argument):
+        return "lib" + argument + ".so"
+    return None
+
+
+def _native_load_correlations(dex: dict[str, Any], libraries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Correlate literal DEX loads with exact APK filenames; not proof of runtime use."""
+    owners = []
+    app = dex.get("manifest_application_class") or {}
+    if app.get("resolved_class_name"):
+        owners.append(("application", None, app["resolved_class_name"], app.get("native_library_loads", [])))
+    for service in dex.get("manifest_service_component_classes", []):
+        owners.append(("service", service.get("manifest_name"), service.get("resolved_class_name"), service.get("native_library_loads", [])))
+    output = []
+    for owner_type, manifest_name, class_name, loads in owners:
+        rows = []
+        for argument in loads:
+            expected = _loaded_library_filename(argument)
+            abis = sorted({item["abi"] for item in libraries if expected and item["library_name"] == expected})
+            rows.append({"loader_argument": argument, "expected_library_name": expected, "matching_abis": abis,
+                "match_status": "filename_match" if abis else "not_found", "evidence_limit": "exact_filename_only"})
+        output.append({"owner_type": owner_type, "manifest_name": manifest_name, "resolved_class_name": class_name, "loads": rows})
+    return output
+
 def inspect_apk_report(
     apk_path: str | Path,
     executable: str = "apkanalyzer",
@@ -127,6 +158,9 @@ def inspect_apk_report(
                 for engine, counts in sorted(engine_candidate_abi_counts.items())
             },
             "elf_analysis": elf_analysis,
+            "native_load_correlations": _native_load_correlations(
+                dex, inventory["native_libraries"]
+            ),
             "windows_binary_reuse_verified": False,
         },
         "interpretation": {
