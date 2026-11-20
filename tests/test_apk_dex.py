@@ -516,8 +516,8 @@ def test_parse_native_library_loads_covers_all_exact_jvm_loader_entrypoints():
     [
         "invoke-virtual {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V",
         "invoke-static {v0, v1}, Ljava/lang/Runtime;->loadLibrary(Ljava/lang/String;)V",
-        "invoke-static {v0}, Ljava/lang/System;->load(Ljava/lang/String;)V",
-        "invoke-virtual {v0, v1}, Ljava/lang/Runtime;->load(Ljava/lang/String;)V",
+        "invoke-virtual {v0}, Ljava/lang/System;->load(Ljava/lang/String;)V",
+        "invoke-static {v0, v1}, Ljava/lang/Runtime;->load(Ljava/lang/String;)V",
     ],
 )
 def test_parse_native_library_loads_rejects_wrong_invocation_kind(invocation):
