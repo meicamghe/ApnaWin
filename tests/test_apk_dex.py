@@ -478,11 +478,9 @@ def test_inspector_rejects_excessive_or_invalid_manifest_service_components(tmp_
 def test_parse_native_library_loads_requires_exact_jvm_loader_owner():
     output = (
         ".method public static load()V\n"
-        '    const-string v0, "decoy-system"
-'
+        '    const-string v0, "decoy-system"\n'
         "    invoke-static {v0}, Lcom/example/Loader;->loadLibrary(Ljava/lang/String;)V\n"
-        '    const-string v1, "decoy-runtime"
-'
+        '    const-string v1, "decoy-runtime"\n'
         "    invoke-virtual {v2, v1}, Lcom/example/Loader;->load(Ljava/lang/String;)V\n"
         '    const-string v3, "real-library"\n'
         "    invoke-static {v3}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
