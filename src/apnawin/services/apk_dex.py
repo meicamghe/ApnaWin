@@ -238,7 +238,7 @@ def _parse_native_library_loads(output: str) -> list[str]:
                     if re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", value):
                         libraries.add(value)
                 elif load_kind == "path":
-                    match = re.search(r"(?:^|[/\\\\])(lib[A-Za-z0-9_.-]+\\.so)$", value)
+                    match = re.search(r"(?:^|[/\\])(lib[A-Za-z0-9_.-]+\.so)$", value)
                     if match:
                         libraries.add(match.group(1))
             continue
