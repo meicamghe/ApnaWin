@@ -119,3 +119,8 @@ Release remains blocked until these tests pass. Current GitHub CI validates code
 3. Validate the current SSH category allow-list against redacted server/payload pairs and runtime selection observations.
 4. Implement only confirmed adapters; keep Xray share-link support separate from APNA catalog conversion.
 5. Execute the Windows acceptance plan and keep the release gate closed until evidence is attached.
+
+
+### Static DEX loader-to-APK filename correlation
+
+The combined report joins literal System.loadLibrary arguments and absolute Runtime.load library basenames from manifest Application/Service classes to exact native-library basenames in the same APK. Each row reports matching ABI directories and labels the evidence exact_filename_only. Missing filenames are reported as not_found, not inferred from engine-name substrings. This join does not prove that the loader executes, that the library initializes successfully, or that the service owns its runtime. JNI_OnLoad exports and native-method declarations remain separate evidence; dynamic JNI registration, reflection, process launches and protected loaders require additional analysis.
