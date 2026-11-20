@@ -487,3 +487,44 @@ def test_parse_native_library_loads_requires_exact_jvm_loader_owner():
         ".end method\n"
     )
     assert apk_dex._parse_native_library_loads(output) == ["real-library"]
+
+
+
+def test_parse_native_library_loads_covers_all_exact_jvm_loader_entrypoints():
+    output = (
+        ".method public static load()V\\n"
+        '    const-string v0, "system-library"\\n'
+        "    invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\\n"
+        '    const-string v1, "/data/app/lib/libsystem_path.so"\\n'
+        "    invoke-static {v1}, Ljava/lang/System;->load(Ljava/lang/String;)V\\n"
+        '    const-string v2, "runtime-library"\\n'
+        "    invoke-virtual {v3, v2}, Ljava/lang/Runtime;->loadLibrary(Ljava/lang/String;)V\\n"
+        '    const-string v4, "/data/app/lib/libruntime_path.so"\\n'
+        "    invoke-virtual {v3, v4}, Ljava/lang/Runtime;->load(Ljava/lang/String;)V\\n"
+        ".end method\\n"
+    )
+    assert apk_dex._parse_native_library_loads(output) == [
+        "libsystem_path.so",
+        "libruntime_path.so",
+        "runtime-library",
+        "system-library",
+    ]
+
+
+@pytest.mark.parametrize(
+    "invocation",
+    [
+        "invoke-virtual {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V",
+        "invoke-static {v0, v1}, Ljava/lang/Runtime;->loadLibrary(Ljava/lang/String;)V",
+        "invoke-static {v0}, Ljava/lang/System;->load(Ljava/lang/String;)V",
+        "invoke-virtual {v0, v1}, Ljava/lang/Runtime;->load(Ljava/lang/String;)V",
+    ],
+)
+def test_parse_native_library_loads_rejects_wrong_invocation_kind(invocation):
+    output = (
+        ".method public static load()V\\n"
+        '    const-string v0, "decoy-library"\\n'
+        f"    {invocation}\\n"
+        ".end method\\n"
+    )
+    assert apk_dex._parse_native_library_loads(output) == []

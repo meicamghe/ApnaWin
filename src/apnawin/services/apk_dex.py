@@ -199,26 +199,46 @@ def _parse_native_library_loads(output: str) -> list[str]:
         invoke_match = invoke_pattern.match(line)
         if invoke_match:
             operands = [item.strip() for item in invoke_match.group(1).split(",")]
+            invocation = line.lstrip().split(None, 1)[0]
             owner, separator, target = line.partition("->")
             owner = owner.strip().rsplit(",", 1)[-1].strip() if separator else ""
             argument_register = None
-            if owner == "Ljava/lang/System;" and target.startswith(
-                "loadLibrary(Ljava/lang/String;)V"
+            load_kind = None
+            if (
+                owner == "Ljava/lang/System;"
+                and invocation.startswith("invoke-static")
+                and target.startswith("loadLibrary(Ljava/lang/String;)V")
             ):
                 if operands:
-                    argument_register = operands[0]
-            elif owner == "Ljava/lang/Runtime;" and target.startswith(
-                "load(Ljava/lang/String;)V"
+                    argument_register, load_kind = operands[0], "library"
+            elif (
+                owner == "Ljava/lang/System;"
+                and invocation.startswith("invoke-static")
+                and target.startswith("load(Ljava/lang/String;)V")
+            ):
+                if operands:
+                    argument_register, load_kind = operands[0], "path"
+            elif (
+                owner == "Ljava/lang/Runtime;"
+                and invocation.startswith("invoke-virtual")
+                and target.startswith("loadLibrary(Ljava/lang/String;)V")
             ):
                 if len(operands) > 1:
-                    argument_register = operands[1]
+                    argument_register, load_kind = operands[1], "library"
+            elif (
+                owner == "Ljava/lang/Runtime;"
+                and invocation.startswith("invoke-virtual")
+                and target.startswith("load(Ljava/lang/String;)V")
+            ):
+                if len(operands) > 1:
+                    argument_register, load_kind = operands[1], "path"
             if argument_register in registers:
                 value = registers[argument_register]
-                if target.startswith("loadLibrary("):
+                if load_kind == "library":
                     if re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", value):
                         libraries.add(value)
-                elif target.startswith("load("):
-                    match = re.search(r"(?:^|[/\\])(lib[A-Za-z0-9_.-]+\.so)$", value)
+                elif load_kind == "path":
+                    match = re.search(r"(?:^|[/\\\\])(lib[A-Za-z0-9_.-]+\\.so)$", value)
                     if match:
                         libraries.add(match.group(1))
             continue
