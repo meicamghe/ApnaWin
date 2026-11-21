@@ -1,16 +1,120 @@
+# Current active state — 2026-11-18
+
+**Repository:** `meicamghe/ApnaWin`  
+**Branch:** `vpn/dual-stack-egress-readiness`  
+**PR:** [#6](https://github.com/meicamghe/ApnaWin/pull/6), open Draft, not merged.  
+**Latest observed HEAD:** `851e6ca17212fa01b904c910360c17f84ea005f1` (subsequent documentation commits may advance this).
+
+## Acceptance target
+
+A real Windows 10/11 connection to APNA TUNNEL LITE (`com.apnatunnel.lite`): independently verified SSH host key, successful authentication, SSH-carried UDPGW, and routed TCP/UDP/DNS traffic through Xray/Wintun. Unit tests, mocked sockets, package builds and catalog decoding do not prove provider connectivity.
+
+## Current implementation
+
+- **APNA catalog:** bounded Base64/modified-XXTEA decoder, APK asset import, live HTTPS catalog fetch with observed Android request headers, bounded retries and range-resume handling. Catalog fetching is lower priority than transport reliability; manual APK import remains available.
+- **APNA profile mapping:** only the verified SSH-family categories `ocsws`, `ocscf`, `ocsnormal`, and `ocshttp` are mapped. Unsupported category names are not guessed into Xray, Trojan, Shadowsocks or UDP protocols.
+- **Payload:** ordered placeholder substitution, ISO-8859-1 encoding, Java split semantics, instant/delayed split handling, and HTTP 200/101 handling for Upgrade payloads.
+- **SSH:** direct/TLS/HTTP payload socket connector, Paramiko authentication, strict known-hosts rejection or explicit SHA-256 host-key pinning, loopback-only SOCKS5 TCP forwarding, and stage-specific diagnostics.
+- **SSH relay lifecycle:** reconnect-after-close is supported. A TCP half-close now propagates FIN to the remote SSH channel while continuing to drain the remote response; a regression test covers this behavior.
+- **UDP:** BadVPN-compatible PacketProto/UDPGW framing and flow tracking, carried over SSH `direct-tcpip`, exposed through local SOCKS5 UDP ASSOCIATE. UDPGW preflight is performed through the authenticated SSH SOCKS endpoint.
+- **APNA TUN:** `ApnaTunnelEngine` routes the local SOCKS5/UDPGW gateway through a strict dual-stack Xray TUN on Wintun. Startup requires UDP DNS plus certificate-validated IPv4 and IPv6 TLS egress checks; failed startup rolls back resources and preserves ownership if cleanup cannot be confirmed.
+- **Other protocols:** the desktop engine registry currently registers APNA SSH and Xray. The Xray importer supports VLESS, VMess, Trojan and Shadowsocks share links using Xray-core. These are protocol outbounds inside the Xray engine, not independent engine executables. OpenVPN and standalone SOCKS enum values do not yet have production engine registrations.
+- **Windows packaging:** x64 portable app build, helper/runtime security checks, smoke test and BadVPN native build are automated. The BadVPN artifact is research-only and not integrated because its upstream Windows TUN backend targets TAP-Windows, not the product's Wintun path.
+
+## Latest CI findings and work
+
+- Windows run [44275436929](https://github.com/meicamghe/ApnaWin/actions/runs/44275436929) on `64a41d7`: Ruff, packaging, installer/runtime security and VPN readiness/egress jobs passed; unit/integration had **1 test failure, 1226 passed, 1 skipped**. The sole failure was an incorrect test assertion that expected the peer end of a socketpair to be closed by the SSH session. The test now checks the owned endpoint.
+- BadVPN build [44275436880](https://github.com/meicamghe/ApnaWin/actions/runs/44275436880) on `64a41d7` succeeded.
+- Added a regression test and implementation fix for SSH TCP half-close response handling.
+- Latest full Windows test/build and BadVPN workflows for `851e6ca` were in progress at the time of this handoff; check their current status before claiming success.
+- The README and this handoff are being synchronized with the current implementation and its support boundary.
+
+## Release gates still open
+
+1. Verify a live APNA SSH host key against an independent provider-controlled source.
+2. Authenticate to an authorized APNA server.
+3. Verify a real UDPGW datagram round-trip and routed TCP, UDP and DNS traffic over that server on Windows 10/11.
+4. Verify IPv4/IPv6 egress, DNS leak behavior, disconnect and crash cleanup on clean Windows hosts.
+5. Confirm final Windows x64 package integrity from a successful current-head CI run.
+
+Keep PR #6 Draft and unmerged. Never claim APNA connectivity from mocked tests, a green CI suite, a live catalog fetch, or a successful package build.
+
+---
+
+## Historical handoff archive (older snapshots; superseded by the current state above)
+
+## User acceptance target
+
+A real Windows 10/11 connection to APNA TUNNEL LITE (`com.apnatunnel.lite`) with SSH host-key verification, successful authentication, and routed TCP/UDP/DNS traffic. Unit tests, mocked sockets, package builds and catalog decoding are not proof of provider connectivity. Do not call the build ready until this passes.
+
+## Current implementation inventory
+
+- Catalog: bounded Base64/modified-XXTEA decoder and APK asset reader; discovery-only live updater source. The supplied APK's actual `assets/janur.json` decodes to Version 580, 44 free servers and 623 payloads. No credentials were printed or added to fixtures.
+- Profile import: Windows UI imports an APNA APK, lists supported SSH-category server/payload pairs, probes SSH host keys without authentication, and stores selected credentials/settings under current-user DPAPI. The UI dispatches `APNA_SSH` profiles to `ApnaTunnelEngine`.
+- SSH: payload compiler, direct/TLS/HTTP payload socket connector, Paramiko authentication with known-hosts or explicit SHA-256 pin, and loopback-only SOCKS5 TCP forwarding.
+- UDP: BadVPN-compatible PacketProto/UDPGW codec, flow-ID/LRU manager, SSH-carried UDPGW stream, and loopback SOCKS5 UDP ASSOCIATE gateway.
+- TUN: `ApnaTunnelEngine` starts the SSH/UDPGW session, generates a strict dual-stack Xray TUN config whose only outbound is the loopback SOCKS5 gateway, starts the elevated Xray/Wintun supervisor, and performs UDP DNS egress probing before reporting connected.
+- Native research: pinned BadVPN Windows x64 build workflow has passed in prior run [43887319339](https://github.com/meicamghe/ApnaWin/actions/runs/43887319339). This build uses TAP-Windows and is not wired into the product; Xray/Wintun remains the product TUN path.
+- Payload compatibility: APNA primary DEX confirms ordered placeholder substitution, ISO-8859-1, `[instant_split]`, `[delay_split]`, and exactly 1000 ms delay. The related Android injector accepts HTTP 200 and does not reject 101 Upgrade; mapper now allows both for Upgrade payloads while requiring 200 for ordinary HTTP payloads.
+
+## Verified APK and reverse-engineering boundary
+
+- Base APK SHA-256: `b1f650b168665b0728b1be0e25a0c722cd77ec873e1a1c7e2711a78aa1012a6d`.
+- No ELF/.so entry is embedded in base.apk; an ABI split/native-library extraction is still needed.
+- `assets/.bxdtcxfzx.dex` is a LIAPP stub: declared DEX file size 428 bytes, one `com.liapp` loader class, with 98,907 appended protected bytes. `assets/LIAPP.ini` identifies LIAPP 5.1.1.190. The protected `SalamanderService` implementation is not recoverable from the ordinary visible DEX inventory without the LIAPP runtime/decryption path.
+- Actual embedded catalog snapshot has four SSH-compatible categories: `ocsws` (8 servers/469 payloads), `ocscf` (2/118), `ocsnormal` (2/1), `ocshttp` (4/1). Its server records in those categories contain `server_port=1194`, `ssl_port=443`, `server_udp_port=53`; these are snapshot values only.
+- The runtime mapping of all catalog fields and exact protected service behavior is not fully verified. The profile mapper is a working hypothesis constrained to observed catalog fields; do not treat every method/category as provider-certified.
+
+## Actual connectivity status and next gates
+
+No real APNA SSH authentication, UDPGW session, or Windows application traffic has yet been demonstrated. The current container cannot resolve the embedded APNA hostnames (temporary DNS resolver failure), so it cannot perform live endpoint checks from this environment.
+
+1. Obtain a usable live network path for DNS/TCP checks against a selected embedded APNA SSH endpoint; then run the host-key probe and compare the fingerprint with an independent provider source.
+2. Attempt real SSH authentication using the APK-provided public catalog credentials only through the encrypted local profile flow; capture redacted handshake/auth result.
+3. Verify the UDPGW stream on the selected server/port and DNS query/response over that stream.
+4. Run the Windows x64 packaged app on a clean Windows 10/11 machine; verify Xray/Wintun TUN, IPv4/IPv6 TCP, UDP, DNS, disconnect and crash cleanup.
+5. Keep APNA Connect disabled or fail closed wherever endpoint identity, credentials, UDPGW or TUN readiness is not validated. Never infer success from a green test suite.
+
+
+## User acceptance target
+
+The only meaningful product milestone is a real Windows 10/11 connection to the user's target APNA TUNNEL LITE service (package `com.apnatunnel.lite`), with authenticated handshake and verified routed traffic. A successful build, UI, Xray smoke test, catalog decode, mocked network test or green unit suite does **not** establish APNA compatibility. Keep APNA Connect disabled until real authorized endpoints and credentials/profile configuration are validated end-to-end.
+
+## New APNA evidence and implementation since the older notes
+
+- Supplied base APK SHA-256: `b1f650b168665b0728b1be0e25a0c722cd77ec873e1a1c7e2711a78aa1012a6d`. Its primary DEX exposes Android VpnService/TUN, local SOCKS, SSH manager, XRay and SOCKS/HTTP service launch descriptors, and a separate UDPGW/DNS control path. The APK has no embedded ELF/.so entry; an ABI split or protected extraction path is still needed to inspect the exact native binary.
+- Exact public JNI package match: `org.uproxy.tun2socks.Tun2SocksJni`; the related uProxy source describes TCP via SOCKS and UDP via a separate UDPGW endpoint.
+- BadVPN UDPGW framing has been documented: 16-bit little-endian PacketProto frame length; 3-byte flags/connection-ID header; destination address and port; UDP payload. The client opens a SOCKS CONNECT stream to UDPGW; it is not SOCKS5 UDP ASSOCIATE. The inspected current CMake tree includes UDPGW client and Windows socket backends, but a real Windows build and UDPGW round-trip are still unverified.
+- The exact method-name cluster `formatCustomPayload`, `injectSplitPayload`, `injectSimpleSplit`, `parseRotate` appears in public sibling implementations. A closer SecondVPN source explicitly recognizes `[instant_split]` and implements immediate write/flush boundaries, while `[delay_split]` sleeps 1,000 ms between chunks and `[rotate=...]` advances round-robin. The 1-second default is sibling evidence, not yet proven from APNA's protected method body.
+- Added `src/apnawin/engines/apna_payload.py`: isolated APNA-observed placeholder expansion, strict ISO-8859-1 encoding, split chunk generation, injectable delay and per-profile rotation. Added `tests/test_apna_payload.py`. This is a tested protocol building block only; it is not yet wired to a real SSH engine.
+- New detailed evidence: `docs/apna-upstream-framework-comparison.md`, `docs/apna-lite-android-runtime-analysis.md`, `docs/apna-lite-integration-plan.md`, and `docs/apna-tunnel-lite-upstream-evidence.md`.
+
+## Immediate next engineering gates
+
+1. Recover all installed APNA split APKs and fingerprint the actual `libtun2socks` binary.
+2. Trace the protected APNA selection path: server category → payload → SSH/XRay/SOCKS/direct mode, including semicolon host pools and the meaning of `Pulled`, `sslws`, `sausage`, `query`, `dothost`, and certificate fields.
+3. Confirm APNA payload replacement order, `[protocol]` value, rotate state scope and delay timing from the protected method body or controlled traces.
+4. Build the SSH transport adapter and integrate the payload compiler; implement HTTP proxy/SSL/WS modes only when their actual catalog mapping is known.
+5. Build and test the Windows UDPGW client path, then connect the appropriate TUN-to-SOCKS/UDPGW forwarding runtime.
+6. Test with an authorized real APNA profile on Windows 10/11; verify handshake, IPv4, IPv6, DNS, reconnect and cleanup. Do not report connection success before this passes.
+
 # Session handoff
 
-## Current repository state
+## Current repository state — 2026-11-16
 
-The native Windows application shell, profile management, Xray process runner, Windows Job Object supervision, remote catalog schema/cache, refresh coordinator, bounded HTTPS transport and privacy-conscious APK inventory are implemented. Android APK inspection is static metadata analysis only; native Android `.so` files are not treated as Windows DLLs.
+The current Windows x64 branch is `vpn/integrated-tun-readiness-runtime`, HEAD `76503f2d927eefbf75500c50e0282747513bf68a`. Pull request [#4](https://github.com/meicamghe/ApnaWin/pull/4) is open and mergeable.
 
-The Connect button remains intentionally disabled because a verified Windows tunnel/TUN integration and authorized end-to-end server configuration are not available.
+The desktop Connect flow is wired to the fixed-path elevated Xray helper. Connect is enabled only for a validated encrypted XRAY TUN profile when the helper is installed under Program Files. The helper verifies the packaged Xray/Wintun hashes, validates the strict dual-stack TUN config, waits for the adapter, effective IPv4/IPv6 default routes and configured DNS, then requires an independent certificate-validated IPv4 TLS egress probe. Adapter/routes/DNS are monitored while connected; repeated unhealthy samples trigger Xray shutdown.
 
-## Latest CI verification
+**This is local tunnel-readiness integration, not release acceptance.** It does not establish APNA-provider compatibility, IPv6 application egress, DNS/IPv4/IPv6 leak resistance under failure, or cleanup after forced termination/reboot. Xray's WFP filters are process-owned; ApnaWin has no independent persistent kill switch. The journal/plan/transaction modules remain experimental injected-adapter infrastructure and are not in the production route/DNS path.
 
-Workflow [43714910902](https://github.com/meicamghe/ApnaWin/actions/runs/43714910902) passed on commit `b1012d9d7725247f2409fff6fe6cf6b7c39ac756`: 619 tests passed (one warning from a duplicate ZIP-entry fixture); Windows x64 PyInstaller folder build, packaged executable smoke test and portable artifact upload all succeeded. Artifact ID: `14161764950`.
+An authorized APNA Xray configuration/catalog/authentication source is still unavailable. Do not invent endpoints, credentials or protocol details. Do not claim a working APNA connection until a real authorized profile is tested on clean Windows 10/11 systems.
 
-CI validates configured tests and packaging, not live VPN connectivity.
+## Latest CI and portable artifact
+
+Workflow [43819919964](https://github.com/meicamghe/ApnaWin/actions/runs/43819919964) (run 358) passed all 6 jobs on HEAD `76503f2d927eefbf75500c50e0282747513bf68a`: 903 passed, 1 skipped in the full unit/integration suite; VPN readiness/egress, installer/runtime security, Ruff, Windows x64 packaging and final artifact publication all succeeded.
+
+Published artifact: `ApnaWin-Windows-x64`, artifact ID `14204335649`, 76,806,229 bytes, SHA-256 `1b48b8b45a3faf57ef33fc9f0ae2c3ef498e26c3c1f210ff1b9f921f6ea0d513`. The ZIP contains the desktop executable, elevated helper, Xray, Wintun, runtime manifest, licenses and installer script. CI validates configured tests and packaging; it does not execute a real APNA tunnel or prove leak resistance.
 
 ## Windows network transaction
 
@@ -104,3 +208,26 @@ Added XrayTunnelSupervisor as the desktop-side lifecycle abstraction: XRAY-only,
 ## Latest verified Windows build (2026-11-15)
 
 CI run 43724914682 completed successfully: 848 tests passed, one skipped, and the Windows build, elevated helper build, pinned Xray/Wintun runtime installation, packaged-app smoke test and artifact upload all succeeded. Artifact ApnaWin-Windows-x64: ID 14165469958, 75,925,661 bytes, not expired. Commit 6410a2cf5b0b651dd48519bcdca299f246e64143 includes the desktop-side XrayTunnelSupervisor wrapper. The latest commit adds read-only adapter/route/DNS diagnostics. Connect remains disabled; no APNA endpoint/auth format has been established, and live route/DNS/WFP/e2e acceptance is still pending.
+
+## Integrated Windows VPN readiness work — awaiting CI
+
+A consolidated pull request (#4) now combines the active connection workstreams: strict TUN config import and proxy-only outbound policy; fixed-path UAC helper and Xray supervisor; runtime-manifest SHA-256 verification for Xray/Wintun; adapter ownership preflight; effective IPv4/IPv6 default-route metric checks; exact DNS readiness; independent external TLS egress probe; periodic adapter/route/DNS health monitoring; graceful shutdown on startup timeout or repeated health loss. The current PR head is tracked in GitHub pull request #4. Windows CI for the integrated branch is pending/queued; do not report it as passed until the run completes.
+
+The separate Python Wintun packet engine and route/DNS transaction path are not used: Xray native TUN owns those operations. The desktop Connect UI remains disabled until clean Windows 10/11 tests prove provider-specific traffic, DNS and IPv4/IPv6 leak behavior, WFP behavior, normal disconnect, helper/desktop crash and reboot cleanup. APNA's actual remote catalog/authentication schema and an authorized APNA Xray config remain unverified; do not fabricate them.
+
+
+## Current integrated desktop connection state — 2026-11-16
+
+- The main window now creates the production XrayTunnelEngine and ConnectionController on Windows only when the fixed elevated helper exists under Program Files. Connect is enabled only for an XRAY profile with a validated encrypted config; non-Windows and incomplete installations remain disabled.
+- Connect/Disconnect run in a Qt worker thread. The helper withholds its ready event until runtime hashes, TUN adapter, effective IPv4/IPv6 default routes, configured DNS and an independent certificate-validated TLS egress probe pass. The helper watches desktop/stop events and supervises Xray in a Job Object.
+- While connected, the helper rechecks adapter/routes/DNS every two seconds. This update adds periodic independent TLS egress checks every 15 seconds; three consecutive failed egress checks request graceful shutdown.
+- CI run 43812584700 (run 350) passed all five parallel validation tracks and published the portable artifact. This is component/CI validation, not a live APNA provider acceptance test.
+- APNA server catalog endpoint, authentication, response schema and an authorized APNA Xray config remain unverified. Do not claim APNA compatibility or fabricate endpoints. Live tests must still cover provider-specific traffic, DNS and IPv4/IPv6 leaks, WFP behavior, clean disconnect, helper/desktop crash and reboot cleanup.
+
+
+
+## UDP DNS readiness validation — 2026-11-18
+
+The APNA full-tunnel startup path runs a UDP DNS probe after Xray/Wintun has installed the TUN routes and before the engine reports CONNECTED. The probe uses the configured resolver IP literals, verifies the response source and transaction ID, requires an exact matching question and NOERROR response, and now parses every declared answer record to reject truncated or malformed DNS packets. Configured IPv4 and IPv6 resolver families must each pass. Regression coverage includes malformed compression pointers, truncated RDATA, invalid flags, wrong questions, duplicate resolvers, timeout validation and IPv6 failure.
+
+This remains automated protocol validation, not a substitute for provider-side Windows acceptance. Validate actual DNS and leak behavior on clean Windows 10/11 hosts before changing PR #6 from Draft.

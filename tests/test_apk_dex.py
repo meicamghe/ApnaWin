@@ -330,3 +330,231 @@ def test_missing_service_class_has_no_native_method_claim(tmp_path, monkeypatch)
     assert item["native_method_count"] is None
     assert item["native_method_inspection_completed"] is False
 
+
+
+def test_parse_native_library_loads_finds_literal_system_and_runtime_loads():
+    output = (
+        ".class public Lcom/example/Loader;\n"
+        ".method public static load()V\n"
+        '    const-string v0, "salamander"\n'
+        "    invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        '    const-string v1, "/data/app/lib/libudpqtwo.so"\n'
+        "    invoke-virtual {v2, v1}, Ljava/lang/Runtime;->load(Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    assert apk_dex._parse_native_library_loads(output) == [
+        "libudpqtwo.so", "salamander"
+    ]
+
+
+def test_parse_native_library_loads_ignores_unrelated_strings_and_dynamic_values():
+    output = (
+        ".method public static load()V\n"
+        '    const-string v0, "not-a-library"\n'
+        "    invoke-static {v0}, Ljava/lang/System;->currentTimeMillis()J\n"
+        "    invoke-static {v1}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    assert apk_dex._parse_native_library_loads(output) == []
+
+
+def test_inspector_scans_manifest_application_class_for_native_loads(tmp_path, monkeypatch):
+    apk = tmp_path / "application-loader.apk"
+    apk.write_bytes(b"placeholder")
+    commands = []
+    outputs = iter([
+        b"classes.dex\n",
+        b"C d 2 3 80 com.example.Loader\nC d 1 1 30 com.example.TunnelService\n",
+        b".class public Lcom/example/TunnelService;\n.end class\n",
+        b".class public Lcom/example/Loader;\n.method public load()V\n"
+        b'const-string v0, "salamander"\n'
+        b"invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        b".end method\n",
+        b"classes.dex 100\n",
+    ])
+
+    def fake_run(executable, args, timeout, limit, failure, timed_out, overflow):
+        commands.append(args[:-1])
+        return next(outputs)
+
+    monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
+    monkeypatch.setattr(apk_dex, "run_apkanalyzer", fake_run)
+    report = apk_dex.inspect_apk_dex(
+        apk,
+        manifest_services=[".TunnelService"],
+        package_name="com.example",
+        manifest_application_class=".Loader",
+    )
+    assert report["manifest_application_class"] == {
+        "resolved_class_name": "com.example.Loader",
+        "defined_in_dex": True,
+        "native_library_loads": ["salamander"],
+        "inspection_completed": True,
+    }
+    assert commands == [
+        ["dex", "list"],
+        ["dex", "packages", "--defined-only"],
+        ["dex", "code", "--class", "com.example.TunnelService"],
+        ["dex", "code", "--class", "com.example.Loader"],
+        ["dex", "references"],
+    ]
+
+
+def test_inspector_scans_manifest_service_components_for_native_loads(tmp_path, monkeypatch):
+    apk = tmp_path / "service-native-loader.apk"
+    apk.write_bytes(b"placeholder")
+    commands = []
+    outputs = iter([
+        b"classes.dex\n",
+        b"C d 2 3 80 com.example.SalamanderService\nC d 1 1 30 com.example.OtherService\n",
+        b".class public Lcom/example/SalamanderService;\n.method public start()V\n"
+        b'const-string v0, "salamander"\n'
+        b"invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        b".end method\n",
+        b".class public Lcom/example/OtherService;\n.end class\n",
+        b"classes.dex 100\n",
+    ])
+
+    def fake_run(executable, args, timeout, limit, failure, timed_out, overflow):
+        commands.append(args[:-1])
+        return next(outputs)
+
+    monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
+    monkeypatch.setattr(apk_dex, "run_apkanalyzer", fake_run)
+    report = apk_dex.inspect_apk_dex(
+        apk,
+        package_name="com.example",
+        manifest_service_components=[
+            {"type": "service", "name": ".SalamanderService"},
+            {"type": "service", "name": ".OtherService"},
+        ],
+    )
+    assert report["manifest_service_component_classes"] == [
+        {
+            "manifest_name": ".SalamanderService",
+            "resolved_class_name": "com.example.SalamanderService",
+            "defined_in_dex": True,
+            "native_method_count": 0,
+            "native_library_loads": ["salamander"],
+            "inspection_completed": True,
+        },
+        {
+            "manifest_name": ".OtherService",
+            "resolved_class_name": "com.example.OtherService",
+            "defined_in_dex": True,
+            "native_method_count": 0,
+            "native_library_loads": [],
+            "inspection_completed": True,
+        },
+    ]
+    assert commands == [
+        ["dex", "list"],
+        ["dex", "packages", "--defined-only"],
+        ["dex", "code", "--class", "com.example.SalamanderService"],
+        ["dex", "code", "--class", "com.example.OtherService"],
+        ["dex", "references"],
+    ]
+
+
+def test_inspector_rejects_excessive_or_invalid_manifest_service_components(tmp_path, monkeypatch):
+    apk = tmp_path / "invalid-components.apk"
+    apk.write_bytes(b"placeholder")
+    monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
+    with pytest.raises(ValueError, match="too many service components"):
+        apk_dex.inspect_apk_dex(
+            apk,
+            manifest_service_components=[
+                {"type": "service", "name": f".S{i}"}
+                for i in range(apk_dex._MAX_MANIFEST_SERVICE_COMPONENTS + 1)
+            ],
+        )
+    with pytest.raises(ValueError, match="metadata is invalid"):
+        apk_dex.inspect_apk_dex(
+            apk, manifest_service_components=[{"type": "activity", "name": ".Main"}]
+        )
+
+
+
+def test_parse_native_library_loads_requires_exact_jvm_loader_owner():
+    output = (
+        ".method public static load()V\n"
+        '    const-string v0, "decoy-system"\n'
+        "    invoke-static {v0}, Lcom/example/Loader;->loadLibrary(Ljava/lang/String;)V\n"
+        '    const-string v1, "decoy-runtime"\n'
+        "    invoke-virtual {v2, v1}, Lcom/example/Loader;->load(Ljava/lang/String;)V\n"
+        '    const-string v3, "real-library"\n'
+        "    invoke-static {v3}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    assert apk_dex._parse_native_library_loads(output) == ["real-library"]
+
+
+
+def test_parse_native_library_loads_covers_all_exact_jvm_loader_entrypoints():
+    output = (
+        ".method public static load()V\n"
+        '    const-string v0, "system-library"\n'
+        "    invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        '    const-string v1, "/data/app/lib/libsystem_path.so"\n'
+        "    invoke-static {v1}, Ljava/lang/System;->load(Ljava/lang/String;)V\n"
+        '    const-string v2, "runtime-library"\n'
+        "    invoke-virtual {v3, v2}, Ljava/lang/Runtime;->loadLibrary(Ljava/lang/String;)V\n"
+        '    const-string v4, "/data/app/lib/libruntime_path.so"\n'
+        "    invoke-virtual {v3, v4}, Ljava/lang/Runtime;->load(Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    assert apk_dex._parse_native_library_loads(output) == [
+        "libruntime_path.so",
+        "libsystem_path.so",
+        "runtime-library",
+        "system-library",
+    ]
+
+
+@pytest.mark.parametrize(
+    "invocation",
+    [
+        "invoke-virtual {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V",
+        "invoke-static {v0, v1}, Ljava/lang/Runtime;->loadLibrary(Ljava/lang/String;)V",
+        "invoke-virtual {v0}, Ljava/lang/System;->load(Ljava/lang/String;)V",
+        "invoke-static {v0, v1}, Ljava/lang/Runtime;->load(Ljava/lang/String;)V",
+    ],
+)
+def test_parse_native_library_loads_rejects_wrong_invocation_kind(invocation):
+    output = (
+        ".method public static load()V\n"
+        '    const-string v0, "decoy-library"\n'
+        f"    {invocation}\n"
+        ".end method\n"
+    )
+    assert apk_dex._parse_native_library_loads(output) == []
+
+
+
+def test_parse_native_library_loads_supports_range_invocations():
+    output = (
+        ".method public static load()V\n"
+        '    const-string v0, "system-range-library"\n'
+        "    invoke-static/range {v0 .. v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        '    const-string v1, "/data/app/lib/libsystem_range_path.so"\n'
+        "    invoke-static/range {v1 .. v1}, Ljava/lang/System;->load(Ljava/lang/String;)V\n"
+        '    const-string v3, "runtime-range-library"\n'
+        "    invoke-virtual/range {v2 .. v3}, Ljava/lang/Runtime;->loadLibrary(Ljava/lang/String;)V\n"
+        '    const-string v5, "/data/app/lib/libruntime_range_path.so"\n'
+        "    invoke-virtual/range {v4 .. v5}, Ljava/lang/Runtime;->load(Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    assert apk_dex._parse_native_library_loads(output) == [
+        "libruntime_range_path.so",
+        "libsystem_range_path.so",
+        "runtime-range-library",
+        "system-range-library",
+    ]
+
+
+@pytest.mark.parametrize(
+    "operands",
+    ["v2 .. p3", "v4 .. v3", "v0 .. v255"],
+)
+def test_parse_invoke_registers_rejects_invalid_or_oversized_ranges(operands):
+    assert apk_dex._parse_invoke_registers(operands, is_range=True) == []

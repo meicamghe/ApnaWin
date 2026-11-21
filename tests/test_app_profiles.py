@@ -7,7 +7,7 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
-from apnawin.app import MainWindow
+from apnawin.app import ApnaCatalogImportDialog, MainWindow
 from apnawin.domain.profile import ConnectionProfile, Transport
 from apnawin.storage.profile_store import load_profiles, save_profiles
 
@@ -448,3 +448,469 @@ def test_import_profiles_dialog_cancellation_is_noop(tmp_path, qapp, monkeypatch
     assert window.profiles == [existing]
     assert destination.read_bytes() == original
     window.close()
+
+def test_connect_button_requires_live_controller_and_imported_xray_config(tmp_path, qapp):
+    from apnawin.domain.state import ConnectionState
+    from apnawin.domain.profile import ConnectionProfile, Transport
+    from apnawin.storage.profile_store import save_profiles
+
+    class ConfigStore:
+        path = tmp_path / "xray-configs.json"
+        def has_config(self, _name):
+            return True
+
+    class Controller:
+        state = ConnectionState.DISCONNECTED
+
+    profile = ConnectionProfile("Office", Transport.XRAY, "vpn.example.test", 443)
+    profiles_path = tmp_path / "profiles.json"
+    save_profiles(profiles_path, [profile])
+    window = MainWindow(
+        profiles_path=profiles_path,
+        xray_config_store=ConfigStore(),
+        connection_controller=Controller(),
+    )
+    assert window.connect_button.isEnabled() is True
+    assert window.disconnect_button.isEnabled() is False
+    window.close()
+
+
+
+def test_close_requested_during_connect_disconnects_after_worker_finishes(
+    tmp_path, qapp
+):
+    from apnawin.domain.state import ConnectionState
+
+    class Controller:
+        state = ConnectionState.CONNECTED
+
+    window = MainWindow(
+        profiles_path=tmp_path / "profiles.json",
+        connection_controller=Controller(),
+    )
+    requested = []
+    window._close_after_disconnect = True
+    window._disconnect_tunnel = lambda: requested.append("disconnect")
+
+    window._connection_worker_finished()
+
+    assert requested == ["disconnect"]
+    assert window._close_after_disconnect is True
+    window._connection_timer.stop()
+
+
+
+def test_failed_disconnect_does_not_retry_forever_on_window_close(
+    tmp_path, qapp
+):
+    from apnawin.domain.state import ConnectionState
+
+    class Controller:
+        state = ConnectionState.ERROR
+
+    class FinishedWorker:
+        action = "disconnect"
+
+        def deleteLater(self):
+            pass
+
+    window = MainWindow(
+        profiles_path=tmp_path / "profiles.json",
+        connection_controller=Controller(),
+    )
+    attempts = []
+    window._connection_worker = FinishedWorker()
+    window._close_after_disconnect = True
+    window._disconnect_tunnel = lambda: attempts.append("disconnect")
+
+    window._connection_worker_finished()
+
+    assert attempts == []
+    assert window._close_after_disconnect is False
+    assert window._connection_worker is None
+    window._connection_timer.stop()
+
+
+def test_live_apna_catalog_button_is_present_and_windows_gated(tmp_path, qapp):
+    window = MainWindow(profiles_path=tmp_path / "profiles.json")
+
+    assert window.import_apna_live_button.isEnabled() is (os.name == "nt")
+    window.close()
+
+
+def test_live_catalog_worker_returns_catalog_without_writing_plaintext(monkeypatch, qapp):
+    import apnawin.app as app_module
+
+    class FakeSource:
+        def __init__(self, **kwargs):
+            assert kwargs["timeout_seconds"] == 3.0
+            assert kwargs["retry_attempts"] == 2
+            assert callable(kwargs["progress_callback"])
+            assert kwargs["cancel_event"].is_set() is False
+            self.progress_callback = kwargs["progress_callback"]
+
+        def fetch_document(self):
+            self.progress_callback(128, 512)
+            return {"Version": "synthetic", "Free_servers": [], "Payloads": []}
+
+    monkeypatch.setattr(app_module, "ApnaLiteCatalogSource", FakeSource)
+    worker = app_module._ApnaCatalogFetchWorker()
+    worker.run()
+
+    assert worker.catalog["Version"] == "synthetic"
+    assert worker.error is None
+
+
+def test_apna_catalog_file_worker_decodes_raw_catalog_off_ui_thread(tmp_path, qapp, monkeypatch):
+    import apnawin.app as app_module
+
+    source = tmp_path / "servers.dat"
+    source.write_bytes(b"encrypted-fixture")
+    expected = {"Version": "synthetic", "Free_servers": [], "Payloads": []}
+    monkeypatch.setattr(app_module, "decode_apna_lite_catalog", lambda data: expected)
+    worker = app_module._ApnaCatalogFileWorker(str(source))
+    worker.run()
+
+    assert worker.catalog is expected
+    assert worker.error is None
+    assert worker.source_label == "downloaded catalog file"
+
+
+def test_apna_catalog_file_worker_reports_decode_error_without_changing_source(
+    tmp_path, qapp, monkeypatch
+):
+    import apnawin.app as app_module
+
+    source = tmp_path / "servers.dat"
+    original = b"invalid-encrypted-catalog"
+    source.write_bytes(original)
+
+    def fail_decode(_data):
+        raise ValueError("Invalid Base64 catalog")
+
+    monkeypatch.setattr(app_module, "decode_apna_lite_catalog", fail_decode)
+    worker = app_module._ApnaCatalogFileWorker(str(source))
+    worker.run()
+
+    assert worker.catalog is None
+    assert worker.error == "ValueError: Invalid Base64 catalog"
+    assert source.read_bytes() == original
+
+
+def test_live_catalog_worker_reports_only_exception_type_and_message(monkeypatch, qapp):
+    import apnawin.app as app_module
+
+    class FakeSource:
+        def __init__(self, **kwargs):
+            pass
+
+        def fetch_document(self):
+            raise OSError("temporary network failure")
+
+    monkeypatch.setattr(app_module, "ApnaLiteCatalogSource", FakeSource)
+    worker = app_module._ApnaCatalogFetchWorker()
+    worker.run()
+
+    assert worker.catalog is None
+    assert worker.error == "OSError: temporary network failure"
+
+
+def test_window_has_larger_server_list_and_host_key_verification_action(tmp_path, qapp):
+    window = MainWindow(profiles_path=tmp_path / "profiles.json")
+
+    assert window.width() >= 900
+    assert window.height() >= 650
+    assert window.profile_list.minimumHeight() >= 280
+    assert window.verify_apna_host_key_button.isEnabled() is False
+    window.close()
+
+
+
+def test_clear_all_profiles_requires_confirmation_and_persists_empty_list(tmp_path, qapp, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    import apnawin.app as app_module
+
+    profiles = [
+        ConnectionProfile("One", Transport.SOCKS, "localhost", 1080),
+        ConnectionProfile("Two", Transport.XRAY, "vpn.example.test", 443),
+    ]
+    path = tmp_path / "profiles.json"
+    save_profiles(path, profiles)
+    monkeypatch.setattr(
+        app_module.QMessageBox, "question",
+        lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes,
+    )
+    window = MainWindow(profiles_path=path)
+    window._clear_all_profiles()
+    assert window.profiles == []
+    assert window.profile_list.count() == 0
+    assert load_profiles(path) == []
+    assert window.clear_all_button.isEnabled() is False
+    window.close()
+
+
+def test_clear_all_profiles_uses_one_batch_cleanup_per_store(tmp_path, qapp, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    import apnawin.app as app_module
+
+    profiles = [
+        ConnectionProfile(f"Imported {index}", Transport.SOCKS, "localhost", 1080)
+        for index in range(250)
+    ]
+    path = tmp_path / "profiles.json"
+    save_profiles(path, profiles)
+    monkeypatch.setattr(
+        app_module.QMessageBox, "question",
+        lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes,
+    )
+    window = MainWindow(profiles_path=path)
+    calls = {"xray": [], "apna": []}
+    monkeypatch.setattr(
+        window.xray_config_store, "remove_many",
+        lambda names: calls["xray"].append(list(names)),
+    )
+    monkeypatch.setattr(
+        window.apna_profile_store, "remove_many",
+        lambda names: calls["apna"].append(list(names)),
+    )
+
+    window._clear_all_profiles()
+
+    expected_names = [profile.name for profile in profiles]
+    assert calls == {"xray": [expected_names], "apna": [expected_names]}
+    assert window.profiles == []
+    assert window.profile_list.count() == 0
+    window.close()
+
+
+def test_clear_all_profiles_cancel_preserves_profiles(tmp_path, qapp, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    import apnawin.app as app_module
+
+    profile = ConnectionProfile("Keep", Transport.SOCKS, "localhost", 1080)
+    path = tmp_path / "profiles.json"
+    save_profiles(path, [profile])
+    monkeypatch.setattr(
+        app_module.QMessageBox, "question",
+        lambda *_args, **_kwargs: QMessageBox.StandardButton.No,
+    )
+    window = MainWindow(profiles_path=path)
+    window._clear_all_profiles()
+    assert window.profiles == [profile]
+    assert load_profiles(path) == [profile]
+    window.close()
+
+
+def test_status_error_text_is_selectable(tmp_path, qapp):
+    window = MainWindow(profiles_path=tmp_path / "profiles.json")
+    flags = window.status_label.textInteractionFlags()
+    assert flags & Qt.TextInteractionFlag.TextSelectableByMouse
+    assert flags & Qt.TextInteractionFlag.TextSelectableByKeyboard
+    window.close()
+
+
+
+def test_apna_import_report_shows_all_tiers_even_when_no_ssh_profiles_exist(
+    tmp_path, qapp, monkeypatch
+):
+    import apnawin.app as app_module
+
+    captured = {}
+    monkeypatch.setattr(
+        app_module,
+        "show_copyable_error",
+        lambda _parent, title, message: captured.update(title=title, message=message),
+    )
+    window = MainWindow(profiles_path=tmp_path / "profiles.json")
+    catalog = {
+        "Free_servers": [
+            {"category": "ocsudp", "server_name": "UDP edge", "server_host": "udp.example.test"},
+            {"category": "ocsws", "server_name": "SSH edge", "server_host": "ssh.example.test"},
+        ],
+        "Premium_servers": [{"category": "trojan", "server_name": "Trojan edge"}],
+        "Vip_servers": [{"category": "vmess", "server_name": "VMess one"}, {"category": "vmess", "server_name": "VMess two"}],
+        "Private_servers": [{"category": "unknown", "server_name": "Private edge"}],
+        "Payloads": [],
+    }
+
+    window._import_apna_catalog(catalog, source_label="test catalog")
+    worker = window._catalog_import_worker
+    assert worker is not None
+    assert worker.wait(5000)
+    qapp.processEvents()
+
+    assert captured["title"] == "APNA catalog import report"
+    assert "Catalog total: 6 server records" in captured["message"]
+    assert "Free: 2 server records; 1 SSH-compatible" in captured["message"]
+    assert "Premium: 1 server records; 0 SSH-compatible" in captured["message"]
+    assert "VIP: 2 server records; 0 SSH-compatible" in captured["message"]
+    assert "Private: 1 server records; 0 SSH-compatible" in captured["message"]
+    assert "ocsudp=1, ocsws=1" in captured["message"]
+    assert "Complete server inventory" in captured["message"]
+    assert "UDP edge | udp.example.test" in captured["message"]
+    assert "Trojan edge" in captured["message"]
+    assert "Only SSH-compatible categories are currently importable" in captured["message"]
+    assert "SSH profile import unavailable" not in captured["message"]
+    assert window.profiles == []
+    window.close()
+
+
+
+def test_vpn_operation_failure_is_selectable_and_opens_copyable_diagnostics(
+    tmp_path, qapp, monkeypatch
+):
+    import apnawin.app as app_module
+
+    captured = {}
+    monkeypatch.setattr(
+        app_module,
+        "show_copyable_error",
+        lambda _parent, title, message: captured.update(title=title, message=message),
+    )
+    window = MainWindow(profiles_path=tmp_path / "profiles.json")
+    window._connection_operation_finished(
+        False,
+        "ApnaHostKeyProbeError: SSH host-key exchange failed: HTTP 301",
+    )
+    assert captured["title"] == "VPN operation failed"
+    assert "HTTP 301" in captured["message"]
+    assert "HTTP 301" in window.status_label.text()
+    flags = window.status_label.textInteractionFlags()
+    assert flags & Qt.TextInteractionFlag.TextSelectableByMouse
+    window.close()
+
+def test_all_import_paths_are_exposed_from_one_import_menu(tmp_path, qapp):
+    window = MainWindow(profiles_path=tmp_path / "profiles.json")
+
+    menu = window.import_button.menu()
+    assert menu is window.import_menu
+    action_texts = [action.text() for action in menu.actions()]
+    assert action_texts == [
+        "APNA encrypted catalog / APK…",
+        "Fetch live APNA catalog…",
+        "Open manual APNA catalog download…",
+        "Xray JSON (VLESS / VMess / Trojan / UDP-capable)…",
+        "Xray share link (VLESS / VMess / Trojan / Shadowsocks)…",
+    ]
+    assert window.import_xray_config_button.isHidden()
+    assert window.import_apna_apk_button.isHidden()
+    assert window.import_apna_live_button.isHidden()
+    assert window.import_xray_action.isEnabled() is False
+    assert window.import_xray_share_action.isEnabled() is True
+    assert window.import_apna_file_action.isEnabled() is (os.name == "nt")
+    assert window.import_apna_live_action.isEnabled() is (os.name == "nt")
+    assert window.download_apna_manual_action.isEnabled() is (os.name == "nt")
+    window.close()
+
+def test_cancel_live_fetch_requests_worker_cancellation(tmp_path, qapp):
+    class Worker:
+        def __init__(self):
+            self.cancelled = False
+        def isRunning(self):
+            return True
+        def cancel(self):
+            self.cancelled = True
+
+    window = MainWindow(profiles_path=tmp_path / "profiles.json")
+    worker = Worker()
+    window._catalog_worker = worker
+    window._cancel_live_apna_catalog()
+    assert worker.cancelled is True
+    assert window.cancel_catalog_button.isEnabled() is False
+    window._catalog_worker = None
+    window._connection_timer.stop()
+    window.close()
+
+
+def test_close_requested_during_apna_file_decode_closes_after_worker_finishes(
+    tmp_path, qapp, monkeypatch
+):
+    import apnawin.app as app_module
+
+    window = MainWindow(profiles_path=tmp_path / "profiles.json")
+    worker = app_module._ApnaCatalogFileWorker(str(tmp_path / "unused.dat"))
+    worker.catalog = {"Version": "synthetic"}
+    window._file_worker = worker
+    window._close_after_catalog_fetch = True
+    closed = []
+    monkeypatch.setattr(window, "close", lambda: closed.append(True))
+
+    window._apna_file_import_finished()
+
+    assert closed == [True]
+    assert window._close_after_catalog_fetch is False
+    assert window._file_worker is None
+    window._connection_timer.stop()
+
+
+
+
+def test_connection_worker_error_identifies_the_failing_profile():
+    from apnawin.app import _ConnectionWorker
+
+    class FailingController:
+        def connect(self, profile):
+            raise ConnectionError("TLS certificate verification failed")
+
+    profile = ConnectionProfile(
+        "Free · SSH profile 17", Transport.APNA_SSH, "ssh17.example.test", 443
+    )
+    worker = _ConnectionWorker(FailingController(), "connect", profile)
+    results = []
+    worker.operation_finished.connect(lambda success, detail: results.append((success, detail)))
+
+    worker.run()
+
+    assert len(results) == 1
+    success, detail = results[0]
+    assert success is False
+    assert "Profile: Free · SSH profile 17 (apna_ssh) at ssh17.example.test:443" in detail
+    assert "ConnectionError: TLS certificate verification failed" in detail
+
+
+
+def test_apna_import_dialog_passes_only_user_selected_ca_bundle(tmp_path, qapp, monkeypatch):
+    import apnawin.app as app_module
+
+    catalog = {
+        "Version": 1,
+        "Payloads": [
+            {
+                "category": "ocsws",
+                "friendly_name": "TLS payload",
+                "method": "http",
+                "sslws": "true",
+                "host": "front.example.test",
+                "port": "443",
+                "payload": "GET / HTTP/1.1[crlf]Host: [host][crlf][crlf]",
+                "sausage": "",
+            }
+        ],
+    }
+    server = {
+        "server_name": "Test SSH",
+        "category": "ocsws",
+        "server_host": "ssh.example.test",
+        "server_port": "1194",
+    }
+    ca_file = tmp_path / "provider-ca.pem"
+    ca_file.write_text("provider supplied CA placeholder", encoding="ascii")
+    monkeypatch.setattr(
+        app_module.QFileDialog,
+        "getOpenFileName",
+        lambda *_args, **_kwargs: (str(ca_file), "PEM"),
+    )
+    captured = {}
+    monkeypatch.setattr(
+        app_module,
+        "build_apna_lite_ssh_profile",
+        lambda *_args, **kwargs: captured.update(kwargs) or object(),
+    )
+
+    dialog = ApnaCatalogImportDialog(catalog, [server])
+    dialog._choose_ca_bundle()
+    dialog._build_profile()
+
+    assert dialog.ca_bundle_edit.text() == str(ca_file)
+    assert captured["ca_bundle_file"] == str(ca_file)
+    dialog.close()

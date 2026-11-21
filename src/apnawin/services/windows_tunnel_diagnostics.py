@@ -46,7 +46,7 @@ class WindowsTunnelDiagnostics:
         *,
         adapter_name: str = "ApnaWin",
         powershell_executable: str = "powershell.exe",
-        timeout: float = 5.0,
+        timeout: float = 15.0,
         runner: Callable[..., subprocess.CompletedProcess] | None = None,
     ) -> None:
         if (
@@ -89,15 +89,45 @@ if ($null -eq $a) {{
     exit 0
 }}
 $idx = [int]$a.ifIndex
-$r4 = @(Get-NetRoute -DestinationPrefix '0.0.0.0/0' -InterfaceIndex $idx -ErrorAction SilentlyContinue)
-$r6 = @(Get-NetRoute -DestinationPrefix '::/0' -InterfaceIndex $idx -ErrorAction SilentlyContinue)
+# Require the best combined route/interface metric to select only the TUN.
+# Fetch interface metrics once per address family instead of issuing a CIM query per route.
+$if4 = @{{}}
+Get-NetIPInterface -AddressFamily IPv4 -ErrorAction SilentlyContinue | ForEach-Object {{
+    $if4[[int]$_.InterfaceIndex] = [long]$_.InterfaceMetric
+}}
+$if6 = @{{}}
+Get-NetIPInterface -AddressFamily IPv6 -ErrorAction SilentlyContinue | ForEach-Object {{
+    $if6[[int]$_.InterfaceIndex] = [long]$_.InterfaceMetric
+}}
+$r4 = @(Get-NetRoute -DestinationPrefix '0.0.0.0/0' -PolicyStore ActiveStore -ErrorAction SilentlyContinue | ForEach-Object {{
+    $routeIndex = [int]$_.InterfaceIndex
+    if ($if4.ContainsKey($routeIndex)) {{
+        [pscustomobject]@{{ InterfaceIndex = $routeIndex; Metric = [long]$_.RouteMetric + $if4[$routeIndex] }}
+    }}
+}})
+$r6 = @(Get-NetRoute -DestinationPrefix '::/0' -PolicyStore ActiveStore -ErrorAction SilentlyContinue | ForEach-Object {{
+    $routeIndex = [int]$_.InterfaceIndex
+    if ($if6.ContainsKey($routeIndex)) {{
+        [pscustomobject]@{{ InterfaceIndex = $routeIndex; Metric = [long]$_.RouteMetric + $if6[$routeIndex] }}
+    }}
+}})
+$best4 = @()
+if ($r4.Count -gt 0) {{
+    $metric4 = ($r4 | Measure-Object -Property Metric -Minimum).Minimum
+    $best4 = @($r4 | Where-Object {{ $_.Metric -eq $metric4 }} | Select-Object -ExpandProperty InterfaceIndex -Unique)
+}}
+$best6 = @()
+if ($r6.Count -gt 0) {{
+    $metric6 = ($r6 | Measure-Object -Property Metric -Minimum).Minimum
+    $best6 = @($r6 | Where-Object {{ $_.Metric -eq $metric6 }} | Select-Object -ExpandProperty InterfaceIndex -Unique)
+}}
 $dns = @(Get-DnsClientServerAddress -InterfaceIndex $idx -ErrorAction SilentlyContinue | ForEach-Object {{ $_.ServerAddresses }} | Where-Object {{ $_ }})
 [pscustomobject]@{{
     adapter_present = $true
     adapter_status = [string]$a.Status
     interface_index = $idx
-    ipv4_default_route = ($r4.Count -gt 0)
-    ipv6_default_route = ($r6.Count -gt 0)
+    ipv4_default_route = ($best4.Count -gt 0 -and @($best4 | Where-Object {{ $_ -ne $idx }}).Count -eq 0)
+    ipv6_default_route = ($best6.Count -gt 0 -and @($best6 | Where-Object {{ $_ -ne $idx }}).Count -eq 0)
     dns_servers = $dns
 }} | ConvertTo-Json -Compress -Depth 4
 """
