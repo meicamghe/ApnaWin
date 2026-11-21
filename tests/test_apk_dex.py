@@ -504,8 +504,8 @@ def test_parse_native_library_loads_covers_all_exact_jvm_loader_entrypoints():
         ".end method\n"
     )
     assert apk_dex._parse_native_library_loads(output) == [
-        "libsystem_path.so",
         "libruntime_path.so",
+        "libsystem_path.so",
         "runtime-library",
         "system-library",
     ]
