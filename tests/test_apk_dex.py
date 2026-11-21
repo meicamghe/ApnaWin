@@ -533,16 +533,16 @@ def test_parse_native_library_loads_rejects_wrong_invocation_kind(invocation):
 
 def test_parse_native_library_loads_supports_range_invocations():
     output = (
-        ".method public static load()V\\n"
-        '    const-string v0, "system-range-library"\\n'
-        "    invoke-static/range {v0 .. v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\\n"
-        '    const-string v1, "/data/app/lib/libsystem_range_path.so"\\n'
-        "    invoke-static/range {v1 .. v1}, Ljava/lang/System;->load(Ljava/lang/String;)V\\n"
-        '    const-string v3, "runtime-range-library"\\n'
-        "    invoke-virtual/range {v2 .. v3}, Ljava/lang/Runtime;->loadLibrary(Ljava/lang/String;)V\\n"
-        '    const-string v5, "/data/app/lib/libruntime_range_path.so"\\n'
-        "    invoke-virtual/range {v4 .. v5}, Ljava/lang/Runtime;->load(Ljava/lang/String;)V\\n"
-        ".end method\\n"
+        ".method public static load()V\n"
+        '    const-string v0, "system-range-library"\n'
+        "    invoke-static/range {v0 .. v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        '    const-string v1, "/data/app/lib/libsystem_range_path.so"\n'
+        "    invoke-static/range {v1 .. v1}, Ljava/lang/System;->load(Ljava/lang/String;)V\n"
+        '    const-string v3, "runtime-range-library"\n'
+        "    invoke-virtual/range {v2 .. v3}, Ljava/lang/Runtime;->loadLibrary(Ljava/lang/String;)V\n"
+        '    const-string v5, "/data/app/lib/libruntime_range_path.so"\n'
+        "    invoke-virtual/range {v4 .. v5}, Ljava/lang/Runtime;->load(Ljava/lang/String;)V\n"
+        ".end method\n"
     )
     assert apk_dex._parse_native_library_loads(output) == [
         "libruntime_range_path.so",
