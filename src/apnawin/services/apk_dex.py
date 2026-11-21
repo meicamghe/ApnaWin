@@ -167,7 +167,7 @@ def _parse_invoke_registers(operands: str, *, is_range: bool) -> list[str]:
     """Parse bounded DEX invoke registers, including the /range form."""
     if not is_range:
         return [item.strip() for item in operands.split(",") if item.strip()]
-    match = re.fullmatch(r"\\s*([vp])(\\d+)\\s*\\.\\.\\s*([vp])(\\d+)\\s*", operands)
+    match = re.fullmatch(r"\s*([vp])(\d+)\s*\.\.\s*([vp])(\d+)\s*", operands)
     if match is None or match.group(1) != match.group(3):
         return []
     first, last = int(match.group(2)), int(match.group(4))
