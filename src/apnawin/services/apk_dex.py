@@ -163,6 +163,20 @@ def _parse_native_method_count(output: str) -> int:
     return count
 
 
+def _parse_invoke_registers(operands: str, *, is_range: bool) -> list[str]:
+    """Parse bounded DEX invoke registers, including the /range form."""
+    if not is_range:
+        return [item.strip() for item in operands.split(",") if item.strip()]
+    match = re.fullmatch(r"\\s*([vp])(\\d+)\\s*\\.\\.\\s*([vp])(\\d+)\\s*", operands)
+    if match is None or match.group(1) != match.group(3):
+        return []
+    first, last = int(match.group(2)), int(match.group(4))
+    # DEX invoke-range has at most 255 argument words; reject malformed spans.
+    if last < first or last - first > 254:
+        return []
+    return [f"{match.group(1)}{index}" for index in range(first, last + 1)]
+
+
 def _parse_native_library_loads(output: str) -> list[str]:
     """Extract literal System.loadLibrary/ load call arguments from one smali class.
 
@@ -198,8 +212,10 @@ def _parse_native_library_loads(output: str) -> list[str]:
             continue
         invoke_match = invoke_pattern.match(line)
         if invoke_match:
-            operands = [item.strip() for item in invoke_match.group(1).split(",")]
             invocation = line.lstrip().split(None, 1)[0]
+            operands = _parse_invoke_registers(
+                invoke_match.group(1), is_range=invocation.endswith("/range")
+            )
             owner, separator, target = line.partition("->")
             owner = owner.strip().rsplit(",", 1)[-1].strip() if separator else ""
             argument_register = None
