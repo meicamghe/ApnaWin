@@ -127,6 +127,10 @@ def _stream_settings(
         raise XrayShareLinkError(f"Unsupported Xray network transport: {network}")
     if security not in _SUPPORTED_SECURITY or (security == "reality" and not allow_reality):
         raise XrayShareLinkError(f"Unsupported Xray stream security: {security}")
+    if security == "reality" and network not in {"tcp", "grpc"}:
+        raise XrayShareLinkError(
+            "REALITY security is supported only with TCP or gRPC by this importer"
+        )
 
     settings: dict = {"network": network, "security": security}
     if network == "ws":
@@ -207,12 +211,16 @@ def _parse_vless(parsed) -> tuple[str, int, dict, dict]:
         raise XrayShareLinkError("Only VLESS encryption=none is supported by this importer")
     user: dict = {"id": normalized_id, "encryption": "none"}
     flow = query.get("flow", "")
+    network = query.get("type", query.get("network", "tcp")).lower()
+    security = query.get("security", "none").lower()
     if flow:
         if flow not in {"xtls-rprx-vision", "xtls-rprx-vision-udp443"}:
             raise XrayShareLinkError("Unsupported VLESS flow")
+        if network != "tcp" or security not in {"tls", "reality"}:
+            raise XrayShareLinkError(
+                "VLESS Vision flow requires TCP with TLS or REALITY security"
+            )
         user["flow"] = flow
-    network = query.get("type", query.get("network", "tcp"))
-    security = query.get("security", "none")
     outbound = {
         "tag": "proxy",
         "protocol": "vless",
