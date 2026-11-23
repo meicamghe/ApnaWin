@@ -350,7 +350,7 @@ class _ApnaCatalogFetchWorker(QThread):
     def run(self) -> None:
         try:
             self.catalog = ApnaLiteCatalogSource(
-                timeout_seconds=3.0, retry_attempts=2,
+                timeout_seconds=20.0, retry_attempts=4,
                 progress_callback=self.progress.emit,
                 cancel_event=self.cancel_event,
             ).fetch_document()
