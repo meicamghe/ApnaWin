@@ -94,7 +94,7 @@ def test_packetproto_decoder_handles_large_coalesced_reads_with_bounded_buffer()
 def test_packetproto_decoder_rejects_oversized_declared_frame_before_buffer_growth():
     decoder = PacketProtoDecoder(max_payload_bytes=32)
     with pytest.raises(UdpGwProtocolError, match="frame length"):
-        decoder.feed(b"\\xff\\xff" + b"x" * 100000)
+        decoder.feed(bytes((0xFF, 0xFF)) + b"x" * 100000)
     assert decoder.buffered_bytes <= 34
 
 
