@@ -48,6 +48,31 @@ def test_grpc_service_name_rejects_delete_control_character():
         import_xray_share_link(uri)
 
 
+def test_import_vless_tls_alpn_values():
+    result = import_xray_share_link(
+        f"vless://{UUID}@edge.example.test:443?security=tls&alpn=h2%2Chttp%2F1.1"
+    )
+    outbound = outbound_for(result)
+    assert outbound["streamSettings"]["tlsSettings"]["alpn"] == ["h2", "http/1.1"]
+
+
+@pytest.mark.parametrize(
+    "alpn",
+    [
+        "h2%2C%2Chttp%2F1.1",
+        "%2Ch2",
+        "h2%2C",
+        "%0A",
+        "a" * 33,
+        "%2C".join(["h2"] * 9),
+    ],
+)
+def test_rejects_malformed_tls_alpn_list(alpn):
+    uri = f"vless://{UUID}@edge.example.test:443?security=tls&alpn={alpn}"
+    with pytest.raises(XrayShareLinkError, match="TLS ALPN"):
+        import_xray_share_link(uri)
+
+
 def test_import_vless_ws_tls_creates_encrypted_store_ready_profile():
     result = import_xray_share_link(
         f"vless://{UUID}@edge.example.test:443"
