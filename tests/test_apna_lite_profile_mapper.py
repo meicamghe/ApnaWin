@@ -59,7 +59,10 @@ def _payload(method="http", sslws="false", host="front-a.example.test;front-b.ex
     if template is None:
         template = (
             "GET / HTTP/1.1[crlf]Host: [cf][crlf]"
-            "X-Online-Host: [host][crlf]Upgrade: websocket[crlf][crlf]"
+            "X-Online-Host: [host][crlf]Upgrade: websocket[crlf]"
+            "Connection: Upgrade[crlf]"
+            "Sec-WebSocket-Key: MDEyMzQ1Njc4OWFiY2RlZg==[crlf]"
+            "Sec-WebSocket-Version: 13[crlf][crlf]"
         )
     return {
         "friendly_name": "TEST WEBSOCKET",
@@ -220,13 +223,32 @@ def test_websocket_status_mapping_is_case_and_horizontal_whitespace_insensitive(
         template=(
             "GET / HTTP/1.1[crlf]Host: [host][crlf]"
             + upgrade_header
-            + "[crlf]Connection: Upgrade[crlf][crlf]"
+            + "[crlf]Connection: Upgrade[crlf]"
+            + "Sec-WebSocket-Key: MDEyMzQ1Njc4OWFiY2RlZg==[crlf]"
+            + "Sec-WebSocket-Version: 13[crlf][crlf]"
         )
     )
     mapped = build_apna_lite_ssh_profile(
         _catalog(), _server(), payload, host_selector=_first
     )
     assert mapped.session_config.payload.expected_http_statuses == (200, 101)
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        "CONNECT [host_port] HTTP/1.1[crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf]Sec-WebSocket-Key: MDEyMzQ1Njc4OWFiY2RlZg==[crlf]Sec-WebSocket-Version: 13[crlf][crlf]",
+        "GET / HTTP/1.0[crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf]Sec-WebSocket-Key: MDEyMzQ1Njc4OWFiY2RlZg==[crlf]Sec-WebSocket-Version: 13[crlf][crlf]",
+        "GET / HTTP/1.1[crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf]Sec-WebSocket-Version: 13[crlf][crlf]",
+        "GET / HTTP/1.1[crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf]Sec-WebSocket-Key: invalid[crlf]Sec-WebSocket-Version: 13[crlf][crlf]",
+    ],
+)
+def test_incomplete_websocket_request_does_not_admit_http_101(template):
+    payload = _payload(template=template)
+    mapped = build_apna_lite_ssh_profile(
+        _catalog(), _server(), payload, host_selector=_first
+    )
+    assert mapped.session_config.payload.expected_http_statuses == (200,)
 
 
 def test_non_websocket_http_payload_requires_connect_success_only():
