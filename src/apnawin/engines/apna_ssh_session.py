@@ -32,6 +32,31 @@ class ApnaSshError(ConnectionError):
     """SSH authentication, host-key verification, or forwarding failed."""
 
 
+def _validate_network_host(host: str, field: str) -> str:
+    """Accept an IP literal or a bounded ASCII DNS name, never URI fragments."""
+    if not isinstance(host, str) or not host or len(host) > 253:
+        raise ValueError(f"{field} must be an IP address or DNS name")
+    try:
+        ipaddress.ip_address(host)
+        return host
+    except ValueError:
+        pass
+    if not host.isascii():
+        raise ValueError(f"{field} must be an IP address or ASCII DNS name")
+    name = host[:-1] if host.endswith(".") else host
+    if not name or len(name) > 253:
+        raise ValueError(f"{field} must be an IP address or DNS name")
+    labels = name.split(".")
+    if any(
+        not label
+        or len(label) > 63
+        or re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?", label) is None
+        for label in labels
+    ):
+        raise ValueError(f"{field} must be an IP address or valid DNS name")
+    return host
+
+
 class _PinnedHostKeyPolicy(paramiko.MissingHostKeyPolicy):
     """Accept an otherwise unknown host key only when its SHA-256 pin matches."""
 
@@ -63,19 +88,18 @@ class ApnaSshConfig:
     banner_timeout: float = 15.0
 
     def __post_init__(self) -> None:
-        if not isinstance(self.ssh_host, str) or not self.ssh_host or len(self.ssh_host) > 253:
-            raise ValueError("ssh_host is invalid")
-        try:
-            ipaddress.ip_address(self.ssh_host)
-        except ValueError:
-            if any(c.isspace() or ord(c) < 0x21 or ord(c) > 0x7E for c in self.ssh_host):
-                raise ValueError("ssh_host must be an IP address or ASCII DNS name")
+        _validate_network_host(self.ssh_host, "ssh_host")
         if isinstance(self.ssh_port, bool) or not isinstance(self.ssh_port, int):
             raise TypeError("ssh_port must be an integer")
         if not 1 <= self.ssh_port <= 65535:
             raise ValueError("ssh_port must be between 1 and 65535")
-        if not isinstance(self.username, str) or not self.username or len(self.username) > 256:
-            raise ValueError("username is invalid")
+        if (
+            not isinstance(self.username, str)
+            or not self.username
+            or len(self.username) > 256
+            or any(ord(character) < 0x20 or ord(character) == 0x7F for character in self.username)
+        ):
+            raise ValueError("username is invalid or contains control characters")
         if self.password is not None and not isinstance(self.password, str):
             raise TypeError("password must be text or None")
         if not self.password and not self.key_filename:
@@ -141,8 +165,11 @@ class _SocksHandler(socketserver.BaseRequestHandler):
             elif address_type == 3:
                 length = _recv_exact(client, 1)[0]
                 try:
-                    host = _recv_exact(client, length).decode("idna")
-                except UnicodeError:
+                    if not 1 <= length <= 255:
+                        raise ValueError("SOCKS domain length is invalid")
+                    host = _recv_exact(client, length).decode("ascii")
+                    _validate_network_host(host, "SOCKS destination")
+                except (UnicodeError, ValueError):
                     _socks_reply(client, 8)
                     return
             else:
@@ -446,10 +473,7 @@ class ApnaSshSession:
         source_port: int = 0,
     ):
         """Open an authenticated SSH direct-tcpip channel (e.g. remote UDPGW)."""
-        if not isinstance(destination_host, str) or not destination_host:
-            raise ValueError("destination_host is required")
-        if any(ord(char) < 0x21 or ord(char) > 0x7E for char in destination_host):
-            raise ValueError("destination_host contains whitespace or control characters")
+        _validate_network_host(destination_host, "destination_host")
         for name, value in (("destination_port", destination_port), ("source_port", source_port)):
             if isinstance(value, bool) or not isinstance(value, int):
                 raise TypeError(f"{name} must be an integer")
