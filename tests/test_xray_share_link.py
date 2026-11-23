@@ -229,3 +229,24 @@ def test_vless_vision_flow_accepts_tcp_with_reality():
     outbound = outbound_for(result)
     assert outbound["settings"]["vnext"][0]["users"][0]["flow"] == "xtls-rprx-vision"
 
+@pytest.mark.parametrize(
+    "method",
+    [
+        "aes-128-gcm",
+        "aes-256-gcm",
+        "chacha20-poly1305",
+        "chacha20-ietf-poly1305",
+        "xchacha20-poly1305",
+        "xchacha20-ietf-poly1305",
+        "2022-blake3-aes-128-gcm",
+        "2022-blake3-aes-256-gcm",
+        "2022-blake3-chacha20-poly1305",
+    ],
+)
+def test_imports_documented_xray_shadowsocks_cipher_methods(method):
+    result = import_xray_share_link(
+        f"ss://{method}:secret-pass@ss.example.test:8388#Cipher%20test"
+    )
+    outbound = outbound_for(result)
+    assert outbound["settings"]["servers"][0]["method"] == method
+
