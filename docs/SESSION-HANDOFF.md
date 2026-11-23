@@ -240,3 +240,13 @@ The separate Python Wintun packet engine and route/DNS transaction path are not 
 The APNA full-tunnel startup path runs a UDP DNS probe after Xray/Wintun has installed the TUN routes and before the engine reports CONNECTED. The probe uses the configured resolver IP literals, verifies the response source and transaction ID, requires an exact matching question and NOERROR response, and now parses every declared answer record to reject truncated or malformed DNS packets. Configured IPv4 and IPv6 resolver families must each pass. Regression coverage includes malformed compression pointers, truncated RDATA, invalid flags, wrong questions, duplicate resolvers, timeout validation and IPv6 failure.
 
 This remains automated protocol validation, not a substitute for provider-side Windows acceptance. Validate actual DNS and leak behavior on clean Windows 10/11 hosts before changing PR #6 from Draft.
+
+
+## APNA TLS compatibility and cleanup regression coverage — 2026-11-23
+
+- The live Windows acceptance guide now distinguishes provider CA validation from the explicit per-profile TLS compatibility fallback. The fallback disables TLS chain/hostname verification, retains encryption and SNI, and does not bypass SSH host-key pinning or SSH authentication.
+- Added UI regression coverage for enabling/disabling the selected profile's TLS compatibility option and preserving SNI.
+- Fixed the UI rollback path: if encrypted profile persistence fails after a checkbox change, restore the previous visible selection instead of leaving the UI inconsistent with stored state. Added parameterized tests for both prior checkbox states.
+- Added APNA tunnel-engine coverage for retrying encrypted Xray-config cleanup after a transient store-removal failure. The first disconnect must retain ERROR ownership state; a later disconnect retries only the remaining config cleanup and must not restart or re-stop already released network resources.
+- BadVPN native Windows x64 workflow succeeded on commit d03d0e85dfd6b077ceaced797dabc2332f99e4f6. The Windows tests/build workflow for that commit was still queued at last check. Commits after d03d0e8 require their own CI result; do not treat earlier green runs as validation of newer changes.
+- Current work remains in PR #6, Draft. No live authorized APNA Windows endpoint acceptance has been performed; real SSH authentication, UDPGW datagram round-trip, routed IPv4/IPv6/DNS traffic and crash/disconnect restoration remain release gates.
