@@ -325,8 +325,12 @@ def _parse_shadowsocks(parsed) -> tuple[str, int, dict, dict]:
         user_info, _separator, endpoint = raw.rpartition("@")
         host_port = urlsplit("//" + endpoint)
         host, port = _url_endpoint(host_port)
-        if ":" not in user_info:
+        if ":" not in user_info and "%3a" not in user_info.lower():
             user_info = _decode_base64(user_info, "Shadowsocks credentials").decode("utf-8")
+        else:
+            # SIP002 permits percent-encoded user-info; decode the method/password
+            # separator and password bytes before splitting the credentials.
+            user_info = unquote(user_info)
     if ":" not in user_info:
         raise XrayShareLinkError("Shadowsocks credentials must contain method and password")
     method, password = user_info.split(":", 1)
