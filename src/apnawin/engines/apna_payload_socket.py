@@ -38,6 +38,7 @@ class PayloadSocketConfig:
     payload: str = ""
     sni: str | None = None
     ca_bundle_file: str | None = None
+    allow_insecure_tls: bool = False
     cf_host: str | None = None
     brand: str | None = None
     user_agent: str | None = None
@@ -112,6 +113,8 @@ class PayloadSocketConfig:
             or any(ord(char) < 0x21 or ord(char) > 0x7E for char in self.sni)
         ):
             raise ValueError("sni is invalid")
+        if not isinstance(self.allow_insecure_tls, bool):
+            raise TypeError("allow_insecure_tls must be a boolean")
         if self.ca_bundle_file is not None and (
             not isinstance(self.ca_bundle_file, str)
             or not self.ca_bundle_file
@@ -339,7 +342,14 @@ class ApnaPayloadSocketConnector:
                     else config.target_host
                 )
                 tls_context = self._tls_context
-                if config.ca_bundle_file is not None:
+                if config.allow_insecure_tls:
+                    # Explicit per-profile compatibility mode for endpoints using
+                    # self-signed/untrusted certificates. SNI is still sent; only
+                    # certificate-chain and hostname verification are disabled.
+                    tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                    tls_context.check_hostname = False
+                    tls_context.verify_mode = ssl.CERT_NONE
+                elif config.ca_bundle_file is not None:
                     # Add a provider-supplied CA to the normal system trust store.
                     # Certificate verification remains enabled.
                     tls_context = ssl.create_default_context()
