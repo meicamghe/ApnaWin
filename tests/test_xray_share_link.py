@@ -52,7 +52,7 @@ def test_import_vless_ws_tls_creates_encrypted_store_ready_profile():
 def test_import_vless_reality_requires_public_key_sni_and_fingerprint():
     result = import_xray_share_link(
         f"vless://{UUID}@edge.example.test:443?type=tcp&security=reality"
-        "&sni=front.example.test&pbk=public-key&sid=abcd&fp=chrome#Reality"
+        "&sni=front.example.test&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=abcd&fp=chrome#Reality"
     )
     outbound = outbound_for(result)
     reality = outbound["streamSettings"]["realitySettings"]
@@ -64,7 +64,7 @@ def test_import_vless_reality_requires_public_key_sni_and_fingerprint():
 def test_import_vless_xhttp_reality_settings():
     result = import_xray_share_link(
         f"vless://{UUID}@edge.example.test:443?type=xhttp&security=reality"
-        "&sni=front.example.test&pbk=public-key&sid=abcd&fp=chrome"
+        "&sni=front.example.test&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=abcd&fp=chrome"
         "&host=cdn.example.test&path=%2Fedge&mode=packet-up#XHTTP"
     )
     outbound = outbound_for(result)
