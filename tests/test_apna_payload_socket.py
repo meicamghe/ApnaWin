@@ -724,9 +724,9 @@ def test_redacted_http_request_summary_exposes_routing_fields_without_query_or_l
         sni="front.example.test",
     )
     request = (
-        b"GET /tunnel/opaque-token-123456789012345678901234?auth=do-not-log HTTP/1.1\\r\\n"
-        b"Host: front.example.test\\r\\n"
-        b"Upgrade: websocket\\r\\n\\r\\n"
+        b"GET /tunnel/opaque-token-123456789012345678901234?auth=do-not-log HTTP/1.1\r\n"
+        b"Host: front.example.test\r\n"
+        b"Upgrade: websocket\r\n\r\n"
     )
     summary = _redacted_request_summary(config, (PayloadChunk(request),))
     assert "GET /tunnel/<redacted> HTTP/1.1" in summary
