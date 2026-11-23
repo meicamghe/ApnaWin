@@ -13,6 +13,7 @@ from apnawin.engines.apna_payload_socket import (
     PayloadSocketConfig,
     PayloadSocketMode,
     PayloadTransportError,
+    _redacted_request_summary,
 )
 
 
@@ -708,3 +709,30 @@ def test_allow_insecure_tls_must_be_boolean():
             target_host="ssh.example.test", target_port=443,
             allow_insecure_tls="yes",
         )
+
+
+def test_redacted_http_request_summary_exposes_routing_fields_without_query_or_long_tokens():
+    from apnawin.engines.apna_payload import PayloadChunk
+
+    config = PayloadSocketConfig(
+        mode=PayloadSocketMode.TLS_HTTP_PROXY,
+        connect_host="edge.example.test",
+        connect_port=443,
+        target_host="ssh.example.test",
+        target_port=1194,
+        payload="",
+        sni="front.example.test",
+    )
+    request = (
+        b"GET /tunnel/opaque-token-123456789012345678901234?auth=do-not-log HTTP/1.1\\r\\n"
+        b"Host: front.example.test\\r\\n"
+        b"Upgrade: websocket\\r\\n\\r\\n"
+    )
+    summary = _redacted_request_summary(config, (PayloadChunk(request),))
+    assert "GET /tunnel/<redacted> HTTP/1.1" in summary
+    assert "Host=front.example.test" in summary
+    assert "endpoint=edge.example.test:443" in summary
+    assert "target=ssh.example.test:1194" in summary
+    assert "SNI=front.example.test" in summary
+    assert "do-not-log" not in summary
+    assert "opaque-token" not in summary
