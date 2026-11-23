@@ -347,34 +347,52 @@ class ApnaSshSession:
             thread.start()
             return self.socks_address
         except Exception as exc:
-            self._ssh_client = None
-            self._payload_socket = None
-            self._server = None
-            self._server_thread = None
+            # Roll back in reverse acquisition order. Keep ownership of any
+            # resource whose cleanup failed so the caller can retry close().
             if server is not None:
+                server_stopped = True
                 try:
                     if thread is not None and thread.is_alive():
                         server.shutdown()
-                    server.server_close()
-                    if thread is not None and thread.is_alive():
-                        thread.join(timeout=2)
                 except Exception:
-                    # Cleanup is best-effort here: preserve the connection
-                    # failure that caused rollback instead of masking it with
-                    # a secondary server-shutdown exception.
-                    pass
+                    server_stopped = False
+                try:
+                    server.server_close()
+                except Exception:
+                    server_stopped = False
+                if thread is not None and thread.is_alive():
+                    try:
+                        thread.join(timeout=2)
+                    except Exception:
+                        server_stopped = False
+                    if thread.is_alive():
+                        server_stopped = False
+                if server_stopped:
+                    self._server = None
+                    self._server_thread = None
+                else:
+                    self._server = server
+                    self._server_thread = thread
+
             try:
                 client.close()
             except Exception:
-                # A broken SSHClient.close() must not hide the original
-                # authentication, host-key, or negotiation failure.
-                pass
+                # Preserve both the primary failure and a retryable handle.
+                self._ssh_client = client
+            else:
+                self._ssh_client = None
+
             if sock is not None:
                 try:
                     sock.close()
                 except Exception:
-                    # Preserve the primary failure if socket cleanup also fails.
-                    pass
+                    self._payload_socket = sock
+                else:
+                    self._payload_socket = None
+
+            self._closed = not any(
+                (self._server, self._ssh_client, self._payload_socket)
+            )
             if isinstance(exc, (ApnaSshError, ValueError, TypeError)):
                 raise
             if isinstance(exc, paramiko.BadHostKeyException):
