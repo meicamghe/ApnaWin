@@ -226,6 +226,7 @@ class UdpGwStreamClient:
 
     def receive_packet(self, *, timeout: float | None = None) -> UdpGwPacket:
         sock = self._require_socket()
+        previous_timeout = None
         if timeout is not None:
             if (
                 isinstance(timeout, bool)
@@ -234,23 +235,28 @@ class UdpGwStreamClient:
                 or timeout <= 0
             ):
                 raise ValueError("timeout must be positive and finite")
+            previous_timeout = sock.gettimeout()
             sock.settimeout(timeout)
-        while not self._pending:
-            try:
-                chunk = sock.recv(64 * 1024)
-            except socket.timeout:
-                raise
-            except OSError as exc:
-                raise UdpGwTransportError("Could not receive UDPGW stream data") from exc
-            if not chunk:
-                raise UdpGwTransportError("UDPGW stream closed by remote server")
-            try:
-                self._pending.extend(
-                    decode_udpgw_payload(frame) for frame in self._decoder.feed(chunk)
-                )
-            except ValueError as exc:
-                raise UdpGwTransportError("Remote server sent malformed UDPGW data") from exc
-        return self._pending.popleft()
+        try:
+            while not self._pending:
+                try:
+                    chunk = sock.recv(64 * 1024)
+                except socket.timeout:
+                    raise
+                except OSError as exc:
+                    raise UdpGwTransportError("Could not receive UDPGW stream data") from exc
+                if not chunk:
+                    raise UdpGwTransportError("UDPGW stream closed by remote server")
+                try:
+                    self._pending.extend(
+                        decode_udpgw_payload(frame) for frame in self._decoder.feed(chunk)
+                    )
+                except ValueError as exc:
+                    raise UdpGwTransportError("Remote server sent malformed UDPGW data") from exc
+            return self._pending.popleft()
+        finally:
+            if timeout is not None:
+                sock.settimeout(previous_timeout)
 
     def close(self) -> None:
         sock, self._socket = self._socket, None
