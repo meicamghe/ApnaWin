@@ -42,9 +42,18 @@ def scan_apna_ssh_host_key(
         fingerprint = base64.b64encode(digest).decode("ascii").rstrip("=")
         return f"SHA256:{fingerprint}"
     except Exception as exc:
-        raise ApnaHostKeyProbeError(
-            f"SSH host-key exchange failed: {type(exc).__name__}: {exc}"
-        ) from exc
+        detail = " ".join(str(exc).split())[:240]
+        if isinstance(exc, paramiko.SSHException) and "no acceptable ciphers" in detail.lower():
+            message = (
+                "SSH key exchange found no mutually supported encryption cipher. "
+                "The endpoint sent SSH negotiation data, but its offered ciphers do not "
+                "overlap with this client's secure cipher policy. No legacy cipher was "
+                "enabled automatically; use another provider-approved SSH endpoint or "
+                "obtain the server's cipher list for an explicit security review."
+            )
+        else:
+            message = f"SSH host-key exchange failed: {type(exc).__name__}: {detail}"
+        raise ApnaHostKeyProbeError(message) from exc
     finally:
         try:
             if transport is not None:
