@@ -72,6 +72,7 @@ def _serialize_config(config: ApnaTunnelSessionConfig) -> bytes:
             "payload": payload.payload,
             "sni": payload.sni,
             "ca_bundle_file": payload.ca_bundle_file,
+            "allow_insecure_tls": payload.allow_insecure_tls,
             "cf_host": payload.cf_host,
             "brand": payload.brand,
             "user_agent": payload.user_agent,
@@ -130,12 +131,18 @@ def _deserialize_config(raw: bytes) -> ApnaTunnelSessionConfig:
         "read_timeout", "max_response_header_bytes",
     }
     legacy_payload_expected = payload_expected
-    payload_expected = payload_expected | {"ca_bundle_file"}
+    payload_expected_with_ca = payload_expected | {"ca_bundle_file"}
+    payload_expected_with_insecure = payload_expected | {"allow_insecure_tls"}
+    payload_expected = payload_expected | {"ca_bundle_file", "allow_insecure_tls"}
     if (
         set(ssh_raw) != ssh_expected
         or (
-            set(payload_raw) != legacy_payload_expected
-            and set(payload_raw) != payload_expected
+            set(payload_raw) not in {
+                frozenset(legacy_payload_expected),
+                frozenset(payload_expected_with_ca),
+                frozenset(payload_expected_with_insecure),
+                frozenset(payload_expected),
+            }
         )
     ):
         raise ApnaProfileStoreError("APNA SSH or payload schema has missing or unknown fields")
@@ -163,6 +170,7 @@ def _deserialize_config(raw: bytes) -> ApnaTunnelSessionConfig:
             payload=payload_raw["payload"],
             sni=payload_raw["sni"],
             ca_bundle_file=payload_raw.get("ca_bundle_file"),
+            allow_insecure_tls=payload_raw.get("allow_insecure_tls", False),
             cf_host=payload_raw["cf_host"],
             brand=payload_raw["brand"],
             user_agent=payload_raw["user_agent"],
