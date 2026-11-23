@@ -216,3 +216,14 @@ The parser audit also added explicit rejection of duplicate VMess JSON keys and 
 5. Keep CI source/test validation enabled but disable automatic Windows packaging and artifact publication until the user explicitly authorizes a product build.
 
 No Windows product build, installer, release, PR merge, or live-provider connectivity test was initiated by this correction.
+
+## 2026-11-23 UI-to-engine registration audit
+
+The current desktop source registers exactly two live engine keys in `_create_live_connection_controller()`:
+
+- `Transport.XRAY` → `XrayTunnelEngine`
+- `Transport.APNA_SSH` → `ApnaTunnelEngine`
+
+Although the generic `Transport` enum and profile editor also expose `OPENVPN` and `SOCKS`, neither has a registered engine. The Connect control explicitly enables only XRAY and APNA_SSH profiles. Therefore an OPENVPN or SOCKS profile can exist as metadata but cannot currently establish a connection; the UI is fail-closed rather than silently routing it through another engine.
+
+There is no `openvpn.py` or `openvpn_process.py` adapter in the current engine source. The historical v27 OpenVPN runtime is not sufficient evidence to claim v51 APNA OpenVPN selection. The next OpenVPN task is to recover a v51 runtime/config contract or implement a separately labeled, user-imported generic OpenVPN profile without assigning APNA catalog categories to it. SOCKS is a proxy interface, not a standalone encrypted VPN protocol, and should be modeled as an upstream/local proxy adapter only when its role and lifecycle are explicit.
