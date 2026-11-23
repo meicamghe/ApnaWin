@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 
+import paramiko
 import pytest
 
 from apnawin.engines.apna_host_key import ApnaHostKeyProbeError, scan_apna_ssh_host_key
@@ -87,6 +88,23 @@ def test_scans_and_formats_host_key_fingerprint_without_authentication():
     assert connector.configs == [_config().payload]
     assert transports[0].started == _config().ssh.connect_timeout
     assert transports[0].closed is True
+    assert sock.closed is True
+
+
+def test_probe_reports_cipher_mismatch_without_enabling_legacy_ciphers():
+    sock = _FakeSocket()
+    connector = _FakeConnector(sock)
+
+    class IncompatibleCipherTransport(_FakeTransport):
+        def start_client(self, *, timeout):
+            raise paramiko.SSHException("Incompatible ssh server (no acceptable ciphers)")
+
+    with pytest.raises(ApnaHostKeyProbeError, match="no mutually supported encryption cipher"):
+        scan_apna_ssh_host_key(
+            _config(),
+            connector=connector,
+            transport_factory=IncompatibleCipherTransport,
+        )
     assert sock.closed is True
 
 
