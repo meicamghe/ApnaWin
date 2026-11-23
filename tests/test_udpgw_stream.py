@@ -47,6 +47,32 @@ def _read_socks5_request(sock: socket.socket) -> tuple[int, bytes, int]:
     return address_type, address, port
 
 
+@pytest.mark.parametrize(
+    "host",
+    [
+        "",
+        "bad..example",
+        "-bad.example",
+        "bad-.example",
+        "bad_name.example",
+        "a" * 64 + ".example",
+        "bad\u00e9.example",
+        "fe80::1%eth0",
+    ],
+)
+@pytest.mark.parametrize("field", ["proxy_host", "target_host"])
+def test_socks5_connect_config_rejects_malformed_hosts(host: str, field: str) -> None:
+    values = {
+        "proxy_host": "127.0.0.1",
+        "proxy_port": 1080,
+        "target_host": "udpgw.example.test",
+        "target_port": 7300,
+    }
+    values[field] = host
+    with pytest.raises(ValueError, match="valid ASCII DNS name"):
+        Socks5ConnectConfig(**values)
+
+
 def test_socks5_connect_negotiates_domain_target() -> None:
     seen = []
 
