@@ -113,6 +113,14 @@ def _name(fragment: str, protocol: str, host: str, port: int) -> str:
     return candidate[:128]
 
 
+def _transport_path(value: str, transport: str) -> str:
+    """Bound transport paths and reject control characters before config generation."""
+    path = value or "/"
+    if len(path) > 2048 or any(ord(ch) < 32 or ord(ch) == 127 for ch in path):
+        raise XrayShareLinkError(f"{transport} path is invalid")
+    return path
+
+
 def _stream_settings(
     network: str,
     security: str,
@@ -134,9 +142,7 @@ def _stream_settings(
 
     settings: dict = {"network": network, "security": security}
     if network == "ws":
-        path = query.get("path", "/") or "/"
-        if len(path) > 2048 or any(ord(ch) < 32 for ch in path):
-            raise XrayShareLinkError("WebSocket path is invalid")
+        path = _transport_path(query.get("path", "/"), "WebSocket")
         headers = {}
         ws_host = query.get("host", "")
         if ws_host:
@@ -153,7 +159,7 @@ def _stream_settings(
             grpc["authority"] = authority
         settings["grpcSettings"] = grpc
     elif network == "httpupgrade":
-        path = query.get("path", "/") or "/"
+        path = _transport_path(query.get("path", "/"), "HTTPUpgrade")
         upgrade_host = query.get("host", "")
         upgrade = {"path": path}
         if upgrade_host:
