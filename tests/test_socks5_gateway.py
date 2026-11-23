@@ -110,6 +110,15 @@ def test_gateway_config_requires_loopback_and_valid_udp_endpoint() -> None:
         Socks5GatewayConfig("127.0.0.1", 1080, udpgw_host="udpgw.example", udpgw_port=0)
 
 
+@pytest.mark.parametrize(
+    "host",
+    ["bad..proxy", "-bad.proxy", "bad_.proxy", "bad-.proxy", "x" * 64 + ".proxy"],
+)
+def test_gateway_config_rejects_malformed_endpoint_hosts(host: str) -> None:
+    with pytest.raises(ValueError, match="valid ASCII DNS"):
+        Socks5GatewayConfig(ssh_proxy_host=host, ssh_proxy_port=1080)
+
+
 def test_gateway_refuses_udp_associate_without_udpgw_configuration() -> None:
     gateway = Socks5Gateway(
         Socks5GatewayConfig(
