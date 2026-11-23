@@ -9,6 +9,7 @@ from paramiko.message import Message
 from apnawin.engines.apna_ssh_diagnostics import (
     ApnaDiagnosticTransport,
     _read_server_cipher_proposals,
+    cipher_diagnostic_suffix,
 )
 
 
@@ -55,3 +56,17 @@ def test_diagnostic_transport_reports_peer_ciphers_without_changing_policy(monke
     assert "client->server=[aes128-cbc]" in detail
     assert "server->client=[3des-cbc]" in detail
     assert "client enabled=[aes128-ctr, aes256-ctr]" in detail
+
+
+
+def test_cipher_diagnostic_identifies_unrecognized_peer_cipher_without_enabling_it():
+    error = paramiko.SSHException(
+        "Incompatible ssh server (no acceptable ciphers); server cipher offers: "
+        "client->server=[strawberry]; server->client=[strawberry]; "
+        "client enabled=[aes128-ctr, aes256-ctr]"
+    )
+    detail = cipher_diagnostic_suffix(error)
+    assert "not recognized by this Paramiko build" in detail
+    assert "[strawberry]" in detail
+    assert "Do not guess an alias" in detail
+    assert "strawberry" not in paramiko.Transport._preferred_ciphers
