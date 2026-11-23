@@ -134,3 +134,13 @@ def test_packetproto_encoder_rejects_empty_or_oversized_payload() -> None:
         encode_packetproto(b"")
     with pytest.raises(UdpGwProtocolError):
         encode_packetproto(b"x" * 65536)
+
+
+def test_encoder_rejects_scoped_ipv6_destination():
+    with pytest.raises(UdpGwProtocolError, match="interface scope"):
+        encode_datagram(
+            connection_id=9,
+            address="fe80::1%eth0",
+            port=53,
+            data=b"query",
+        )
