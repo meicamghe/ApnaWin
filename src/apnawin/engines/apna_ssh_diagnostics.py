@@ -6,6 +6,7 @@ enable additional algorithms or weaken Paramiko's negotiated security policy.
 from __future__ import annotations
 
 import paramiko
+import re
 from paramiko.message import Message
 
 
@@ -68,4 +69,38 @@ def cipher_diagnostic_suffix(error: BaseException) -> str:
     index = text.lower().find(marker)
     if index < 0:
         return ""
-    return " " + text[index + 2 : index + 900]
+    details = text[index + 2 : index + 900]
+    # Report peer names this Paramiko build does not implement, without
+    # adding aliases or weakening the negotiated cipher policy.
+    try:
+        supported = set(paramiko.Transport._preferred_ciphers)
+        proposals = _read_server_cipher_proposals_from_error(details)
+    except Exception:
+        proposals = ()
+        supported = set()
+    unknown = tuple(dict.fromkeys(name for name in proposals if name not in supported))
+    if unknown:
+        details += (
+            "; peer advertised cipher name(s) not recognized by this Paramiko build: "
+            + _format_algorithms(unknown)
+            + ". Do not guess an alias or weaken cipher policy"
+        )
+    return " " + details
+
+
+def _read_server_cipher_proposals_from_error(details: str) -> tuple[str, ...]:
+    """Extract cipher names from the two bounded diagnostic proposal lists."""
+    match = re.search(
+        r"client->server=\\[([^]]*)\\];\\s*server->client=\\[([^]]*)\\]",
+        details,
+    )
+    if match is None:
+        return ()
+    names = []
+    for group in match.groups():
+        names.extend(
+            item.strip()
+            for item in group.split(",")
+            if item.strip() and not item.strip().startswith("…")
+        )
+    return tuple(names)
