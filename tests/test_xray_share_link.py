@@ -191,3 +191,19 @@ def test_invalid_vmess_payload_does_not_leak_payload_in_error():
     with pytest.raises(XrayShareLinkError) as error:
         import_xray_share_link("vmess://not-base64")
     assert "not-base64" not in str(error.value)
+
+@pytest.mark.parametrize(
+    ("userinfo", "expected_password"),
+    [
+        ("aes-256-gcm:p%40ss%3Aword", "p@ss:word"),
+        ("aes-256-gcm%3Ap%40ss%3Aword", "p@ss:word"),
+    ],
+)
+def test_shadowsocks_decodes_percent_encoded_sip002_credentials(userinfo, expected_password):
+    result = import_xray_share_link(
+        f"ss://{userinfo}@ss.example.test:8388#Encoded%20credentials"
+    )
+    outbound = outbound_for(result)
+    assert outbound["settings"]["servers"][0]["method"] == "aes-256-gcm"
+    assert outbound["settings"]["servers"][0]["password"] == expected_password
+
