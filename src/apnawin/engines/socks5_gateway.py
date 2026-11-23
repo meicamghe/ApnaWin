@@ -307,10 +307,18 @@ class Socks5Gateway:
         server = self._server
         if server is None:
             return
-        server.shutdown()
-        server.server_close()
         thread = self._thread
-        if thread is not None:
+        # shutdown() waits for serve_forever() to set its completion event.
+        # If Thread.start() itself failed, that event can never be set and
+        # shutdown() would deadlock. Only shut down a thread that actually
+        # started and is still serving.
+        thread_started = (
+            thread is not None and getattr(thread, "ident", True) is not None
+        )
+        if thread_started and thread.is_alive():
+            server.shutdown()
+        server.server_close()
+        if thread_started:
             thread.join(timeout=2)
             if thread.is_alive():
                 raise Socks5GatewayError(
