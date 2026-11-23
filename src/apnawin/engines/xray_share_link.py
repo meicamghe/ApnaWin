@@ -51,13 +51,38 @@ def _decode_base64(value: str, field: str) -> bytes:
 
 
 def _query(parsed) -> dict[str, str]:
-    pairs = parse_qsl(parsed.query, keep_blank_values=True, strict_parsing=False)
+    try:
+        pairs = parse_qsl(
+            parsed.query,
+            keep_blank_values=True,
+            strict_parsing=False,
+            max_num_fields=128,
+        )
+    except ValueError as exc:
+        raise XrayShareLinkError(
+            "Share link query is malformed or contains too many parameters"
+        ) from exc
     result: dict[str, str] = {}
     for key, value in pairs:
         if key in result:
             raise XrayShareLinkError(f"Share link contains duplicate query parameter: {key}")
         result[key] = value
     return result
+
+
+def _unique_json_object(pairs: list[tuple[str, object]]) -> dict:
+    """Reject duplicate VMess JSON fields instead of silently choosing the last value."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise XrayShareLinkError("VMess payload contains duplicate JSON fields")
+        result[key] = value
+    return result
+
+
+def _reject_json_constant(_value: str) -> None:
+    """Reject non-standard NaN/Infinity tokens in VMess JSON."""
+    raise XrayShareLinkError("VMess payload contains a non-finite JSON value")
 
 
 def _url_endpoint(parsed) -> tuple[str, int]:
@@ -203,7 +228,11 @@ def _parse_vmess(parsed) -> tuple[str, int, dict, dict]:
         raise XrayShareLinkError("VMess link must use the standard Base64 JSON form")
     document_bytes = _decode_base64(encoded, "VMess payload")
     try:
-        document = json.loads(document_bytes.decode("utf-8"))
+        document = json.loads(
+            document_bytes.decode("utf-8"),
+            object_pairs_hook=_unique_json_object,
+            parse_constant=_reject_json_constant,
+        )
     except (UnicodeError, json.JSONDecodeError) as exc:
         raise XrayShareLinkError("VMess payload must contain a UTF-8 JSON object") from exc
     if not isinstance(document, dict):
@@ -271,7 +300,7 @@ def _parse_trojan(parsed) -> tuple[str, int, dict, dict]:
         raise XrayShareLinkError("Trojan link must contain a valid password")
     query = _query(parsed)
     network = query.get("type", query.get("network", "tcp"))
-    security = query.get("security", "tls")
+    security = query.get("security", "tls").lower()
     if security == "none":
         raise XrayShareLinkError("Trojan share links must use TLS or Reality security")
     outbound = {
