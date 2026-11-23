@@ -28,7 +28,7 @@ class PayloadTransportError(ConnectionError):
 def _redacted_request_summary(config: "PayloadSocketConfig", chunks: tuple) -> str:
     """Summarize HTTP routing metadata without logging payloads or query secrets."""
     request = b"".join(chunk.data for chunk in chunks).decode("iso-8859-1", errors="replace")
-    lines = request.split("\\r\\n")
+    lines = request.split("\r\n")
     parts = lines[0].split() if lines else []
     if len(parts) != 3:
         return (
