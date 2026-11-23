@@ -80,7 +80,7 @@ def test_import_vmess_base64_json():
     outbound = outbound_for(result)
     assert result.profile.name == "VMess Branch"
     assert outbound["protocol"] == "vmess"
-    assert outbound["settings"]["vnext"][0]["users"][0]["alterId"] == 0
+    assert "alterId" not in outbound["settings"]["vnext"][0]["users"][0]
     assert outbound["streamSettings"]["network"] == "ws"
     assert outbound["streamSettings"]["tlsSettings"]["allowInsecure"] is False
 
@@ -92,6 +92,9 @@ def test_import_vmess_base64_json():
         ("port", "443/tcp"),
         ("aid", True),
         ("aid", 1.5),
+        ("aid", "1"),
+        ("scy", "none"),
+        ("scy", "zero"),
         ("tls", "xtls"),
         ("tls", True),
     ],
