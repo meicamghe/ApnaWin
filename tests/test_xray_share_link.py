@@ -283,6 +283,29 @@ def test_rejects_invalid_or_oversized_transport_paths(uri):
         import_xray_share_link(uri)
 
 
+@pytest.mark.parametrize(
+    ("options", "message"),
+    [
+        ("security=tls&sni=front.example.test%0Aevil", "TLS server name"),
+        (
+            "security=reality&sni=front.example.test%7Fevil"
+            "&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&fp=chrome",
+            "Reality server name",
+        ),
+        ("type=grpc&security=tls&authority=front.example.test%0DInjected", "gRPC authority"),
+        (
+            "security=reality&sni=front.example.test"
+            "&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&fp=chrome&spx=%2Fpath%0AInjected",
+            "Reality spiderX",
+        ),
+    ],
+)
+def test_rejects_control_characters_in_xray_transport_options(options, message):
+    uri = f"vless://{UUID}@edge.example.test:443?{options}"
+    with pytest.raises(XrayShareLinkError, match=message):
+        import_xray_share_link(uri)
+
+
 def test_vless_vision_flow_accepts_tcp_with_reality():
     result = import_xray_share_link(
         f"vless://{UUID}@edge.example.test:443?type=tcp&security=reality"
