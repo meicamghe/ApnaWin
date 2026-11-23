@@ -720,7 +720,7 @@ def test_redacted_http_request_summary_exposes_routing_fields_without_query_or_l
         connect_port=443,
         target_host="ssh.example.test",
         target_port=1194,
-        payload="",
+        payload="GET / HTTP/1.1",
         sni="front.example.test",
     )
     request = (
