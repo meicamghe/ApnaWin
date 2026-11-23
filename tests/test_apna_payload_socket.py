@@ -605,3 +605,50 @@ def test_payload_socket_config_rejects_invalid_provider_ca_path():
             target_port=1194,
             ca_bundle_file="bad\npath",
         )
+
+
+def test_tls_direct_opt_in_compatibility_uses_tls_but_disables_certificate_checks(monkeypatch):
+    client, peer = socket.socketpair()
+    observed = {}
+
+    class CompatibilityContext:
+        def __init__(self, protocol):
+            observed["protocol"] = protocol
+            self.check_hostname = True
+            self.verify_mode = ssl.CERT_REQUIRED
+
+        def wrap_socket(self, sock, *, server_hostname):
+            observed["check_hostname"] = self.check_hostname
+            observed["verify_mode"] = self.verify_mode
+            observed["sni"] = server_hostname
+            return sock
+
+    monkeypatch.setattr(ssl, "SSLContext", CompatibilityContext)
+    connector = ApnaPayloadSocketConnector(socket_factory=lambda *_a, **_k: client)
+    config = PayloadSocketConfig(
+        mode=PayloadSocketMode.TLS_DIRECT,
+        connect_host="xm63.example.test",
+        connect_port=443,
+        target_host="xm63.example.test",
+        target_port=443,
+        sni="nba.onesports.ph",
+        allow_insecure_tls=True,
+    )
+    connected = connector.connect(config)
+    assert connected is client
+    assert observed["protocol"] == ssl.PROTOCOL_TLS_CLIENT
+    assert observed["check_hostname"] is False
+    assert observed["verify_mode"] == ssl.CERT_NONE
+    assert observed["sni"] == "nba.onesports.ph"
+    connected.close()
+    peer.close()
+
+
+def test_allow_insecure_tls_must_be_boolean():
+    with pytest.raises(TypeError, match="allow_insecure_tls"):
+        PayloadSocketConfig(
+            mode=PayloadSocketMode.TLS_DIRECT,
+            connect_host="ssh.example.test", connect_port=443,
+            target_host="ssh.example.test", target_port=443,
+            allow_insecure_tls="yes",
+        )
