@@ -54,6 +54,29 @@ A real Windows 10/11 connection to APNA TUNNEL LITE (`com.apnatunnel.lite`): ind
 
 Keep PR #6 Draft and unmerged. Never claim APNA connectivity from mocked tests, a green CI suite, a live catalog fetch, or a successful package build.
 
+
+## User live-test reports — 2026-11-23 (after the c261e9c checkpoint)
+
+The user supplied eight additional endpoint test results after the prior 37-report batch. None established an SSH session:
+
+| Endpoint/profile group | Observed result | Interpretation |
+|---|---|---|
+| `d2vkityu2663xy.cloudfront.net:1194` — three CloudFront profile names | HTTP 403 on all three | CloudFront edge denial before SSH; profile-specific payload method/path, HTTP Host, viewer port, SNI and provider behavior/origin policy remain unverified. |
+| `d3v7vv3wqyy9ly.cloudfront.net:1194` — IRAN Filter Breaker | HTTP 301 to `https://[proxy]:443/` | Redirect is intentionally not followed; provider-approved request target and redirect semantics are unknown. |
+| Same `d3v7vv3wqyy9ly.cloudfront.net:1194` — IRAN #5 | HTTP 403 | Edge denial; not an SSH negotiation result. |
+| Same `d3v7vv3wqyy9ly.cloudfront.net:1194` — IRAN #9 | HTTP 400 with Cloudflare Ray ID | HTTP request rejected as malformed; exact payload bytes/headers are needed. |
+| `xm63.tumsongcloud.xyz:1194` and `xm49.tumsongcloud.xyz:1194` — MASTER SERVER 6 | SSH peer advertises only `strawberry` in both cipher directions | Paramiko has no matching recognized cipher. This is not safely fixable by guessing an alias or enabling legacy ciphers. |
+
+These eight reports bring the user's cumulative reported test count to 45, with zero confirmed successful VPN connections (the previous 37 plus these eight). Treat this as the user's reported sample, not a complete catalog-wide test.
+
+### Engineering decision
+
+- The current transport correctly fails closed on these observed stages. HTTP 301/400/403 occurs before SSH; the two `strawberry` reports reach SSH KEXINIT but fail cipher negotiation.
+- Do not rewrite CloudFront payloads, Host/SNI, path, or port by inference. Request the exact redacted catalog fields for each tested profile (method, payload template, payload host/port, `sslws`, `sausage`, `dothost`, and the associated server record's host/ports) and preserve the exact profile-to-record association.
+- Do not add `strawberry` to Paramiko's cipher allowlist or map it to AES/another standard cipher. It is not a recognized Paramiko cipher name; identifying it requires provider documentation or a verifiable protocol implementation/trace.
+- Next valid acceptance step is to obtain provider-authorized profile details and, for the SSH endpoints, an independently published host-key fingerprint and supported cipher specification. Retest one representative profile per distinct transport/payload behavior before making code changes.
+- The latest verified CI checkpoint remains structural only: Windows tests/build and the research-only BadVPN Windows x64 build passed. These checks do not prove APNA provider authentication or routed traffic.
+
 ---
 
 ## Historical handoff archive (older snapshots; superseded by the current state above)
