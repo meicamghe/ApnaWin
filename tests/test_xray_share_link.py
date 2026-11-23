@@ -340,6 +340,10 @@ def test_imports_documented_xray_shadowsocks_cipher_methods(method):
         "ss://chacha20-ietf-poly1305:runtime-password@ss.example.test:8388",
         "ss://aes-256-gcm:runtime-password@ss.example.test:8388",
         "ss://xchacha20-ietf-poly1305:runtime-password@ss.example.test:8388",
+        # Shadowsocks 2022 requires a correctly sized Base64-encoded master key.
+        f"ss://{base64.urlsafe_b64encode(b'2022-blake3-aes-128-gcm:' + base64.b64encode(b'A' * 16)).decode().rstrip('=')}@ss.example.test:8388",
+        f"ss://{base64.urlsafe_b64encode(b'2022-blake3-aes-256-gcm:' + base64.b64encode(b'B' * 32)).decode().rstrip('=')}@ss.example.test:8388",
+        f"ss://{base64.urlsafe_b64encode(b'2022-blake3-chacha20-poly1305:' + base64.b64encode(b'C' * 32)).decode().rstrip('=')}@ss.example.test:8388",
     ],
 )
 def test_generated_config_is_accepted_by_pinned_xray_runtime(uri, tmp_path):
