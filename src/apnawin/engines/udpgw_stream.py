@@ -259,15 +259,28 @@ class UdpGwStreamClient:
                 sock.settimeout(previous_timeout)
 
     def close(self) -> None:
-        sock, self._socket = self._socket, None
+        # Retain the socket handle until close succeeds. If the OS reports a
+        # transient close failure, the session owner can retry cleanup.
+        sock = self._socket
+        if sock is None:
+            self._pending.clear()
+            self._decoder = PacketProtoDecoder()
+            return
+        try:
+            sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            # shutdown may report that the peer already closed; close remains
+            # authoritative for releasing the local descriptor.
+            pass
+        try:
+            sock.close()
+        except OSError as exc:
+            raise UdpGwTransportError(
+                "Could not close UDPGW stream; resource ownership is retained"
+            ) from exc
+        self._socket = None
         self._pending.clear()
         self._decoder = PacketProtoDecoder()
-        if sock is not None:
-            try:
-                sock.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
-            sock.close()
 
     def _require_socket(self) -> socket.socket:
         if self._socket is None or self._socket.fileno() < 0:
