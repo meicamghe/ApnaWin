@@ -57,7 +57,7 @@ def test_import_vless_reality_requires_public_key_sni_and_fingerprint():
     outbound = outbound_for(result)
     reality = outbound["streamSettings"]["realitySettings"]
     assert reality["serverName"] == "front.example.test"
-    assert reality["publicKey"] == "public-key"
+    assert reality["publicKey"] == "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
     assert reality["shortId"] == "abcd"
     assert reality["fingerprint"] == "chrome"
 
