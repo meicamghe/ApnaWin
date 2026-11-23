@@ -207,3 +207,25 @@ def test_shadowsocks_decodes_percent_encoded_sip002_credentials(userinfo, expect
     assert outbound["settings"]["servers"][0]["method"] == "aes-256-gcm"
     assert outbound["settings"]["servers"][0]["password"] == expected_password
 
+@pytest.mark.parametrize(
+    "uri",
+    [
+        f"vless://{UUID}@edge.example.test:443?type=ws&security=reality&sni=front.example.test&pbk=key&fp=chrome",
+        f"trojan://secret@edge.example.test:443?type=httpupgrade&security=reality&sni=front.example.test&pbk=key&fp=chrome",
+        f"vless://{UUID}@edge.example.test:443?type=ws&security=tls&flow=xtls-rprx-vision",
+        f"vless://{UUID}@edge.example.test:443?type=tcp&security=none&flow=xtls-rprx-vision",
+    ],
+)
+def test_rejects_runtime_incompatible_reality_and_vision_combinations(uri):
+    with pytest.raises(XrayShareLinkError):
+        import_xray_share_link(uri)
+
+
+def test_vless_vision_flow_accepts_tcp_with_reality():
+    result = import_xray_share_link(
+        f"vless://{UUID}@edge.example.test:443?type=tcp&security=reality"
+        "&sni=front.example.test&pbk=key&fp=chrome&flow=xtls-rprx-vision"
+    )
+    outbound = outbound_for(result)
+    assert outbound["settings"]["vnext"][0]["users"][0]["flow"] == "xtls-rprx-vision"
+
