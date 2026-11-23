@@ -371,6 +371,10 @@ def _parse_vmess(parsed) -> tuple[str, int, dict, dict]:
 
 def _parse_trojan(parsed) -> tuple[str, int, dict, dict]:
     host, port = _url_endpoint(parsed)
+    if parsed.password is not None:
+        raise XrayShareLinkError(
+            "Trojan password must be a single URL user-info value; encode literal colons as %3A"
+        )
     password = unquote(parsed.username or "")
     if (
         not password
@@ -392,10 +396,17 @@ def _parse_trojan(parsed) -> tuple[str, int, dict, dict]:
     return host, port, outbound, query
 
 
+def _decode_shadowsocks_userinfo(encoded: str, field: str) -> str:
+    try:
+        return _decode_base64(encoded, field).decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise XrayShareLinkError(f"{field} must decode to UTF-8 text") from exc
+
+
 def _parse_shadowsocks(parsed) -> tuple[str, int, dict, dict]:
     raw = parsed.netloc
     if "@" not in raw:
-        decoded = _decode_base64(raw.split("#", 1)[0], "Shadowsocks user info").decode("utf-8")
+        decoded = _decode_shadowsocks_userinfo(raw.split("#", 1)[0], "Shadowsocks user info")
         if "@" not in decoded:
             raise XrayShareLinkError("Shadowsocks link must include method:password@host:port")
         user_info, endpoint = decoded.rsplit("@", 1)
@@ -406,7 +417,7 @@ def _parse_shadowsocks(parsed) -> tuple[str, int, dict, dict]:
         host_port = urlsplit("//" + endpoint)
         host, port = _url_endpoint(host_port)
         if ":" not in user_info and "%3a" not in user_info.lower():
-            user_info = _decode_base64(user_info, "Shadowsocks credentials").decode("utf-8")
+            user_info = _decode_shadowsocks_userinfo(user_info, "Shadowsocks credentials")
         else:
             # SIP002 permits percent-encoded user-info; decode the method/password
             # separator and password bytes before splitting the credentials.
@@ -422,8 +433,12 @@ def _parse_shadowsocks(parsed) -> tuple[str, int, dict, dict]:
         "2022-blake3-chacha20-poly1305",
     }:
         raise XrayShareLinkError("Unsupported Shadowsocks cipher method")
-    if not password or len(password) > 1024:
-        raise XrayShareLinkError("Shadowsocks password is empty or too long")
+    if (
+        not password
+        or len(password) > 1024
+        or any(ord(character) < 32 or ord(character) == 127 for character in password)
+    ):
+        raise XrayShareLinkError("Shadowsocks password is empty, too long, or contains control characters")
     query = _query(parsed)
     if "plugin" in query:
         raise XrayShareLinkError("Shadowsocks SIP003 plugins are not yet supported")
