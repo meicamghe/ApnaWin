@@ -524,3 +524,52 @@ def test_gateway_close_retains_ownership_if_serving_thread_does_not_stop() -> No
 
     assert gateway._server is server
     assert gateway._thread is thread
+
+def test_gateway_close_does_not_shutdown_a_thread_that_never_started(monkeypatch) -> None:
+    gateway = Socks5Gateway(
+        Socks5GatewayConfig(ssh_proxy_host="127.0.0.1", ssh_proxy_port=1080)
+    )
+
+    class FakeServer:
+        def __init__(self, address, handler, owner):
+            self.server_address = ("127.0.0.1", 12000)
+            self.closed = False
+
+        def shutdown(self):
+            raise AssertionError("shutdown must not run for an unstarted thread")
+
+        def server_close(self):
+            self.closed = True
+
+    class FailingThread:
+        ident = None
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            raise RuntimeError("thread start failed")
+
+        def is_alive(self):
+            return False
+
+        def join(self, timeout):
+            raise AssertionError("an unstarted thread cannot be joined")
+
+    monkeypatch.setattr(
+        "apnawin.engines.socks5_gateway._GatewayServer", FakeServer
+    )
+    monkeypatch.setattr(
+        "apnawin.engines.socks5_gateway.threading.Thread", FailingThread
+    )
+
+    with pytest.raises(RuntimeError, match="thread start failed"):
+        gateway.start()
+
+    server = gateway._server
+    assert server is not None
+    gateway.close()
+
+    assert server.closed
+    assert gateway._server is None
+    assert gateway._thread is None
