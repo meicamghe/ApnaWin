@@ -16,9 +16,51 @@ from apnawin.engines.socks5_gateway import (
     Socks5GatewayError,
     encode_socks5_udp_datagram,
     parse_socks5_udp_datagram,
+    _read_socks5_address,
 )
 from apnawin.engines.udpgw_protocol import decode_udpgw_payload, encode_datagram
 
+
+
+@pytest.mark.parametrize(
+    "hostname",
+    [
+        b"",
+        b"bad..example",
+        b"-bad.example",
+        b"bad-.example",
+        b"bad_name.example",
+        b"bad\xff.example",
+        b"a" * 64 + b".example",
+    ],
+)
+def test_socks5_address_reader_rejects_malformed_domains(hostname: bytes) -> None:
+    left, right = socket.socketpair()
+    try:
+        left.sendall(bytes((len(hostname),)) + hostname)
+        with pytest.raises(Socks5GatewayError, match="hostname"):
+            _read_socks5_address(right, 3)
+    finally:
+        left.close()
+        right.close()
+
+
+def test_socks5_address_reader_accepts_valid_ascii_domain() -> None:
+    left, right = socket.socketpair()
+    try:
+        left.sendall(b"\x0bdns.example")
+        assert _read_socks5_address(right, 3) == "dns.example"
+    finally:
+        left.close()
+        right.close()
+
+
+def test_parse_socks5_udp_rejects_malformed_domain() -> None:
+    hostname = b"bad..example"
+    packet = b"\x00\x00\x00\x03" + bytes((len(hostname),)) + hostname
+    packet += struct.pack("!H", 53) + b"query"
+    with pytest.raises(Socks5GatewayError, match="hostname"):
+        parse_socks5_udp_datagram(packet)
 
 def test_parse_and_encode_socks5_ipv4_udp_datagram() -> None:
     request = b"\x00\x00\x00\x01" + ipaddress.ip_address("8.8.8.8").packed
