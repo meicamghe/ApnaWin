@@ -39,6 +39,18 @@ def test_rejects_ambiguous_or_controlled_user_credentials(uri):
         import_xray_share_link(uri)
 
 
+@pytest.mark.parametrize(
+    "uri",
+    [
+        f"vless://{UUID}@edge.example.test:443/ignored?security=tls",
+        "trojan://secret@edge.example.test:443/ignored?security=tls",
+    ],
+)
+def test_rejects_ignored_paths_in_authority_based_share_links(uri):
+    with pytest.raises(XrayShareLinkError, match="unsupported URL path"):
+        import_xray_share_link(uri)
+
+
 def test_grpc_service_name_rejects_delete_control_character():
     uri = (
         f"vless://{UUID}@edge.example.test:443?type=grpc&security=tls"
