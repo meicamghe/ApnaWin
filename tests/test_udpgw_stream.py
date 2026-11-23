@@ -187,3 +187,40 @@ def test_receive_packet_restores_socket_timeout_after_temporary_override() -> No
 
     assert packet.is_keepalive
     assert fake_socket.timeout == 9.0
+
+def test_close_retains_udpgw_socket_when_close_fails_and_can_retry() -> None:
+    class FlakySocket:
+        def __init__(self):
+            self.close_calls = 0
+            self.closed = False
+
+        def fileno(self):
+            return -1 if self.closed else 123
+
+        def shutdown(self, _how):
+            raise OSError("socket already shut down")
+
+        def close(self):
+            self.close_calls += 1
+            if self.close_calls == 1:
+                raise OSError("temporary close failure")
+            self.closed = True
+
+    fake_socket = FlakySocket()
+    stream = UdpGwStreamClient(
+        Socks5ConnectConfig("127.0.0.1", 1080, "udpgw.example.test", 7300)
+    )
+    stream._socket = fake_socket
+
+    with pytest.raises(UdpGwTransportError, match="ownership is retained"):
+        stream.close()
+
+    assert stream.socket is fake_socket
+    assert stream.connected
+    assert fake_socket.close_calls == 1
+
+    stream.close()
+
+    assert stream._socket is None
+    assert fake_socket.closed
+    assert fake_socket.close_calls == 2
