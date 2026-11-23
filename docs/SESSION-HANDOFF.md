@@ -1,9 +1,18 @@
-# Current active state — 2026-11-18
+# Current active state — 2026-11-23
 
 **Repository:** `meicamghe/ApnaWin`  
 **Branch:** `vpn/dual-stack-egress-readiness`  
 **PR:** [#6](https://github.com/meicamghe/ApnaWin/pull/6), open Draft, not merged.  
-**Latest observed HEAD:** `851e6ca17212fa01b904c910360c17f84ea005f1` (subsequent documentation commits may advance this).
+**Latest verified HEAD at handoff:** `c261e9c6c7a52138d6c1794976900ca2c474fb70`.
+
+## Latest verified checkpoint — 2026-11-23
+
+- PR #6 remains open and Draft. Do not merge or convert it from Draft without explicit user approval.
+- Both current-head workflows for `c261e9c` completed successfully: Windows tests/build (including Ruff, runtime security, VPN readiness/egress, unit/integration tests, packaging and portable artifact publication) and the APNA BadVPN Windows x64 native build.
+- The latest commit fixes a test-only TLS compatibility-context injection issue; production TLS behavior was not changed by that commit.
+- The TLS self-signed compatibility option is already wired end-to-end for imported APNA profiles: the APK import dialog exposes the opt-in checkbox, the mapper passes it to `PayloadSocketConfig`, the encrypted profile store persists it, and the selected-profile UI exposes a persisted toggle. The toggle changes only TLS certificate verification; it does not change SNI or SSH authentication.
+- Import counts are counts of server/payload combinations, not server records or hostnames. The import worker iterates each server record and every SSH-compatible payload in that server's category, creates one candidate per valid pair, and deduplicates by generated profile name. Thus 3,028 imported profiles from 50 server records / 16 SSH-compatible records is not, by itself, evidence of hostname expansion or a counting bug. The report explicitly distinguishes pair attempts, valid combinations, and imported profiles.
+- No live SSH authentication, UDPGW datagram round-trip, or Windows routed traffic has been proven by green CI. Those remain external acceptance gates and require the user's authorized APNA endpoint/network and a Windows 10/11 test host.
 
 ## Acceptance target
 
