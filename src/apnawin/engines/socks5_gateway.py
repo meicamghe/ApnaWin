@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ipaddress
 import math
+import re
 import select
 import socket
 import socketserver
@@ -111,6 +112,24 @@ def _recv_exact(sock: socket.socket, size: int) -> bytes:
     return bytes(result)
 
 
+def _validate_socks5_domain(host: str) -> str:
+    """Accept bounded ASCII DNS names; reject ambiguous or malformed labels."""
+    if not host or len(host) > 253 or not host.isascii():
+        raise Socks5GatewayError("SOCKS5 request contains an invalid hostname")
+    name = host[:-1] if host.endswith(".") else host
+    if not name or len(name) > 253:
+        raise Socks5GatewayError("SOCKS5 request contains an invalid hostname")
+    labels = name.split(".")
+    if any(
+        not label
+        or len(label) > 63
+        or re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?", label) is None
+        for label in labels
+    ):
+        raise Socks5GatewayError("SOCKS5 request contains an invalid hostname")
+    return host
+
+
 def _read_socks5_address(sock: socket.socket, address_type: int) -> str:
     if address_type == 1:
         return str(ipaddress.IPv4Address(_recv_exact(sock, 4)))
@@ -121,9 +140,10 @@ def _read_socks5_address(sock: socket.socket, address_type: int) -> str:
         if not length:
             raise Socks5GatewayError("SOCKS5 request contains an empty hostname")
         try:
-            return _recv_exact(sock, length).decode("idna")
+            host = _recv_exact(sock, length).decode("ascii")
         except UnicodeError as exc:
             raise Socks5GatewayError("SOCKS5 request contains an invalid hostname") from exc
+        return _validate_socks5_domain(host)
     raise Socks5GatewayError("SOCKS5 request uses an unsupported address type")
 
 
