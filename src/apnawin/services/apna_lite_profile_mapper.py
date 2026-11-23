@@ -88,16 +88,15 @@ def _catalog_bool(value: object, field: str) -> bool:
 def _payload_requests_websocket_upgrade(template: str) -> bool:
     """Recognize an Upgrade header across APNA's literal and tokenized CRLF forms."""
     normalized = re.sub(
-        r"\\[(?:crlf|lf|cr)\\]",
-        "\\n",
+        r"\[(?:crlf|lf|cr)\]",
+        "\n",
         template,
         flags=re.IGNORECASE,
     )
     return re.search(
-        r"(?im)^[ \\t]*upgrade[ \\t]*:[ \\t]*websocket(?:[ \\t]*,|[ \\t]*$)",
+        r"(?im)^[ \t]*upgrade[ \t]*:[ \t]*websocket(?:[ \t]*,|[ \t]*$)",
         normalized,
     ) is not None
-
 
 
 def list_apna_lite_ssh_servers(catalog: dict) -> list[dict]:
