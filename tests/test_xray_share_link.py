@@ -198,6 +198,19 @@ def test_invalid_vmess_payload_does_not_leak_payload_in_error():
     assert "not-base64" not in str(error.value)
 
 @pytest.mark.parametrize(
+    "uri",
+    [
+        "vless://[broken-ipv6:443",
+        "vmess://[broken-ipv6",
+        f"vless://{UUID}@edge.example.test:443?type=ws&path=%2Fbad%0Apath",
+        f"trojan://secret@edge.example.test:443\n?security=tls",
+    ],
+)
+def test_rejects_malformed_urls_and_control_characters(uri):
+    with pytest.raises(XrayShareLinkError):
+        import_xray_share_link(uri)
+
+@pytest.mark.parametrize(
     ("userinfo", "expected_password"),
     [
         ("aes-256-gcm:p%40ss%3Aword", "p@ss:word"),
