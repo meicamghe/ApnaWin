@@ -85,6 +85,20 @@ def _catalog_bool(value: object, field: str) -> bool:
     raise ApnaLiteProfileError(f"{field} must be true or false")
 
 
+def _payload_requests_websocket_upgrade(template: str) -> bool:
+    """Recognize an Upgrade header across APNA's literal and tokenized CRLF forms."""
+    normalized = re.sub(
+        r"\\[(?:crlf|lf|cr)\\]",
+        "\\n",
+        template,
+        flags=re.IGNORECASE,
+    )
+    return re.search(
+        r"(?im)^[ \\t]*upgrade[ \\t]*:[ \\t]*websocket(?:[ \\t]*,|[ \\t]*$)",
+        normalized,
+    ) is not None
+
+
 
 def list_apna_lite_ssh_servers(catalog: dict) -> list[dict]:
     """Return SSH-compatible servers from every catalog tier."""
@@ -227,7 +241,7 @@ def build_apna_lite_ssh_profile(
         # because the payload contains an Upgrade header.
         expected_statuses = (
             (200, 101)
-            if "upgrade: websocket" in payload_text.lower()
+            if _payload_requests_websocket_upgrade(payload_text)
             else (200,)
         )
 
