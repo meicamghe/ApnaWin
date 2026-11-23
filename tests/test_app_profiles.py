@@ -982,7 +982,6 @@ def test_selected_apna_tls_compatibility_toggle_persists_per_profile(tmp_path, q
 def test_selected_apna_tls_toggle_rolls_back_when_encrypted_save_fails(
     tmp_path, qapp, monkeypatch, initial_enabled
 ):
-    from dataclasses import replace
     from apnawin.engines.apna_payload_socket import PayloadSocketConfig, PayloadSocketMode
     from apnawin.engines.apna_ssh_session import ApnaSshConfig
     from apnawin.engines.apna_tunnel_session import ApnaTunnelSessionConfig
