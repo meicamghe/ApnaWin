@@ -524,3 +524,49 @@ def test_listener_bind_failure_releases_ssh_resources_and_allows_retry() -> None
         session.close()
         for peer in peers:
             peer.close()
+
+
+
+def test_close_retains_server_ownership_when_shutdown_fails_and_can_retry() -> None:
+    class FlakyServer:
+        def __init__(self):
+            self.shutdown_calls = 0
+            self.close_calls = 0
+
+        def shutdown(self):
+            self.shutdown_calls += 1
+            if self.shutdown_calls == 1:
+                raise OSError("temporary shutdown failure")
+
+        def server_close(self):
+            self.close_calls += 1
+
+    class StoppedThread:
+        def join(self, timeout=None):
+            return None
+
+        def is_alive(self):
+            return False
+
+    session = ApnaSshSession(
+        ApnaSshConfig("ssh.example.test", 22, "user", password="secret"),
+        _payload_config(),
+    )
+    server = FlakyServer()
+    thread = StoppedThread()
+    session._server = server
+    session._server_thread = thread
+
+    with pytest.raises(OSError, match="temporary shutdown failure"):
+        session.close()
+
+    assert session._server is server
+    assert session._server_thread is thread
+    assert session._closed is False
+
+    session.close()
+    assert server.shutdown_calls == 2
+    assert server.close_calls == 1
+    assert session._server is None
+    assert session._server_thread is None
+    assert session._closed is True
