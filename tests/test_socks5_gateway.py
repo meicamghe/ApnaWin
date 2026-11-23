@@ -466,14 +466,18 @@ def test_gateway_close_retains_resource_ownership_when_shutdown_fails() -> None:
             self.close_calls += 1
 
     class FakeThread:
+        ident = 1
+
         def __init__(self):
             self.join_calls = 0
+            self.alive = True
 
         def join(self, timeout):
             self.join_calls += 1
+            self.alive = False
 
         def is_alive(self):
-            return False
+            return self.alive
 
     server = FakeServer()
     thread = FakeThread()
@@ -534,6 +538,9 @@ def test_gateway_close_does_not_shutdown_a_thread_that_never_started(monkeypatch
         def __init__(self, address, handler, owner):
             self.server_address = ("127.0.0.1", 12000)
             self.closed = False
+
+        def serve_forever(self):
+            raise AssertionError("serve_forever must not be called")
 
         def shutdown(self):
             raise AssertionError("shutdown must not run for an unstarted thread")
