@@ -27,6 +27,27 @@ def outbound_for(result):
     return config["outbounds"][0]
 
 
+@pytest.mark.parametrize(
+    "uri",
+    [
+        f"vless://{UUID}:unexpected@edge.example.test:443?security=tls",
+        "trojan://secret%7Fpassword@edge.example.test:443?security=tls",
+    ],
+)
+def test_rejects_ambiguous_or_controlled_user_credentials(uri):
+    with pytest.raises(XrayShareLinkError):
+        import_xray_share_link(uri)
+
+
+def test_grpc_service_name_rejects_delete_control_character():
+    uri = (
+        f"vless://{UUID}@edge.example.test:443?type=grpc&security=tls"
+        "&serviceName=bridge%7FInjected"
+    )
+    with pytest.raises(XrayShareLinkError, match="gRPC service name"):
+        import_xray_share_link(uri)
+
+
 def test_import_vless_ws_tls_creates_encrypted_store_ready_profile():
     result = import_xray_share_link(
         f"vless://{UUID}@edge.example.test:443"
