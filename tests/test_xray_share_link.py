@@ -155,6 +155,38 @@ def test_rejects_unsupported_or_unsafe_share_links(uri):
         import_xray_share_link(uri)
 
 
+@pytest.mark.parametrize(
+    "document",
+    [
+        (
+            '{"add":"vmess.example.test","add":"other.example.test",'
+            '"port":"443","id":"' + UUID + '","aid":"0","net":"tcp","tls":"tls"}'
+        ),
+        (
+            '{"add":"vmess.example.test","port":"443","id":"' + UUID
+            + '","aid":"0","net":"tcp","tls":"tls","extra":NaN}'
+        ),
+    ],
+)
+def test_vmess_rejects_duplicate_fields_and_non_finite_json(document):
+    encoded = base64.urlsafe_b64encode(document.encode()).decode().rstrip("=")
+    with pytest.raises(XrayShareLinkError):
+        import_xray_share_link(f"vmess://{encoded}")
+
+
+def test_share_link_query_has_a_bounded_parameter_count():
+    parameters = "&".join(f"x{index}=1" for index in range(129))
+    uri = f"vless://{UUID}@edge.example.test:443?{parameters}"
+    with pytest.raises(XrayShareLinkError, match="too many parameters"):
+        import_xray_share_link(uri)
+
+
+def test_trojan_rejects_case_insensitive_no_tls_security():
+    uri = "trojan://secret@edge.example.test:443?security=NONE"
+    with pytest.raises(XrayShareLinkError, match="TLS or Reality"):
+        import_xray_share_link(uri)
+
+
 def test_invalid_vmess_payload_does_not_leak_payload_in_error():
     with pytest.raises(XrayShareLinkError) as error:
         import_xray_share_link("vmess://not-base64")
