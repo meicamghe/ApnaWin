@@ -206,6 +206,9 @@ def _stream_settings(
         tls: dict = {"serverName": server_name, "allowInsecure": False}
         alpn = query.get("alpn")
         if alpn:
+            raw_values = alpn.split(",")
+            if not 1 <= len(raw_values) <= 8 or any(not item.strip() for item in raw_values):
+                raise XrayShareLinkError("TLS ALPN list is invalid")
             values = [
                 _safe_option_text(
                     item.strip(),
@@ -213,11 +216,8 @@ def _stream_settings(
                     max_length=32,
                     allow_empty=False,
                 )
-                for item in alpn.split(",")
-                if item.strip()
+                for item in raw_values
             ]
-            if not values or len(values) > 8:
-                raise XrayShareLinkError("TLS ALPN list is invalid")
             tls["alpn"] = values
         fingerprint = query.get("fp")
         if fingerprint:
