@@ -25,6 +25,58 @@ class PayloadTransportError(ConnectionError):
     """The payload transport could not establish a usable SSH byte stream."""
 
 
+def _redacted_request_summary(config: "PayloadSocketConfig", chunks: tuple) -> str:
+    """Summarize HTTP routing metadata without logging payloads or query secrets."""
+    request = b"".join(chunk.data for chunk in chunks).decode("iso-8859-1", errors="replace")
+    lines = request.split("\\r\\n")
+    parts = lines[0].split() if lines else []
+    if len(parts) != 3:
+        return (
+            f"mode={config.mode.value}; endpoint={config.connect_host}:{config.connect_port}; "
+            f"target={config.target_host}:{config.target_port}"
+        )
+
+    method, target, version = parts
+    path = target.split("?", 1)[0].split("#", 1)[0]
+    # Opaque/long path segments may be provider tokens; retain route shape only.
+    safe_segments = []
+    for segment in path.split("/"):
+        if len(segment) > 24 or (
+            len(segment) >= 16
+            and any(char.isdigit() for char in segment)
+            and any(char.isalpha() for char in segment)
+        ):
+            safe_segments.append("<redacted>")
+        else:
+            safe_segments.append(segment[:64])
+    safe_path = "/".join(safe_segments)[:192] or "/"
+
+    host_header = ""
+    for line in lines[1:]:
+        if ":" not in line:
+            continue
+        name, value = line.split(":", 1)
+        if name.strip().lower() == "host":
+            host_header = " ".join(value.strip().split())[:253]
+            break
+
+    fields = [
+        f"mode={config.mode.value}",
+        f"request={method[:16]} {safe_path} {version[:16]}",
+        f"Host={host_header or '[absent]'}",
+        f"endpoint={config.connect_host}:{config.connect_port}",
+        f"target={config.target_host}:{config.target_port}",
+    ]
+    if config.mode in {PayloadSocketMode.TLS_DIRECT, PayloadSocketMode.TLS_HTTP_PROXY}:
+        default_sni = (
+            config.connect_host
+            if config.mode is PayloadSocketMode.TLS_HTTP_PROXY
+            else config.target_host
+        )
+        fields.append(f"SNI={config.sni or default_sni}")
+    return "; ".join(fields)
+
+
 class PayloadSocketMode(str, Enum):
     DIRECT = "direct"
     HTTP_PROXY = "http_proxy"
@@ -144,6 +196,7 @@ def _read_http_connect_response(
     sock: socket.socket,
     limit: int,
     expected_statuses: tuple[int, ...],
+    request_context: str = "",
 ) -> tuple[int, dict[str, tuple[str, ...]]]:
     """Read only through CRLFCRLF so SSH bytes following the header stay buffered."""
     response = bytearray()
@@ -185,6 +238,7 @@ def _read_http_connect_response(
             for key, values in response_headers.items()
             if values and key in {"server", "via", "x-cache", "cf-ray", "content-type", "retry-after"}
         }
+        context = f" Request details: {request_context}." if request_context else ""
         metadata = (
             " Response headers: "
             + ", ".join(f"{key}={value}" for key, value in sorted(headers.items()))
@@ -206,6 +260,7 @@ def _read_http_connect_response(
                 "Redirects are not followed for SSH payloads because changing the "
                 "request target can alter the provider's SSH tunnel route. "
                 f"Expected one of: {expected}. Check the selected payload, host, port and path."
+                f"{context}"
             )
         if status == 101:
             diagnosis = (
@@ -275,7 +330,7 @@ def _read_http_connect_response(
         else:
             diagnosis = "The proxy returned an unexpected HTTP response; verify the selected payload and endpoint."
         raise PayloadTransportError(
-            f"Proxy returned HTTP {status}; {diagnosis}{metadata} Expected one of: {expected}"
+            f"Proxy returned HTTP {status}; {diagnosis}{metadata}{context} Expected one of: {expected}"
         )
     return status, response_headers
 
@@ -463,10 +518,12 @@ class ApnaPayloadSocketConnector:
                 and not config.dropbear_no_response
                 and config.mode in {PayloadSocketMode.HTTP_PROXY, PayloadSocketMode.TLS_HTTP_PROXY}
             ):
+                request_context = _redacted_request_summary(config, chunks)
                 status, response_headers = _read_http_connect_response(
                     active_socket,
                     config.max_response_header_bytes,
                     config.expected_http_statuses,
+                    request_context,
                 )
                 if status == 101:
                     request_bytes = b"".join(chunk.data for chunk in chunks)
