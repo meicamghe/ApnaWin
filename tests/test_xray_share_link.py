@@ -61,6 +61,37 @@ def test_import_vless_reality_requires_public_key_sni_and_fingerprint():
     assert reality["shortId"] == "abcd"
     assert reality["fingerprint"] == "chrome"
 
+def test_import_vless_xhttp_reality_settings():
+    result = import_xray_share_link(
+        f"vless://{UUID}@edge.example.test:443?type=xhttp&security=reality"
+        "&sni=front.example.test&pbk=public-key&sid=abcd&fp=chrome"
+        "&host=cdn.example.test&path=%2Fedge&mode=packet-up#XHTTP"
+    )
+    outbound = outbound_for(result)
+    stream = outbound["streamSettings"]
+    assert stream["network"] == "xhttp"
+    assert stream["xhttpSettings"] == {
+        "path": "/edge",
+        "mode": "packet-up",
+        "host": "cdn.example.test",
+    }
+    assert stream["realitySettings"]["serverName"] == "front.example.test"
+
+
+@pytest.mark.parametrize("mode", ["auto", "packet-up", "stream-up", "stream-one"])
+def test_xhttp_accepts_supported_modes(mode):
+    result = import_xray_share_link(
+        f"vless://{UUID}@edge.example.test:443?type=xhttp&security=tls&mode={mode}"
+    )
+    assert outbound_for(result)["streamSettings"]["xhttpSettings"]["mode"] == mode
+
+
+def test_xhttp_rejects_unknown_mode():
+    with pytest.raises(XrayShareLinkError, match="XHTTP mode"):
+        import_xray_share_link(
+            f"vless://{UUID}@edge.example.test:443?type=xhttp&security=tls&mode=unknown"
+        )
+
 
 def test_import_vmess_base64_json():
     payload = {
@@ -293,16 +324,18 @@ def test_imports_documented_xray_shadowsocks_cipher_methods(method):
         f"vless://{UUID}@vless.example.test:443?type=ws&security=tls&sni=cdn.example.test&host=cdn.example.test&path=%2Fvless",
         f"vless://{UUID}@vless.example.test:443?type=grpc&security=reality&sni=vless.example.test&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=abcd1234&fp=chrome&serviceName=vless-grpc",
         f"vless://{UUID}@vless.example.test:443?type=tcp&security=reality&sni=vless.example.test&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=abcd1234&fp=chrome&flow=xtls-rprx-vision",
-        # VMess: TCP, WebSocket, gRPC and HTTPUpgrade over TLS.
+        f"vless://{UUID}@vless.example.test:443?type=xhttp&security=reality&sni=vless.example.test&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=abcd1234&fp=chrome&path=%2Fvless&mode=packet-up",
+        # VMess: TCP, WebSocket, gRPC, HTTPUpgrade and XHTTP over TLS.
         f"vmess://{base64.urlsafe_b64encode(json.dumps({'v':'2','ps':'runtime-vmess-tcp','add':'vmess.example.test','port':'443','id':UUID,'aid':'0','scy':'auto','net':'tcp','tls':'tls','sni':'vmess.example.test'}).encode()).decode().rstrip('=')}",
         f"vmess://{base64.urlsafe_b64encode(json.dumps({'v':'2','ps':'runtime-vmess-ws','add':'vmess.example.test','port':'443','id':UUID,'aid':'0','scy':'auto','net':'ws','host':'cdn.example.test','path':'/vmess','tls':'tls','sni':'cdn.example.test'}).encode()).decode().rstrip('=')}",
         f"vmess://{base64.urlsafe_b64encode(json.dumps({'v':'2','ps':'runtime-vmess-grpc','add':'vmess.example.test','port':'443','id':UUID,'aid':'0','scy':'auto','net':'grpc','path':'vmess-grpc','tls':'tls','sni':'vmess.example.test'}).encode()).decode().rstrip('=')}",
-        f"vmess://{base64.urlsafe_b64encode(json.dumps({'v':'2','ps':'runtime-vmess-httpupgrade','add':'vmess.example.test','port':'443','id':UUID,'aid':'0','scy':'auto','net':'httpupgrade','host':'cdn.example.test','path':'/upgrade','tls':'tls','sni':'vmess.example.test'}).encode()).decode().rstrip('=')}",
-        # Trojan: TCP, WebSocket, gRPC and HTTPUpgrade over TLS.
+        f"vmess://{base64.urlsafe_b64encode(json.dumps({'v':'2','ps':'runtime-vmess-xhttp','add':'vmess.example.test','port':'443','id':UUID,'aid':'0','scy':'auto','net':'xhttp','host':'cdn.example.test','path':'/xhttp','mode':'packet-up','tls':'tls','sni':'vmess.example.test'}).encode()).decode().rstrip('=')}",
+        # Trojan: TCP, WebSocket, gRPC, HTTPUpgrade and XHTTP over TLS.
         "trojan://runtime-password@trojan.example.test:443?security=tls&type=tcp&sni=trojan.example.test",
         "trojan://runtime-password@trojan.example.test:443?security=tls&type=ws&sni=trojan.example.test&host=cdn.example.test&path=%2Ftrojan",
         "trojan://runtime-password@trojan.example.test:443?security=tls&type=grpc&sni=trojan.example.test&serviceName=trojan-grpc",
         "trojan://runtime-password@trojan.example.test:443?security=tls&type=httpupgrade&sni=trojan.example.test&host=cdn.example.test&path=%2Fupgrade",
+        "trojan://runtime-password@trojan.example.test:443?security=tls&type=xhttp&sni=trojan.example.test&path=%2Ftrojan&mode=stream-up",
         # Shadowsocks: representative AEAD and XChaCha20 cipher implementations.
         "ss://chacha20-ietf-poly1305:runtime-password@ss.example.test:8388",
         "ss://aes-256-gcm:runtime-password@ss.example.test:8388",
