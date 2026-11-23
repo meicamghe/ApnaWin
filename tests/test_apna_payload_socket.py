@@ -164,7 +164,7 @@ def test_http_101_is_not_accepted_for_non_websocket_payload_and_explains_mismatc
     def server(server_socket):
         server_socket.recv(4096)
         server_socket.sendall(
-            b"HTTP/1.1 101 Switching Protocols\\r\\nUpgrade: websocket\\r\\n\\r\\n"
+            b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\r\n"
         )
         server_socket.close()
 
