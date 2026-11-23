@@ -263,7 +263,7 @@ def test_imports_documented_xray_shadowsocks_cipher_methods(method):
     "uri",
     [
         f"vless://{UUID}@vless.example.test:443?type=tcp&security=tls&sni=vless.example.test",
-        f"vless://{UUID}@vless.example.test:443?type=grpc&security=reality&sni=vless.example.test&pbk=public-key&fp=chrome&serviceName=grpc",
+        f"vless://{UUID}@vless.example.test:443?type=grpc&security=reality&sni=vless.example.test&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&fp=chrome&serviceName=grpc",
         f"vmess://{base64.urlsafe_b64encode(json.dumps({'v':'2','ps':'runtime-vmess','add':'vmess.example.test','port':'443','id':UUID,'aid':'0','scy':'auto','net':'ws','host':'vmess.example.test','path':'/vmess','tls':'tls'}).encode()).decode().rstrip('=')}",
         "trojan://runtime-password@trojan.example.test:443?security=tls&type=tcp&sni=trojan.example.test",
         "ss://chacha20-ietf-poly1305:runtime-password@ss.example.test:8388",
