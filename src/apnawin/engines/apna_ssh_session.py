@@ -450,25 +450,46 @@ class ApnaSshSession:
         return channel
 
     def close(self) -> None:
-        if self._closed:
+        if (
+            self._closed
+            and self._server is None
+            and self._ssh_client is None
+            and self._payload_socket is None
+        ):
             return
-        self._closed = True
-        if self._server is not None:
-            self._server.shutdown()
-            self._server.server_close()
-            if self._server_thread is not None:
-                self._server_thread.join(timeout=2)
+
+        # Do not discard ownership until each resource has actually closed.
+        # A failed shutdown/close must remain retryable by the session owner.
+        server = self._server
+        if server is not None:
+            server.shutdown()
+            server.server_close()
+            thread = self._server_thread
+            if thread is not None:
+                thread.join(timeout=2)
+                if thread.is_alive():
+                    raise ApnaSshError(
+                        "SSH SOCKS listener thread did not stop; resource ownership is retained"
+                    )
             self._server = None
             self._server_thread = None
-        if self._ssh_client is not None:
-            self._ssh_client.close()
+
+        client = self._ssh_client
+        if client is not None:
+            client.close()
             self._ssh_client = None
-        if self._payload_socket is not None:
+
+        payload_socket = self._payload_socket
+        if payload_socket is not None:
             try:
-                self._payload_socket.close()
-            except OSError:
-                pass
+                payload_socket.close()
+            except OSError as exc:
+                raise ApnaSshError(
+                    "SSH payload socket cleanup failed; resource ownership is retained"
+                ) from exc
             self._payload_socket = None
+
+        self._closed = True
 
     def __enter__(self) -> ApnaSshSession:
         self.connect()
