@@ -191,6 +191,9 @@ class ApnaCatalogImportDialog(QDialog):
         self.ca_bundle_edit.setPlaceholderText("Optional provider-issued CA certificate bundle")
         self.ca_bundle_button = QPushButton("Choose trusted CA file…")
         self.ca_bundle_button.clicked.connect(self._choose_ca_bundle)
+        self.allow_insecure_tls_check = QCheckBox(
+            "Allow self-signed / untrusted TLS certificates (compatibility mode)"
+        )
         self.transparent_dns_check = QCheckBox("Use APNA UDP gateway for transparent DNS")
         self.probe_button = QPushButton("Probe SSH host key (no authentication)")
         self.probe_button.clicked.connect(self._probe_host_key)
@@ -203,6 +206,7 @@ class ApnaCatalogImportDialog(QDialog):
         form.addRow("User-Agent", self.user_agent_edit)
         form.addRow("Trusted provider CA", self.ca_bundle_button)
         form.addRow("CA bundle path", self.ca_bundle_edit)
+        form.addRow("", self.allow_insecure_tls_check)
         form.addRow("", self.transparent_dns_check)
 
         note = QLabel(
@@ -215,7 +219,7 @@ class ApnaCatalogImportDialog(QDialog):
             "A scanned host-key fingerprint is not independently authenticated. "
             "Compare it with a provider-published fingerprint before trusting it. "
             "Only add a TLS CA bundle obtained from the provider through a trusted channel; "
-            "system certificate verification remains enabled."
+            "Self-signed TLS compatibility is opt-in and disables certificate verification for this profile only."
         )
         warning.setWordWrap(True)
 
@@ -288,6 +292,7 @@ class ApnaCatalogImportDialog(QDialog):
             host_selector=self._choose_host,
             host_key_sha256=self.host_key_edit.text().strip() or None,
             ca_bundle_file=self.ca_bundle_edit.text().strip() or None,
+            allow_insecure_tls=self.allow_insecure_tls_check.isChecked(),
             brand=self.brand_edit.text().strip() or None,
             user_agent=self.user_agent_edit.text().strip() or None,
             transparent_dns=self.transparent_dns_check.isChecked(),
@@ -458,6 +463,8 @@ class _ApnaCatalogImportWorker(QThread):
             candidates = []
             skipped_duplicate = 0
             skipped_unmappable = 0
+            pair_attempts = 0
+            mapped_pairs = 0
             total = len(servers)
             for server_index, server in enumerate(servers, start=1):
                 if self.cancel_event.is_set():
@@ -465,6 +472,7 @@ class _ApnaCatalogImportWorker(QThread):
                     return
                 category = str(server.get("category", ""))
                 payloads = list_apna_lite_ssh_payloads(self.catalog, category)
+                pair_attempts += len(payloads)
                 mapped_any = False
                 for payload in payloads:
                     if credentials is None:
@@ -476,6 +484,7 @@ class _ApnaCatalogImportWorker(QThread):
                     except (TypeError, ValueError):
                         continue
                     mapped_any = True
+                    mapped_pairs += 1
                     key = candidate.profile.name.casefold()
                     if key in existing:
                         skipped_duplicate += 1
@@ -504,6 +513,8 @@ class _ApnaCatalogImportWorker(QThread):
             report_lines = [
                 f"Catalog total: {all_total} server records across all tiers",
                 f"SSH-compatible records: {supported_total}",
+                f"Server/payload combinations examined: {pair_attempts}",
+                f"Valid SSH profile combinations: {mapped_pairs}",
                 f"New profiles imported: {len(self.imported)}",
                 f"Existing/duplicate profiles skipped: {skipped_duplicate}",
                 f"Incomplete or unmappable SSH records skipped: {skipped_unmappable}",
