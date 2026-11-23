@@ -124,3 +124,55 @@ Release remains blocked until these tests pass. Current GitHub CI validates code
 ### Static DEX loader-to-APK filename correlation
 
 The combined report joins literal arguments from the exact JVM loader calls `System.loadLibrary`, `System.load`, `Runtime.loadLibrary` and `Runtime.load` (including DEX `/range` invocation forms) in manifest Application/Service classes to exact native-library basenames in the same APK. `loadLibrary` values are normalized to `lib*.so`; `load` paths contribute only their `.so` basename. Each row reports matching ABI directories and labels the evidence exact_filename_only. Missing filenames are reported as not_found, not inferred from engine-name substrings. This join does not prove that the loader executes, that the library initializes successfully, or that the service owns its runtime. JNI_OnLoad exports and native-method declarations remain separate evidence; dynamic JNI registration, reflection, process launches and protected loaders require additional analysis.
+
+
+## 7. Follow-up engineering audit — 2026-11-23
+
+This section records a source-level audit of the current ApnaWin implementation against the v51 native-library inventory. It intentionally separates **a reusable forwarding component** from **an implementation of a remote protocol**.
+
+### 7.1 What the current code actually implements
+
+| Code area | Verified implementation | What it does not establish |
+|---|---|---|
+| `apna_ssh_session.py` | Paramiko SSH authentication, optional pinned host key, loopback SOCKS5 TCP CONNECT forwarding | Compatibility with the protected Salamander SSH handshake, its cipher/KEX policy, or its native socket handoff |
+| `apna_payload_socket.py` / `apna_payload.py` | Direct/TLS/HTTP payload socket setup and DEX-derived payload expansion | Every protected payload mode or every server-side payload grammar |
+| `udpgw_protocol.py`, `udpgw_stream.py`, `udpgw_flows.py`, `socks5_gateway.py` | BadVPN PacketProto framing, flow IDs, UDPGW-over-TCP stream and local SOCKS5 UDP ASSOCIATE bridge | A successful round-trip against a real APNA provider UDPGW endpoint |
+| `apna_tunnel_engine.py`, `apna_xray_config.py`, `xray_process.py` | Starts an SSH-backed local SOCKS bridge, then configures a separate Xray process as a dual-stack TUN frontend whose only outbound is that local SOCKS bridge | A remote Xray outbound for VLESS/VMess/Trojan/Shadowsocks/WireGuard/Hysteria; those are separate adapters/configuration paths |
+| `multi_transport.py`, `transport_router.py` | Lifecycle dispatch across registered `Transport` engines | Automatic discovery or registration of every protocol found in Android native binaries |
+
+**Important correction for implementation planning:** the existing Xray integration is a TUN/packet-routing frontend over the SSH SOCKS bridge. It is not yet an APNA Xray-protocol client. The Android `libxray.so` code inventory therefore represents additional remote-protocol capability that has not been wired into ApnaWin's profile model or engine registry.
+
+### 7.2 Current v51 versus historical v27 OpenVPN evidence
+
+The v51 primary DEX references `prince.open.vpn.activities.OpenVPNClient`, but the referenced class is not defined in the inspected primary DEX. This is not enough to claim a current v51 OpenVPN implementation. The independent v27 dynamic report did observe an OpenVPN runtime/configuration in that older release. Therefore:
+
+- OpenVPN remains in the compatibility investigation backlog.
+- Do not reuse v27 endpoints, credentials, generated configuration, or assumptions as v51 values.
+- Recover the v51 split/protected implementation or a redacted runtime trace before defining the exact APNA OpenVPN adapter contract.
+- A generic OpenVPN engine may be developed as an independent importable transport, but it must not be presented as a verified v51 catalog mapping.
+
+### 7.3 QUIC/DTLS and `libudpqtwo.so`
+
+The current source has no dedicated QUIC or DTLS transport engine registered in `Transport`. The Android native inventory establishes that the ARM64 Go binary contains QUIC, Pion DTLS, SOCKS5, HTTP proxy and DNS-related code signatures. It does not reveal a stable configuration schema or which service owns the binary.
+
+The next implementation gate is not to guess a protocol from the filename. Recover and document:
+
+1. ELF build metadata, exported/dynamic symbols, imports, relocations and init/fini behavior for the exact split-library hash.
+2. DEX service launch and native-loading paths for `PInjectorService`, `SocksDNSService`, `XRayDNSService` and the proxy service.
+3. Any process arguments, JNI registration names, Binder/Intent extras and configuration key/type pairs (redacted values only).
+4. Socket metadata and a repeatable handshake/packet exchange from an authorized test installation.
+
+After the contract is known, implement QUIC and DTLS as separate transport adapters if the evidence shows distinct handshakes. Do not treat SOCKS5 as a remote VPN protocol: it is a proxy interface which may be carried by another transport.
+
+### 7.4 Implementation sequence
+
+1. Keep the SSH + payload + SOCKS + UDPGW path isolated and add provider-independent protocol conformance tests; never weaken SSH algorithms merely to make an endpoint appear compatible.
+2. Separate the Xray TUN frontend from remote Xray outbound profiles. Add a typed remote-outbound model and per-protocol config builders only with required credential/security fields and validation.
+3. Add independent engine contracts for QUIC and DTLS after recovering `libudpqtwo.so` ownership and wire/config behavior.
+4. Add OpenVPN as an independently testable engine; mark APNA v51 catalog selection as unresolved until v51 evidence exists.
+5. Register each engine explicitly in the multi-transport router, then test lifecycle, cancellation, resource ownership, IPv4/IPv6, TCP/UDP, DNS and leak protection.
+6. Keep all statuses evidence-based: process started, handshake complete, authenticated, proxy reachable, routed egress verified and disconnected must remain distinct states.
+
+### 7.5 Scope and release boundary
+
+This audit changes the engineering plan and does not claim a successful live connection. No Windows installer, portable release, new product build, or PR merge is authorized by this work. PR #6 remains open, Draft and unmerged.
