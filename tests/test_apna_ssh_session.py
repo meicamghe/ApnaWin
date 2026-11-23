@@ -53,7 +53,7 @@ def test_ssh_config_rejects_malformed_network_hosts(host):
         ApnaSshConfig(host, 22, "user", password="secret")
 
 
-@pytest.mark.parametrize("username", ["user\\nadmin", "user\\x00", "user\\x7f"])
+@pytest.mark.parametrize("username", ["user\nadmin", "user\x00", "user\x7f"])
 def test_ssh_config_rejects_control_characters_in_username(username):
     with pytest.raises(ValueError, match="control characters"):
         ApnaSshConfig("ssh.example.test", 22, username, password="secret")
