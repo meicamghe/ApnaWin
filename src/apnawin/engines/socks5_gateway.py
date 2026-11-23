@@ -51,10 +51,10 @@ class Socks5GatewayConfig:
             value = getattr(self, name)
             if value is None and name == "udpgw_host":
                 continue
-            if not isinstance(value, str) or not value or len(value) > 253:
-                raise ValueError(f"{name} must be a non-empty host")
-            if any(ord(char) < 0x21 or ord(char) > 0x7E for char in value):
-                raise ValueError(f"{name} contains whitespace or control characters")
+            try:
+                _validate_endpoint_host(value)
+            except (Socks5GatewayError, TypeError) as exc:
+                raise ValueError(f"{name} must be an IP address or valid ASCII DNS name") from exc
         try:
             listen_ip = ipaddress.ip_address(self.listen_host)
         except ValueError as exc:
@@ -128,6 +128,16 @@ def _validate_socks5_domain(host: str) -> str:
     ):
         raise Socks5GatewayError("SOCKS5 request contains an invalid hostname")
     return host
+
+
+def _validate_endpoint_host(host: str) -> str:
+    if not isinstance(host, str) or not host or len(host) > 253:
+        raise Socks5GatewayError("Network endpoint host is invalid")
+    try:
+        ipaddress.ip_address(host)
+        return host
+    except ValueError:
+        return _validate_socks5_domain(host)
 
 
 def _read_socks5_address(sock: socket.socket, address_type: int) -> str:
