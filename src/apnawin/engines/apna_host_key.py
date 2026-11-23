@@ -7,6 +7,8 @@ from typing import Callable
 
 import paramiko
 
+from apnawin.engines.apna_ssh_diagnostics import ApnaDiagnosticTransport, cipher_diagnostic_suffix
+
 from apnawin.engines.apna_payload_socket import ApnaPayloadSocketConnector
 from apnawin.engines.apna_tunnel_session import ApnaTunnelSessionConfig
 
@@ -19,7 +21,7 @@ def scan_apna_ssh_host_key(
     config: ApnaTunnelSessionConfig,
     *,
     connector: ApnaPayloadSocketConnector | None = None,
-    transport_factory: Callable = paramiko.Transport,
+    transport_factory: Callable | None = None,
 ) -> str:
     """Retrieve the server key without authenticating and return OpenSSH SHA-256 form.
 
@@ -28,14 +30,14 @@ def scan_apna_ssh_host_key(
     """
     if not isinstance(config, ApnaTunnelSessionConfig):
         raise TypeError("config must be an ApnaTunnelSessionConfig")
-    if not callable(transport_factory):
+    if transport_factory is not None and not callable(transport_factory):
         raise TypeError("transport_factory must be callable")
     active_connector = connector or ApnaPayloadSocketConnector()
     sock = None
     transport = None
     try:
         sock = active_connector.connect(config.payload)
-        transport = transport_factory(sock)
+        transport = (transport_factory or ApnaDiagnosticTransport)(sock)
         transport.start_client(timeout=config.ssh.connect_timeout)
         key = transport.get_remote_server_key()
         digest = hashlib.sha256(key.asbytes()).digest()
@@ -49,7 +51,8 @@ def scan_apna_ssh_host_key(
                 "The endpoint sent SSH negotiation data, but its offered ciphers do not "
                 "overlap with this client's secure cipher policy. No legacy cipher was "
                 "enabled automatically; use another provider-approved SSH endpoint or "
-                "obtain the server's cipher list for an explicit security review."
+                "review the server cipher offers below."
+                + cipher_diagnostic_suffix(exc)
             )
         else:
             message = f"SSH host-key exchange failed: {type(exc).__name__}: {detail}"

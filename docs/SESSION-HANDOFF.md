@@ -7,6 +7,8 @@
 
 ## Latest verified checkpoint — 2026-11-23
 
+- Current user-test follow-up: a diagnostic Paramiko transport is being added to report both directional cipher lists from the peer SSH KEXINIT and the client-enabled cipher list when negotiation fails. This is diagnostic only; it does not enable CBC/3DES or alter the algorithm policy. CI validation is pending.
+
 - PR #6 remains open and Draft. Do not merge or convert it from Draft without explicit user approval.
 - Both current-head workflows for `c261e9c` completed successfully: Windows tests/build (including Ruff, runtime security, VPN readiness/egress, unit/integration tests, packaging and portable artifact publication) and the APNA BadVPN Windows x64 native build.
 - The latest commit fixes a test-only TLS compatibility-context injection issue; production TLS behavior was not changed by that commit.

@@ -97,14 +97,21 @@ def test_probe_reports_cipher_mismatch_without_enabling_legacy_ciphers():
 
     class IncompatibleCipherTransport(_FakeTransport):
         def start_client(self, *, timeout):
-            raise paramiko.SSHException("Incompatible ssh server (no acceptable ciphers)")
+            raise paramiko.SSHException(
+                "Incompatible ssh server (no acceptable ciphers); server cipher offers: "
+                "client->server=[aes128-cbc]; server->client=[3des-cbc]; "
+                "client enabled=[aes128-ctr]"
+            )
 
-    with pytest.raises(ApnaHostKeyProbeError, match="no mutually supported encryption cipher"):
+    with pytest.raises(ApnaHostKeyProbeError, match="no mutually supported encryption cipher") as error:
         scan_apna_ssh_host_key(
             _config(),
             connector=connector,
             transport_factory=IncompatibleCipherTransport,
         )
+    assert "aes128-cbc" in str(error.value)
+    assert "3des-cbc" in str(error.value)
+    assert "client enabled=[aes128-ctr]" in str(error.value)
     assert sock.closed is True
 
 

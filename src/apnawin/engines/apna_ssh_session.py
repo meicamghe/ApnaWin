@@ -20,6 +20,8 @@ from typing import Callable
 
 import paramiko
 
+from apnawin.engines.apna_ssh_diagnostics import ApnaDiagnosticTransport, cipher_diagnostic_suffix
+
 from apnawin.engines.apna_payload_socket import (
     ApnaPayloadSocketConnector,
     PayloadSocketConfig,
@@ -324,6 +326,7 @@ class ApnaSshSession:
                 banner_timeout=self.config.banner_timeout,
                 allow_agent=False,
                 look_for_keys=False,
+                transport_factory=ApnaDiagnosticTransport,
             )
             transport = client.get_transport()
             if transport is None or not transport.is_active() or not transport.is_authenticated():
@@ -386,7 +389,8 @@ class ApnaSshSession:
                         "The endpoint sent SSH negotiation data, but its offered ciphers do not "
                         "overlap with this client's secure cipher policy. No legacy cipher was "
                         "enabled automatically; use another provider-approved SSH endpoint or "
-                        "obtain the server's cipher list for an explicit security review."
+                        "review the server cipher offers below."
+                        + cipher_diagnostic_suffix(exc)
                     ) from exc
                 if "banner" in lowered:
                     raise ApnaSshError(
