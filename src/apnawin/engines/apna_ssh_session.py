@@ -358,13 +358,22 @@ class ApnaSshSession:
                     server.server_close()
                     if thread is not None and thread.is_alive():
                         thread.join(timeout=2)
-                except OSError:
+                except Exception:
+                    # Cleanup is best-effort here: preserve the connection
+                    # failure that caused rollback instead of masking it with
+                    # a secondary server-shutdown exception.
                     pass
-            client.close()
+            try:
+                client.close()
+            except Exception:
+                # A broken SSHClient.close() must not hide the original
+                # authentication, host-key, or negotiation failure.
+                pass
             if sock is not None:
                 try:
                     sock.close()
-                except OSError:
+                except Exception:
+                    # Preserve the primary failure if socket cleanup also fails.
                     pass
             if isinstance(exc, (ApnaSshError, ValueError, TypeError)):
                 raise
