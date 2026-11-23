@@ -6,6 +6,8 @@ import threading
 
 import pytest
 
+from apnawin.engines.websocket_stream import WebSocketStreamSocket
+
 from apnawin.engines.apna_payload_socket import (
     ApnaPayloadSocketConnector,
     PayloadSocketConfig,
@@ -130,34 +132,85 @@ def test_config_rejects_invalid_endpoint_and_port() -> None:
         )
 
 
-def test_http_proxy_can_explicitly_accept_websocket_upgrade_101() -> None:
+def test_http_proxy_wraps_a_valid_websocket_upgrade_as_an_ssh_byte_stream() -> None:
     received = []
+    key = "MDEyMzQ1Njc4OWFiY2RlZg=="
+    accept = "BACScCJPNqyz+UBoqMH89VmURoA="
 
     def server(server_socket):
-        received.append(server_socket.recv(4096))
+        request = bytearray()
+        while not request.endswith(b"\r\n\r\n"):
+            request.extend(server_socket.recv(1))
+        received.append(bytes(request))
         server_socket.sendall(
-            b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\r\n"
+            (
+                "HTTP/1.1 101 Switching Protocols\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                f"Sec-WebSocket-Accept: {accept}\r\n\r\n"
+            ).encode("ascii")
         )
         server_socket.close()
 
     client, worker = _socket_pair_factory(server)
-    connector = ApnaPayloadSocketConnector(
-        socket_factory=lambda address, timeout: client
-    )
+    connector = ApnaPayloadSocketConnector(socket_factory=lambda address, timeout: client)
     config = PayloadSocketConfig(
         mode=PayloadSocketMode.HTTP_PROXY,
         connect_host="proxy.example.test",
         connect_port=8080,
         target_host="ssh.example.test",
         target_port=443,
-        payload="GET / HTTP/1.1[crlf]Host: [host][crlf][crlf]",
+        payload=(
+            "GET / HTTP/1.1[crlf]Host: [host][crlf]"
+            "Upgrade: websocket[crlf]Connection: Upgrade[crlf]"
+            f"Sec-WebSocket-Key: {key}[crlf]Sec-WebSocket-Version: 13[crlf][crlf]"
+        ),
         expected_http_statuses=(101,),
     )
     connected = connector.connect(config)
-    assert connected is client
+    assert isinstance(connected, WebSocketStreamSocket)
     connected.close()
     worker.join(timeout=1)
-    assert received == [b"GET / HTTP/1.1\r\nHost: ssh.example.test\r\n\r\n"]
+    assert received == [
+        (
+            b"GET / HTTP/1.1\r\nHost: ssh.example.test\r\n"
+            b"Upgrade: websocket\r\nConnection: Upgrade\r\n"
+            b"Sec-WebSocket-Key: MDEyMzQ1Njc4OWFiY2RlZg==\r\n"
+            b"Sec-WebSocket-Version: 13\r\n\r\n"
+        )
+    ]
+
+
+def test_http_101_rejects_invalid_websocket_accept_value() -> None:
+    def server(server_socket):
+        server_socket.recv(4096)
+        server_socket.sendall(
+            b"HTTP/1.1 101 Switching Protocols\r\n"
+            b"Upgrade: websocket\r\nConnection: Upgrade\r\n"
+            b"Sec-WebSocket-Accept: invalid\r\n\r\n"
+        )
+        server_socket.close()
+
+    client, worker = _socket_pair_factory(server)
+    connector = ApnaPayloadSocketConnector(socket_factory=lambda address, timeout: client)
+    config = PayloadSocketConfig(
+        mode=PayloadSocketMode.HTTP_PROXY,
+        connect_host="proxy.example.test",
+        connect_port=8080,
+        target_host="ssh.example.test",
+        target_port=443,
+        payload=(
+            "GET / HTTP/1.1[crlf]Host: [host][crlf]"
+            "Upgrade: websocket[crlf]Connection: Upgrade[crlf]"
+            "Sec-WebSocket-Key: MDEyMzQ1Njc4OWFiY2RlZg==[crlf]"
+            "Sec-WebSocket-Version: 13[crlf][crlf]"
+        ),
+        expected_http_statuses=(101,),
+    )
+    with pytest.raises(PayloadTransportError, match="Sec-WebSocket-Accept does not match"):
+        connector.connect(config)
+    worker.join(timeout=1)
+    assert client.fileno() == -1
 
 
 def test_http_101_is_not_accepted_for_non_websocket_payload_and_explains_mismatch() -> None:
@@ -232,7 +285,7 @@ def test_tls_http_proxy_uses_proxy_sni_and_expands_cf_and_brand() -> None:
     received = []
     def server(server_socket):
         received.append(server_socket.recv(4096))
-        server_socket.sendall(b"HTTP/1.1 101 Switching Protocols\r\n\r\n")
+        server_socket.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
         server_socket.close()
     client, worker = _socket_pair_factory(server)
     seen = {}
@@ -253,7 +306,7 @@ def test_tls_http_proxy_uses_proxy_sni_and_expands_cf_and_brand() -> None:
         payload="GET / HTTP/1.1[crlf]Host: [cf][crlf]X-Brand: [brand][crlf][crlf]",
         sni="front.example.test",
         brand="ApnaWin",
-        expected_http_statuses=(101,),
+        expected_http_statuses=(200,),
     )
     connected = connector.connect(config)
     assert connected is client

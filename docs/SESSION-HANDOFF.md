@@ -7,6 +7,9 @@
 
 ## Latest verified checkpoint — 2026-11-23
 
+- Cipher diagnostics checkpoint `149b037`: peer SSH KEXINIT cipher lists are reported on no-mutual-cipher failures without changing Paramiko's policy. CI passed all seven jobs on this checkpoint, including the full unit/integration suite and Windows portable packaging.
+- Current follow-up: implement a real RFC 6455 binary WebSocket stream adapter for explicit HTTP 101 Upgrade payloads. It validates the handshake and translates WebSocket frames before Paramiko sees bytes; raw WebSocket frames must never be passed to SSH.
+
 - Implementation checkpoint `b351ef9`: added `ApnaDiagnosticTransport` to the unauthenticated host-key probe and authenticated SSH session; the KEXINIT peer cipher offers are reported in cipher-mismatch errors without changing enabled algorithms. Unit coverage and CI are being validated.
 - Current user-test follow-up: a diagnostic Paramiko transport is being added to report both directional cipher lists from the peer SSH KEXINIT and the client-enabled cipher list when negotiation fails. This is diagnostic only; it does not enable CBC/3DES or alter the algorithm policy. CI validation is pending.
 

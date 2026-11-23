@@ -6,6 +6,9 @@ SSH authentication or create a VPN interface; those remain separate stages.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import ipaddress
 import math
 import socket
@@ -15,6 +18,7 @@ from enum import Enum
 from typing import Callable
 
 from apnawin.engines.apna_payload import PayloadRotation, render_apna_payload, send_payload
+from apnawin.engines.websocket_stream import WebSocketStreamSocket
 
 
 class PayloadTransportError(ConnectionError):
@@ -140,7 +144,7 @@ def _read_http_connect_response(
     sock: socket.socket,
     limit: int,
     expected_statuses: tuple[int, ...],
-) -> int:
+) -> tuple[int, dict[str, tuple[str, ...]]]:
     """Read only through CRLFCRLF so SSH bytes following the header stay buffered."""
     response = bytearray()
     while not response.endswith(b"\r\n\r\n"):
@@ -160,23 +164,27 @@ def _read_http_connect_response(
         status = int(parts[1])
     except (UnicodeError, ValueError) as exc:
         raise PayloadTransportError("Proxy returned an invalid HTTP status line") from exc
+    header_lines = bytes(response).decode("iso-8859-1").split("\r\n")[1:]
+    parsed_headers: dict[str, list[str]] = {}
+    for line in header_lines:
+        if not line:
+            break
+        if ":" not in line:
+            continue
+        name, value = line.split(":", 1)
+        key = name.strip().lower()
+        if key:
+            parsed_headers.setdefault(key, []).append(" ".join(value.strip().split()))
+    response_headers = {key: tuple(values) for key, values in parsed_headers.items()}
     if status not in expected_statuses:
         expected = ", ".join(str(value) for value in expected_statuses)
-        header_lines = bytes(response).decode("iso-8859-1").split("\r\n")[1:]
-        headers: dict[str, str] = {}
-        for line in header_lines:
-            if not line:
-                break
-            if ":" not in line:
-                continue
-            name, value = line.split(":", 1)
-            key = name.strip().lower()
-            # Keep diagnostics useful without exposing cookies, authentication
-            # challenges, arbitrary provider data, or response bodies.
-            if key in {"server", "via", "x-cache", "cf-ray", "content-type", "retry-after"}:
-                clean = " ".join(value.strip().split())[:160]
-                if clean:
-                    headers[key] = clean
+        # Keep diagnostics useful without exposing cookies, authentication
+        # challenges, arbitrary provider data, or response bodies.
+        headers = {
+            key: values[0][:160]
+            for key, values in response_headers.items()
+            if values and key in {"server", "via", "x-cache", "cf-ray", "content-type", "retry-after"}
+        }
         metadata = (
             " Response headers: "
             + ", ".join(f"{key}={value}" for key, value in sorted(headers.items()))
@@ -186,9 +194,9 @@ def _read_http_connect_response(
         if 300 <= status < 400:
             location = next(
                 (
-                    line.split(":", 1)[1].strip()[:512]
-                    for line in header_lines
-                    if line.lower().startswith("location:")
+                    values[0][:512]
+                    for key, values in response_headers.items()
+                    if key == "location" and values
                 ),
                 "",
             )
@@ -269,7 +277,76 @@ def _read_http_connect_response(
         raise PayloadTransportError(
             f"Proxy returned HTTP {status}; {diagnosis}{metadata} Expected one of: {expected}"
         )
-    return status
+    return status, response_headers
+
+
+def _websocket_request_headers(request_bytes: bytes) -> dict[str, tuple[str, ...]]:
+    text = request_bytes.decode("iso-8859-1")
+    header_block = text.split("\r\n\r\n", 1)[0]
+    lines = header_block.split("\r\n")
+    request_line = lines[0].split() if lines else []
+    if len(request_line) != 3 or request_line[0] != "GET" or request_line[2] != "HTTP/1.1":
+        raise PayloadTransportError("HTTP 101 requires a GET HTTP/1.1 WebSocket Upgrade request")
+    headers: dict[str, list[str]] = {}
+    for line in lines[1:]:
+        if not line or ":" not in line:
+            raise PayloadTransportError("WebSocket Upgrade request contains a malformed header")
+        name, value = line.split(":", 1)
+        key = name.strip().lower()
+        if not key:
+            raise PayloadTransportError("WebSocket Upgrade request contains an empty header name")
+        headers.setdefault(key, []).append(value.strip())
+    return {key: tuple(values) for key, values in headers.items()}
+
+
+def _single_header(headers: dict[str, tuple[str, ...]], name: str, side: str) -> str:
+    values = headers.get(name, ())
+    if len(values) != 1:
+        raise PayloadTransportError(
+            f"HTTP 101 WebSocket handshake requires exactly one {side} {name} header"
+        )
+    return values[0].strip()
+
+
+def _has_header_token(value: str, token: str) -> bool:
+    return token in {part.strip().lower() for part in value.split(",")}
+
+
+def _validate_websocket_upgrade(
+    request_bytes: bytes,
+    response_headers: dict[str, tuple[str, ...]],
+) -> None:
+    request_headers = _websocket_request_headers(request_bytes)
+    request_upgrade = _single_header(request_headers, "upgrade", "request")
+    request_connection = _single_header(request_headers, "connection", "request")
+    request_key = _single_header(request_headers, "sec-websocket-key", "request")
+    request_version = _single_header(request_headers, "sec-websocket-version", "request")
+    if not _has_header_token(request_upgrade, "websocket") or not _has_header_token(request_connection, "upgrade"):
+        raise PayloadTransportError(
+            "HTTP 101 request is missing Upgrade: websocket or Connection: Upgrade"
+        )
+    if request_version != "13":
+        raise PayloadTransportError("HTTP 101 WebSocket request must use Sec-WebSocket-Version: 13")
+    try:
+        decoded_key = base64.b64decode(request_key, validate=True)
+    except (ValueError, UnicodeError) as exc:
+        raise PayloadTransportError("HTTP 101 request has an invalid Sec-WebSocket-Key") from exc
+    if len(decoded_key) != 16:
+        raise PayloadTransportError("HTTP 101 Sec-WebSocket-Key must decode to exactly 16 bytes")
+
+    response_upgrade = _single_header(response_headers, "upgrade", "response")
+    response_connection = _single_header(response_headers, "connection", "response")
+    response_accept = _single_header(response_headers, "sec-websocket-accept", "response")
+    if not _has_header_token(response_upgrade, "websocket") or not _has_header_token(response_connection, "upgrade"):
+        raise PayloadTransportError("HTTP 101 response is not a valid WebSocket protocol upgrade")
+    expected_accept = base64.b64encode(
+        hashlib.sha1(
+            (request_key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii"),
+            usedforsecurity=False,
+        ).digest()
+    ).decode("ascii")
+    if not hmac.compare_digest(response_accept, expected_accept):
+        raise PayloadTransportError("HTTP 101 Sec-WebSocket-Accept does not match the request key")
 
 
 def _tls_certificate_diagnosis(exc: ssl.SSLCertVerificationError) -> str:
@@ -322,7 +399,7 @@ class ApnaPayloadSocketConnector:
         self._tls_context = tls_context or ssl.create_default_context()
         self._rotation = rotation or PayloadRotation()
 
-    def connect(self, config: PayloadSocketConfig) -> socket.socket:
+    def connect(self, config: PayloadSocketConfig) -> socket.socket | WebSocketStreamSocket:
         if not isinstance(config, PayloadSocketConfig):
             raise TypeError("config must be a PayloadSocketConfig")
         raw_socket: socket.socket | None = None
@@ -386,11 +463,15 @@ class ApnaPayloadSocketConnector:
                 and not config.dropbear_no_response
                 and config.mode in {PayloadSocketMode.HTTP_PROXY, PayloadSocketMode.TLS_HTTP_PROXY}
             ):
-                _read_http_connect_response(
+                status, response_headers = _read_http_connect_response(
                     active_socket,
                     config.max_response_header_bytes,
                     config.expected_http_statuses,
                 )
+                if status == 101:
+                    request_bytes = b"".join(chunk.data for chunk in chunks)
+                    _validate_websocket_upgrade(request_bytes, response_headers)
+                    active_socket = WebSocketStreamSocket(active_socket)
 
             return active_socket
         except Exception as exc:
