@@ -160,6 +160,32 @@ def test_http_proxy_can_explicitly_accept_websocket_upgrade_101() -> None:
     assert received == [b"GET / HTTP/1.1\r\nHost: ssh.example.test\r\n\r\n"]
 
 
+def test_http_101_is_not_accepted_for_non_websocket_payload_and_explains_mismatch() -> None:
+    def server(server_socket):
+        server_socket.recv(4096)
+        server_socket.sendall(
+            b"HTTP/1.1 101 Switching Protocols\\r\\nUpgrade: websocket\\r\\n\\r\\n"
+        )
+        server_socket.close()
+
+    client, worker = _socket_pair_factory(server)
+    connector = ApnaPayloadSocketConnector(
+        socket_factory=lambda address, timeout: client
+    )
+    config = PayloadSocketConfig(
+        mode=PayloadSocketMode.HTTP_PROXY,
+        connect_host="proxy.example.test",
+        connect_port=8080,
+        target_host="ssh.example.test",
+        target_port=443,
+        payload="CONNECT [host_port] [protocol][crlf][crlf]",
+    )
+    with pytest.raises(PayloadTransportError, match="not configured to accept a WebSocket Upgrade"):
+        connector.connect(config)
+    worker.join(timeout=1)
+    assert client.fileno() == -1
+
+
 def test_config_rejects_invalid_http_status_policy() -> None:
     with pytest.raises(ValueError, match="invalid HTTP status"):
         PayloadSocketConfig(
