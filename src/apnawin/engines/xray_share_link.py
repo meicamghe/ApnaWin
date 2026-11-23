@@ -121,6 +121,18 @@ def _transport_path(value: str, transport: str) -> str:
     return path
 
 
+def _safe_option_text(value: str, field: str, *, max_length: int, allow_empty: bool = True) -> str:
+    """Bound free-form Xray options and reject control characters before config generation."""
+    if (
+        not isinstance(value, str)
+        or (not allow_empty and not value)
+        or len(value) > max_length
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
+    ):
+        raise XrayShareLinkError(f"{field} is invalid")
+    return value
+
+
 def _stream_settings(
     network: str,
     security: str,
@@ -153,7 +165,11 @@ def _stream_settings(
         service_name = query.get("serviceName", query.get("path", ""))
         if len(service_name) > 512 or any(ord(ch) < 32 for ch in service_name):
             raise XrayShareLinkError("gRPC service name is invalid")
-        authority = query.get("authority", query.get("host", ""))
+        authority = _safe_option_text(
+            query.get("authority", query.get("host", "")),
+            "gRPC authority",
+            max_length=512,
+        )
         grpc = {"serviceName": service_name, "multiMode": query.get("mode", "") == "multi"}
         if authority:
             grpc["authority"] = authority
@@ -181,7 +197,12 @@ def _stream_settings(
     if security == "tls":
         if query.get("allowInsecure", "").lower() in {"1", "true", "yes"}:
             raise XrayShareLinkError("Insecure TLS certificate verification is not supported")
-        server_name = query.get("sni", query.get("servername", host))
+        server_name = _safe_option_text(
+            query.get("sni", query.get("servername", host)),
+            "TLS server name",
+            max_length=253,
+            allow_empty=False,
+        )
         tls: dict = {"serverName": server_name, "allowInsecure": False}
         alpn = query.get("alpn")
         if alpn:
@@ -196,7 +217,12 @@ def _stream_settings(
             tls["fingerprint"] = fingerprint
         settings["tlsSettings"] = tls
     elif security == "reality":
-        server_name = query.get("sni", query.get("servername", ""))
+        server_name = _safe_option_text(
+            query.get("sni", query.get("servername", "")),
+            "Reality server name",
+            max_length=253,
+            allow_empty=False,
+        )
         public_key = query.get("pbk", query.get("publicKey", ""))
         short_id = query.get("sid", query.get("shortId", ""))
         fingerprint = query.get("fp", "")
@@ -221,7 +247,7 @@ def _stream_settings(
             "publicKey": public_key,
             "shortId": short_id,
             "fingerprint": fingerprint,
-            "spiderX": query.get("spx", ""),
+            "spiderX": _safe_option_text(query.get("spx", ""), "Reality spiderX", max_length=2048),
         }
     return settings
 
