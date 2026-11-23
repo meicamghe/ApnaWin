@@ -213,7 +213,7 @@ def test_websocket_payload_accepts_both_http_connect_and_upgrade_success():
 
 @pytest.mark.parametrize(
     "upgrade_header",
-    ["Upgrade: websocket", "uPgRaDe:\\tWeBsOcKeT"],
+    ["Upgrade: websocket", "uPgRaDe:\tWeBsOcKeT"],
 )
 def test_websocket_status_mapping_is_case_and_horizontal_whitespace_insensitive(upgrade_header):
     payload = _payload(
