@@ -67,6 +67,36 @@ jobs:
       - name: Verify Python sources compile
         run: python -m compileall -q src
 
+  xray-config-compat:
+    name: Pinned Xray share-link config compatibility
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install project and test dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Download and verify the exact bundled Xray runtime
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP "xray-windows-64.zip"
+          $destination = Join-Path $env:RUNNER_TEMP "xray-runtime"
+          $url = "https://github.com/XTLS/Xray-core/releases/download/v26.11.9/Xray-windows-64.zip"
+          $expected = "1262522266337b824f07beb8e1375786b437683b3890105469088f8e17e0a69d"
+          Invoke-WebRequest -Uri $url -OutFile $archive
+          $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Pinned Xray archive SHA-256 mismatch: $actual" }
+          Expand-Archive -LiteralPath $archive -DestinationPath $destination -Force
+          $executable = Join-Path $destination "xray.exe"
+          if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw "xray.exe missing from verified archive" }
+          $version = (& $executable version 2>&1 | Out-String)
+          if ($LASTEXITCODE -ne 0 -or $version -notmatch "26.11.9") { throw "Unexpected Xray runtime version: $version" }
+          "APNAWIN_XRAY_EXECUTABLE=$executable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Validate imported share-link configs with the real Xray runtime
+        run: python -m pytest -q tests/test_xray_share_link.py -k pinned_xray_runtime
+
   vpn-readiness:
     name: VPN runtime readiness and egress tests
     runs-on: windows-latest
