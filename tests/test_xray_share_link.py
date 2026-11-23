@@ -275,11 +275,25 @@ def test_imports_documented_xray_shadowsocks_cipher_methods(method):
 @pytest.mark.parametrize(
     "uri",
     [
+        # VLESS: TCP/WS TLS, gRPC REALITY, and Vision over REALITY.
         f"vless://{UUID}@vless.example.test:443?type=tcp&security=tls&sni=vless.example.test",
-        f"vless://{UUID}@vless.example.test:443?type=grpc&security=reality&sni=vless.example.test&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&fp=chrome&serviceName=grpc",
-        f"vmess://{base64.urlsafe_b64encode(json.dumps({'v':'2','ps':'runtime-vmess','add':'vmess.example.test','port':'443','id':UUID,'aid':'0','scy':'auto','net':'ws','host':'vmess.example.test','path':'/vmess','tls':'tls'}).encode()).decode().rstrip('=')}",
+        f"vless://{UUID}@vless.example.test:443?type=ws&security=tls&sni=cdn.example.test&host=cdn.example.test&path=%2Fvless",
+        f"vless://{UUID}@vless.example.test:443?type=grpc&security=reality&sni=vless.example.test&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=abcd1234&fp=chrome&serviceName=vless-grpc",
+        f"vless://{UUID}@vless.example.test:443?type=tcp&security=reality&sni=vless.example.test&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=abcd1234&fp=chrome&flow=xtls-rprx-vision",
+        # VMess: TCP, WebSocket, gRPC and HTTPUpgrade over TLS.
+        f"vmess://{base64.urlsafe_b64encode(json.dumps({'v':'2','ps':'runtime-vmess-tcp','add':'vmess.example.test','port':'443','id':UUID,'aid':'0','scy':'auto','net':'tcp','tls':'tls','sni':'vmess.example.test'}).encode()).decode().rstrip('=')}",
+        f"vmess://{base64.urlsafe_b64encode(json.dumps({'v':'2','ps':'runtime-vmess-ws','add':'vmess.example.test','port':'443','id':UUID,'aid':'0','scy':'auto','net':'ws','host':'cdn.example.test','path':'/vmess','tls':'tls','sni':'cdn.example.test'}).encode()).decode().rstrip('=')}",
+        f"vmess://{base64.urlsafe_b64encode(json.dumps({'v':'2','ps':'runtime-vmess-grpc','add':'vmess.example.test','port':'443','id':UUID,'aid':'0','scy':'auto','net':'grpc','path':'vmess-grpc','tls':'tls','sni':'vmess.example.test'}).encode()).decode().rstrip('=')}",
+        f"vmess://{base64.urlsafe_b64encode(json.dumps({'v':'2','ps':'runtime-vmess-httpupgrade','add':'vmess.example.test','port':'443','id':UUID,'aid':'0','scy':'auto','net':'httpupgrade','host':'cdn.example.test','path':'/upgrade','tls':'tls','sni':'vmess.example.test'}).encode()).decode().rstrip('=')}",
+        # Trojan: TCP, WebSocket, gRPC and HTTPUpgrade over TLS.
         "trojan://runtime-password@trojan.example.test:443?security=tls&type=tcp&sni=trojan.example.test",
+        "trojan://runtime-password@trojan.example.test:443?security=tls&type=ws&sni=trojan.example.test&host=cdn.example.test&path=%2Ftrojan",
+        "trojan://runtime-password@trojan.example.test:443?security=tls&type=grpc&sni=trojan.example.test&serviceName=trojan-grpc",
+        "trojan://runtime-password@trojan.example.test:443?security=tls&type=httpupgrade&sni=trojan.example.test&host=cdn.example.test&path=%2Fupgrade",
+        # Shadowsocks: representative AEAD and XChaCha20 cipher implementations.
         "ss://chacha20-ietf-poly1305:runtime-password@ss.example.test:8388",
+        "ss://aes-256-gcm:runtime-password@ss.example.test:8388",
+        "ss://xchacha20-ietf-poly1305:runtime-password@ss.example.test:8388",
     ],
 )
 def test_generated_config_is_accepted_by_pinned_xray_runtime(uri, tmp_path):
@@ -299,4 +313,3 @@ def test_generated_config_is_accepted_by_pinned_xray_runtime(uri, tmp_path):
         f"Xray rejected {result.protocol} config: "
         f"{completed.stdout[-2000:]} {completed.stderr[-2000:]}"
     )
-
