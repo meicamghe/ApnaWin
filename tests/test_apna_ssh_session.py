@@ -380,7 +380,9 @@ def test_connect_preserves_actionable_ssh_stage_errors(failure, message):
             raise failure
 
         def close(self):
-            return None
+            # Simulate a secondary cleanup failure. The original SSH-stage
+            # exception must remain the one surfaced to the caller.
+            raise OSError("simulated SSH client cleanup failure")
 
     session = ApnaSshSession(
         ApnaSshConfig(
