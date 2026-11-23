@@ -5,7 +5,7 @@ This runbook is for an authorized APNA Lite SSH profile on a clean Windows 10/11
 ## Preconditions
 
 - Use an APNA server and credentials that you are authorized to use.
-- Obtain the SSH host-key SHA-256 fingerprint from an independent provider-controlled source. A fingerprint returned by the app's Probe SSH host key button is only an observation of the endpoint and is not trusted evidence by itself.
+- Obtain the SSH host-key SHA-256 fingerprint from an independent provider-controlled source. A fingerprint returned by the app's Probe SSH host key button is only an observation of the endpoint and is not trusted evidence by itself. Prefer a provider-issued TLS CA bundle; the per-profile self-signed TLS compatibility switch is an explicit fallback, not a trust substitute.
 - Confirm the profile's SSH endpoint, payload mode, UDPGW endpoint/port and account credentials from the provider's own configuration. Do not guess missing fields.
 - Record the Windows build, network adapter, and baseline route/DNS state before testing. Do not put passwords, payload secrets, or full profile exports in logs or issue reports.
 
@@ -13,7 +13,7 @@ This runbook is for an authorized APNA Lite SSH profile on a clean Windows 10/11
 
 1. Install the current verified x64 package and launch ApnaWin as a standard user. Approve the signed/elevated helper only when Windows requests it.
 2. Import the APNA Lite APK or fetch the live catalog. Select only a supported SSH-family server/payload pair. Unsupported categories must remain disabled rather than being guessed.
-3. Enter the independently verified SSH host-key fingerprint (or configure a trusted known_hosts entry). The probe button can display the observed key but does not authenticate its trustworthiness.
+3. Enter the independently verified SSH host-key fingerprint (or configure a trusted known_hosts entry). The probe button can display the observed key but does not authenticate its trustworthiness. Keep TLS certificate verification enabled by default. If the provider endpoint is known to use a self-signed/untrusted TLS certificate and no provider CA bundle is available, the user may explicitly enable compatibility mode for that profile only; this disables TLS certificate-chain and hostname checks, retains TLS encryption and SNI, and exposes the connection to man-in-the-middle interception. It does not bypass SSH host-key verification or SSH authentication.
 4. Save the profile and connect. Startup must complete SSH authentication, the configured UDPGW preflight, local SOCKS5 startup, Xray/Wintun startup, UDP DNS checks and certificate-validated IPv4 + IPv6 TLS egress checks before showing Connected.
 5. With the tunnel active, verify separately:
    - HTTPS over IPv4 (for example, curl.exe -4 https://www.cloudflare.com/cdn-cgi/trace).
@@ -44,7 +44,7 @@ Treat each imported server/payload combination as an independent profile. Do not
 |---|---|---|
 | DNS resolution failed | The configured endpoint name did not resolve from this network. | Check that profile's exact endpoint and DNS availability. |
 | TCP connection failed / refused / timeout | No usable TCP socket was established. | Verify that profile's host, port, network reachability and provider status. |
-| TLS self-signed / untrusted issuer | TLS certificate validation failed before SSH. | Obtain the correct endpoint/SNI and provider-published CA chain from a trusted source. Never disable certificate validation or trust an arbitrary certificate. |
+| TLS self-signed / untrusted issuer | TLS certificate validation failed before SSH. | Prefer the provider-published CA chain from a trusted source. If unavailable and the user deliberately accepts MITM risk, enable the explicit per-profile compatibility mode; record that decision and still require independently verified SSH host-key pinning. Never enable it globally or treat it as proof of endpoint identity. |
 | TLS hostname/SNI mismatch | The certificate identity does not match the requested TLS name. | Compare the profile's endpoint and SNI with provider instructions. An IP-literal SNI paired with a DNS endpoint is a warning, not permission to guess a replacement. |
 | HTTP 101 with expected status 200 only | The endpoint switched protocols, but the selected profile is not configured for a WebSocket Upgrade response. This may be a non-WebSocket payload paired with the wrong endpoint, a missing Upgrade header, or an older installed app build. | Confirm the exact payload template and app version. The mapper accepts 101 only when the payload explicitly contains `Upgrade: websocket`; never accept 101 blindly or pass raw WebSocket frames to SSH. |
 | HTTP 301/302 | The payload endpoint redirected instead of establishing the expected SSH stream. | Check the selected payload host, path, Host header and port with the provider. Redirects are intentionally not followed. |
@@ -56,7 +56,7 @@ Treat each imported server/payload combination as an independent profile. Do not
 | UDPGW preflight failed | SSH may be available, but the configured UDP gateway could not be reached through the SSH path. | Verify this profile's published UDPGW host and port. TCP-only success is not full-tunnel success. |
 | TUN/DNS/IPv4/IPv6 egress readiness failed | The application did not prove a complete routed tunnel. | Keep the state disconnected/error, inspect the failing readiness check and confirm rollback restored routes and DNS. |
 
-A probe that retrieves an SSH host-key fingerprint does not authenticate that fingerprint. Never enable trust-on-first-use, disable TLS verification, follow HTTP redirects for SSH payloads, or silently substitute catalog endpoints as a recovery strategy.
+A probe that retrieves an SSH host-key fingerprint does not authenticate that fingerprint. Never enable SSH trust-on-first-use, silently disable TLS verification, follow HTTP redirects for SSH payloads, or substitute catalog endpoints as a recovery strategy. TLS compatibility is allowed only as an explicit per-profile user choice for a known certificate-trust problem; it weakens protection against MITM and does not relax SSH host-key verification.
 
 ## Parallel live-test record
 
