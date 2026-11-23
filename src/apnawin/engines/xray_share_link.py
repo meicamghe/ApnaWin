@@ -262,6 +262,8 @@ def _stream_settings(
 
 
 def _parse_vless(parsed) -> tuple[str, int, dict, dict]:
+    if parsed.path not in {"", "/"}:
+        raise XrayShareLinkError("VLESS share link contains an unsupported URL path")
     host, port = _url_endpoint(parsed)
     if parsed.password is not None:
         raise XrayShareLinkError("VLESS link must not contain a password field")
@@ -370,6 +372,8 @@ def _parse_vmess(parsed) -> tuple[str, int, dict, dict]:
 
 
 def _parse_trojan(parsed) -> tuple[str, int, dict, dict]:
+    if parsed.path not in {"", "/"}:
+        raise XrayShareLinkError("Trojan share link contains an unsupported URL path")
     host, port = _url_endpoint(parsed)
     if parsed.password is not None:
         raise XrayShareLinkError(
