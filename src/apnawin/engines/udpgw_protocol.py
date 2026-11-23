@@ -82,6 +82,10 @@ def encode_datagram(
         ip = ipaddress.ip_address(address)
     except ValueError as exc:
         raise UdpGwProtocolError("UDPGW destination must be an IPv4 or IPv6 address") from exc
+    if isinstance(ip, IPv6Address) and ip.scope_id is not None:
+        raise UdpGwProtocolError(
+            "UDPGW IPv6 destinations cannot contain a local interface scope"
+        )
     payload = bytes(data)
     flags = (FLAG_DNS if is_dns else 0) | (FLAG_REBIND if rebind else 0)
     if isinstance(ip, IPv6Address):
