@@ -157,14 +157,13 @@ class PacketProtoDecoder:
         offset = 0
         buffer_limit = self._max_payload_bytes + 2
 
-        while offset < len(incoming) or len(self._buffer) >= 2:
-            if offset < len(incoming):
-                available = buffer_limit - len(self._buffer)
-                if available <= 0:
-                    raise UdpGwProtocolError("PacketProto receive buffer exceeds its limit")
-                chunk_size = min(available, len(incoming) - offset)
-                self._buffer.extend(incoming[offset : offset + chunk_size])
-                offset += chunk_size
+        while offset < len(incoming):
+            available = buffer_limit - len(self._buffer)
+            if available <= 0:
+                raise UdpGwProtocolError("PacketProto receive buffer exceeds its limit")
+            chunk_size = min(available, len(incoming) - offset)
+            self._buffer.extend(incoming[offset : offset + chunk_size])
+            offset += chunk_size
 
             while len(self._buffer) >= 2:
                 frame_length = _PACKETPROTO_HEADER.unpack_from(self._buffer)[0]
@@ -175,8 +174,5 @@ class PacketProtoDecoder:
                     break
                 frames.append(bytes(self._buffer[2:frame_end]))
                 del self._buffer[:frame_end]
-
-            if offset == len(incoming) and len(self._buffer) < 2:
-                break
 
         return tuple(frames)
