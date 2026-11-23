@@ -35,6 +35,30 @@ def test_config_requires_credentials_and_loopback_listener() -> None:
         ApnaSshConfig("ssh.example.test", 22, "user", password="secret", local_host="0.0.0.0")
 
 
+@pytest.mark.parametrize(
+    "host",
+    [
+        "",
+        "bad host.example",
+        "bad..example",
+        "-leading.example",
+        "trailing-.example",
+        "bad_name.example",
+        "a" * 64 + ".example",
+        "x" * 254,
+    ],
+)
+def test_ssh_config_rejects_malformed_network_hosts(host):
+    with pytest.raises(ValueError, match="IP address|DNS name"):
+        ApnaSshConfig(host, 22, "user", password="secret")
+
+
+@pytest.mark.parametrize("username", ["user\\nadmin", "user\\x00", "user\\x7f"])
+def test_ssh_config_rejects_control_characters_in_username(username):
+    with pytest.raises(ValueError, match="control characters"):
+        ApnaSshConfig("ssh.example.test", 22, username, password="secret")
+
+
 def test_connect_enforces_host_key_policy_and_starts_loopback_socks(monkeypatch) -> None:
     client_socket, peer = socket.socketpair()
     observed = {}
