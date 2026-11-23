@@ -290,7 +290,7 @@ def test_shadowsocks_rejects_control_characters_in_password(uri):
 
 def test_shadowsocks_invalid_utf8_credentials_raise_safe_import_error():
     encoded = base64.urlsafe_b64encode(
-        b"\\xff@ss.example.test:8388"
+        bytes([0xFF]) + b"@ss.example.test:8388"
     ).decode().rstrip("=")
     with pytest.raises(XrayShareLinkError, match="UTF-8"):
         import_xray_share_link(f"ss://{encoded}")
