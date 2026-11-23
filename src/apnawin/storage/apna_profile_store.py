@@ -137,7 +137,7 @@ def _deserialize_config(raw: bytes) -> ApnaTunnelSessionConfig:
     if (
         set(ssh_raw) != ssh_expected
         or (
-            set(payload_raw) not in {
+            frozenset(payload_raw) not in {
                 frozenset(legacy_payload_expected),
                 frozenset(payload_expected_with_ca),
                 frozenset(payload_expected_with_insecure),
