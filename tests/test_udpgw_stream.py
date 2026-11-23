@@ -69,7 +69,7 @@ def test_socks5_connect_config_rejects_malformed_hosts(host: str, field: str) ->
         "target_port": 7300,
     }
     values[field] = host
-    with pytest.raises(ValueError, match="valid ASCII DNS name"):
+    with pytest.raises(ValueError, match=field):
         Socks5ConnectConfig(**values)
 
 
