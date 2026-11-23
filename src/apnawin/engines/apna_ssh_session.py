@@ -380,6 +380,14 @@ class ApnaSshSession:
                     raise ApnaSshError(
                         "SSH host identity could not be verified against known_hosts or the configured SHA-256 pin"
                     ) from exc
+                if "no acceptable ciphers" in lowered:
+                    raise ApnaSshError(
+                        "SSH key exchange found no mutually supported encryption cipher. "
+                        "The endpoint sent SSH negotiation data, but its offered ciphers do not "
+                        "overlap with this client's secure cipher policy. No legacy cipher was "
+                        "enabled automatically; use another provider-approved SSH endpoint or "
+                        "obtain the server's cipher list for an explicit security review."
+                    ) from exc
                 if "banner" in lowered:
                     raise ApnaSshError(
                         "SSH protocol banner was not received. The endpoint may not be serving SSH "
