@@ -286,10 +286,26 @@ def test_rejects_invalid_or_oversized_transport_paths(uri):
 def test_vless_vision_flow_accepts_tcp_with_reality():
     result = import_xray_share_link(
         f"vless://{UUID}@edge.example.test:443?type=tcp&security=reality"
-        "&sni=front.example.test&pbk=key&fp=chrome&flow=xtls-rprx-vision"
+        "&sni=front.example.test&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&fp=chrome&flow=xtls-rprx-vision"
     )
     outbound = outbound_for(result)
     assert outbound["settings"]["vnext"][0]["users"][0]["flow"] == "xtls-rprx-vision"
+
+@pytest.mark.parametrize(
+    "parameters",
+    [
+        "pbk=key&sid=abcd",
+        "pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=abc",
+        "pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=0123456789abcdef00",
+    ],
+)
+def test_reality_rejects_invalid_public_key_or_short_id(parameters):
+    uri = (
+        f"vless://{UUID}@edge.example.test:443?type=tcp&security=reality"
+        f"&sni=front.example.test&fp=chrome&{parameters}"
+    )
+    with pytest.raises(XrayShareLinkError, match="Reality"):
+        import_xray_share_link(uri)
 
 @pytest.mark.parametrize(
     "method",
