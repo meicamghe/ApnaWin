@@ -362,7 +362,7 @@ def test_parse_native_library_loads_invalidates_move_result_registers():
     output = (
         ".method public static load()V\n"
         '    const-string v0, "not-a-library"\n'
-        "    invoke-static {}, Ljava/lang/System;->currentTimeMillis()J\n"
+        "    invoke-static {}, Ljava/lang/System;->getProperties()Ljava/util/Properties;\n"
         "    move-result-object v0\n"
         "    invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
         ".end method\n"
