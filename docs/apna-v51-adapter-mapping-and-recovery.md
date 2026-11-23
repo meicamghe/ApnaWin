@@ -194,3 +194,25 @@ A source-level audit of the current branch confirms the following implementation
 The next safe implementation unit is a separate, typed Xray remote-outbound configuration layer plus its schema-focused tests. It must not alter `build_apna_xray_tun_config()` or claim that an APNA catalog category maps to VLESS/VMess/etc. The builder should accept explicit protocol-specific settings, reject missing/contradictory security and transport fields, serialize deterministic JSON, and pass the existing strict TUN policy only when used as a TUN outbound. Protocol schemas must be checked against the exact Xray-core version selected for the Windows runtime before implementation; the APK's embedded Xray module version is evidence about the Android binary, not automatically the Windows runtime version.
 
 OpenVPN, QUIC and DTLS remain separate engine work items. The current source does not yet provide their complete lifecycle adapters. No Windows build, installer, release, PR merge, or connectivity claim was made as part of this audit.
+
+## 2026-11-23 correction: Xray share-link engine already exists
+
+A follow-up inspection of the actual source and tests found that the preceding source-audit section omitted an existing implementation. The repository already contains:
+
+- `src/apnawin/engines/xray_share_link.py`: imports explicit VLESS, VMess, Trojan and Shadowsocks share links; currently supports TCP, WebSocket, gRPC and HTTPUpgrade stream transports, TLS and Reality where applicable; SIP003 Shadowsocks plugins are rejected.
+- `src/apnawin/storage/xray_config_store.py`: validates the generated TUN config and stores it encrypted using the Windows current-user DPAPI integration.
+- `src/apnawin/engines/xray_process.py` and the Xray tunnel supervisor: validate and run the generated strict dual-stack TUN configuration.
+
+This is an independent share-link import path. It does **not** prove APNA catalog-category mapping, nor does it implement every protocol visible in the Android Xray binary. In particular, WireGuard, Hysteria and MASQUE are not exposed by the current share-link importer. The generic `ConnectionProfile` remains endpoint metadata; protocol credentials and stream settings live in the encrypted Xray config.
+
+The parser audit also added explicit rejection of duplicate VMess JSON keys and non-finite JSON constants, a 128-field query-string bound, and case-insensitive enforcement that Trojan links cannot disable TLS/Reality. Regression tests cover each case. These are parser-hardening changes, not a claim of live endpoint compatibility.
+
+### Corrected next steps
+
+1. Do not recreate the VLESS/VMess/Trojan/Shadowsocks share-link importer. Audit its emitted JSON against the exact Windows Xray-core runtime version and add schema-level fixtures for supported variants.
+2. Recover the APNA v51 protected runtime's catalog-to-engine mapping independently; never infer it from the presence of protocols in `libxray.so`.
+3. Investigate WireGuard, Hysteria and MASQUE as additional Xray outbound profiles only after matching the selected Windows Xray-core version's schema and lifecycle.
+4. Continue OpenVPN as an independent engine, and keep QUIC/DTLS blocked on recovery of `libudpqtwo.so` service ownership and configuration contract.
+5. Keep CI source/test validation enabled but disable automatic Windows packaging and artifact publication until the user explicitly authorizes a product build.
+
+No Windows product build, installer, release, PR merge, or live-provider connectivity test was initiated by this correction.
