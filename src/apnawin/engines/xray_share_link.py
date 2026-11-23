@@ -204,6 +204,8 @@ def _stream_settings(
             raise XrayShareLinkError("Reality links require SNI, public key and fingerprint")
         if len(public_key) > 256 or len(short_id) > 64:
             raise XrayShareLinkError("Reality public key or short ID exceeds the size limit")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{43}=?", public_key):
+            raise XrayShareLinkError("Reality public key must be a Base64URL-encoded 32-byte key")
         try:
             decoded_public_key = _decode_base64(public_key, "Reality public key")
         except XrayShareLinkError as exc:
