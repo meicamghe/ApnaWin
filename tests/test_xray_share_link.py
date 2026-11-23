@@ -1,5 +1,7 @@
 import base64
 import json
+import os
+import subprocess
 
 import pytest
 
@@ -252,4 +254,36 @@ def test_imports_documented_xray_shadowsocks_cipher_methods(method):
     )
     outbound = outbound_for(result)
     assert outbound["settings"]["servers"][0]["method"] == method
+
+@pytest.mark.skipif(
+    not os.environ.get("APNAWIN_XRAY_EXECUTABLE"),
+    reason="Pinned Xray runtime validation is enabled only in the dedicated CI job",
+)
+@pytest.mark.parametrize(
+    "uri",
+    [
+        f"vless://{UUID}@vless.example.test:443?type=tcp&security=tls&sni=vless.example.test",
+        f"vless://{UUID}@vless.example.test:443?type=grpc&security=reality&sni=vless.example.test&pbk=public-key&fp=chrome&serviceName=grpc",
+        f"vmess://{base64.urlsafe_b64encode(json.dumps({'v':'2','ps':'runtime-vmess','add':'vmess.example.test','port':'443','id':UUID,'aid':'0','scy':'auto','net':'ws','host':'vmess.example.test','path':'/vmess','tls':'tls'}).encode()).decode().rstrip('=')}",
+        "trojan://runtime-password@trojan.example.test:443?security=tls&type=tcp&sni=trojan.example.test",
+        "ss://chacha20-ietf-poly1305:runtime-password@ss.example.test:8388",
+    ],
+)
+def test_generated_config_is_accepted_by_pinned_xray_runtime(uri, tmp_path):
+    executable = os.environ["APNAWIN_XRAY_EXECUTABLE"]
+    result = import_xray_share_link(uri)
+    config_path = tmp_path / "xray-runtime-config.json"
+    config_path.write_bytes(result.config_bytes)
+    completed = subprocess.run(
+        [executable, "run", "-test", "-c", str(config_path)],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert completed.returncode == 0, (
+        f"Xray rejected {result.protocol} config: "
+        f"{completed.stdout[-2000:]} {completed.stderr[-2000:]}"
+    )
 
