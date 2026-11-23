@@ -914,3 +914,65 @@ def test_apna_import_dialog_passes_only_user_selected_ca_bundle(tmp_path, qapp, 
     assert dialog.ca_bundle_edit.text() == str(ca_file)
     assert captured["ca_bundle_file"] == str(ca_file)
     dialog.close()
+
+
+def test_selected_apna_tls_compatibility_toggle_persists_per_profile(tmp_path, qapp):
+    from apnawin.engines.apna_payload_socket import PayloadSocketConfig, PayloadSocketMode
+    from apnawin.engines.apna_ssh_session import ApnaSshConfig
+    from apnawin.engines.apna_tunnel_session import ApnaTunnelSessionConfig
+
+    profile = ConnectionProfile(
+        "APNA TLS profile", Transport.APNA_SSH, "ssh.example.test", 443
+    )
+    profiles_path = tmp_path / "profiles.json"
+    save_profiles(profiles_path, [profile])
+
+    class MemoryApnaStore:
+        def __init__(self):
+            self.config = ApnaTunnelSessionConfig(
+                ssh=ApnaSshConfig(
+                    "ssh.example.test", 443, "user", password="secret"
+                ),
+                payload=PayloadSocketConfig(
+                    mode=PayloadSocketMode.TLS_DIRECT,
+                    connect_host="front.example.test",
+                    connect_port=443,
+                    target_host="ssh.example.test",
+                    target_port=1194,
+                    sni="nba.onesports.ph",
+                ),
+                udpgw_host="udpgw.example.test",
+                udpgw_port=7300,
+            )
+
+        def has_config(self, _name):
+            return True
+
+        def load(self, _profile):
+            return self.config
+
+        def save(self, _profile, config):
+            self.config = config
+
+    store = MemoryApnaStore()
+    window = MainWindow(
+        profiles_path=profiles_path,
+        apna_profile_store=store,
+    )
+
+    assert window.apna_insecure_tls_check.isEnabled()
+    assert window.apna_insecure_tls_check.isChecked() is False
+
+    window.apna_insecure_tls_check.setChecked(True)
+
+    assert store.config.payload.allow_insecure_tls is True
+    assert window.apna_insecure_tls_check.isChecked() is True
+    assert "disabled (compatibility mode)" in window.profile_details.text()
+    assert store.config.payload.sni == "nba.onesports.ph"
+
+    window.apna_insecure_tls_check.setChecked(False)
+
+    assert store.config.payload.allow_insecure_tls is False
+    assert window.apna_insecure_tls_check.isChecked() is False
+    window._connection_timer.stop()
+    window.close()
