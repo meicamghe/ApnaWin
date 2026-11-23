@@ -196,7 +196,16 @@ def _read_http_connect_response(
                 "request target can alter the provider's SSH tunnel route. "
                 f"Expected one of: {expected}. Check the selected payload, host, port and path."
             )
-        if status == 400:
+        if status == 101:
+            diagnosis = (
+                "The endpoint switched protocols (HTTP 101), but this profile is not "
+                "configured to accept a WebSocket Upgrade response. The selected payload "
+                "may be missing its explicit 'Upgrade: websocket' header, may be the wrong "
+                "payload for this endpoint, or this installed app build may predate the "
+                "WebSocket status-mapping fix. Do not accept 101 for a non-WebSocket payload "
+                "or pass raw WebSocket frames directly to SSH."
+            )
+        elif status == 400:
             diagnosis = (
                 "The proxy rejected the HTTP request as malformed. Check payload syntax, "
                 "HTTP method/version, Host header, path, target host/port and CRLF placement."
