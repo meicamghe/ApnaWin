@@ -211,6 +211,24 @@ def test_websocket_payload_accepts_both_http_connect_and_upgrade_success():
     assert mapped.session_config.payload.expected_http_statuses == (200, 101)
 
 
+@pytest.mark.parametrize(
+    "upgrade_header",
+    ["Upgrade: websocket", "uPgRaDe:\\tWeBsOcKeT"],
+)
+def test_websocket_status_mapping_is_case_and_horizontal_whitespace_insensitive(upgrade_header):
+    payload = _payload(
+        template=(
+            "GET / HTTP/1.1[crlf]Host: [host][crlf]"
+            + upgrade_header
+            + "[crlf]Connection: Upgrade[crlf][crlf]"
+        )
+    )
+    mapped = build_apna_lite_ssh_profile(
+        _catalog(), _server(), payload, host_selector=_first
+    )
+    assert mapped.session_config.payload.expected_http_statuses == (200, 101)
+
+
 def test_non_websocket_http_payload_requires_connect_success_only():
     payload = _payload(template="CONNECT [host_port] [protocol][crlf][crlf]")
     mapped = build_apna_lite_ssh_profile(
