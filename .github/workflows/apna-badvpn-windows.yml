@@ -54,7 +54,7 @@ jobs:
           cp badvpn-build/tun2socks/badvpn-tun2socks.exe dist/
           cp badvpn-build/udpgw/badvpn-udpgw.exe dist/
           cp badvpn-src/COPYING dist/LICENSE-BadVPN.txt
-          printf '%s\\n' "repository=https://github.com/ambrop72/badvpn" \
+          printf '%s\n' "repository=https://github.com/ambrop72/badvpn" \
             "commit=07268f02706e78e282e19641b5d1d41e8e89bf31" \
             "compiler=MinGW-w64 x86_64" \
             "build=Windows x64; tun2socks + UDPGW" > dist/build-manifest.txt
