@@ -976,3 +976,67 @@ def test_selected_apna_tls_compatibility_toggle_persists_per_profile(tmp_path, q
     assert window.apna_insecure_tls_check.isChecked() is False
     window._connection_timer.stop()
     window.close()
+
+
+@pytest.mark.parametrize("initial_enabled", [False, True])
+def test_selected_apna_tls_toggle_rolls_back_when_encrypted_save_fails(
+    tmp_path, qapp, monkeypatch, initial_enabled
+):
+    from dataclasses import replace
+    from apnawin.engines.apna_payload_socket import PayloadSocketConfig, PayloadSocketMode
+    from apnawin.engines.apna_ssh_session import ApnaSshConfig
+    from apnawin.engines.apna_tunnel_session import ApnaTunnelSessionConfig
+    import apnawin.app as app_module
+
+    profile = ConnectionProfile(
+        "APNA TLS rollback", Transport.APNA_SSH, "ssh.example.test", 443
+    )
+    profiles_path = tmp_path / "profiles.json"
+    save_profiles(profiles_path, [profile])
+
+    class FailingApnaStore:
+        def __init__(self):
+            self.config = ApnaTunnelSessionConfig(
+                ssh=ApnaSshConfig("ssh.example.test", 443, "user", password="secret"),
+                payload=PayloadSocketConfig(
+                    mode=PayloadSocketMode.TLS_DIRECT,
+                    connect_host="front.example.test",
+                    connect_port=443,
+                    target_host="ssh.example.test",
+                    target_port=1194,
+                    sni="nba.onesports.ph",
+                    allow_insecure_tls=initial_enabled,
+                ),
+                udpgw_host="udpgw.example.test",
+                udpgw_port=7300,
+            )
+
+        def has_config(self, _name):
+            return True
+
+        def load(self, _profile):
+            return self.config
+
+        def save(self, _profile, _config):
+            raise OSError("encrypted store is read-only")
+
+    store = FailingApnaStore()
+    warnings = []
+    monkeypatch.setattr(
+        app_module.QMessageBox,
+        "warning",
+        lambda *_args, **_kwargs: warnings.append(True),
+    )
+    window = MainWindow(
+        profiles_path=profiles_path,
+        apna_profile_store=store,
+    )
+    assert window.apna_insecure_tls_check.isChecked() is initial_enabled
+
+    window.apna_insecure_tls_check.setChecked(not initial_enabled)
+
+    assert window.apna_insecure_tls_check.isChecked() is initial_enabled
+    assert store.config.payload.allow_insecure_tls is initial_enabled
+    assert warnings == [True]
+    window._connection_timer.stop()
+    window.close()
