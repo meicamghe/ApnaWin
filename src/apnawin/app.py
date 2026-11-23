@@ -1045,7 +1045,9 @@ class MainWindow(QMainWindow):
         except (OSError, TypeError, ValueError) as exc:
             self.apna_insecure_tls_check.blockSignals(True)
             try:
-                self.apna_insecure_tls_check.setChecked(False)
+                # The toggle has already changed before its signal is emitted.
+                # Restore the previous persisted choice if the encrypted write fails.
+                self.apna_insecure_tls_check.setChecked(not bool(enabled))
             finally:
                 self.apna_insecure_tls_check.blockSignals(False)
             QMessageBox.warning(
