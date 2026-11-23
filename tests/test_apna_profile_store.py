@@ -60,6 +60,7 @@ def test_round_trip_encrypted_profile_and_config_loader(tmp_path):
     assert loaded.ssh.host_key_sha256 == _config().ssh.host_key_sha256
     assert loaded.payload.payload == _config().payload.payload
     assert loaded.payload.ca_bundle_file == "trusted-provider-ca.pem"
+    assert loaded.payload.allow_insecure_tls is False
     assert loaded.payload.cf_host == "front.example.test"
     assert loaded.payload.brand == "ApnaWin"
     assert loaded.payload.user_agent == "ApnaWin-Test/1.0"
@@ -225,3 +226,14 @@ def test_store_loads_legacy_profile_without_optional_ca_bundle(tmp_path):
 
     loaded = store.load(_profile())
     assert loaded.payload.ca_bundle_file is None
+
+
+def test_store_round_trips_explicit_insecure_tls_compatibility_flag(tmp_path):
+    from dataclasses import replace
+
+    store = _store(tmp_path)
+    config = _config()
+    payload = replace(config.payload, allow_insecure_tls=True)
+    store.save(_profile(), replace(config, payload=payload))
+    loaded = store.load(_profile())
+    assert loaded.payload.allow_insecure_tls is True
