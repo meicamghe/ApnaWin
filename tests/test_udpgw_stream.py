@@ -6,7 +6,7 @@ import threading
 
 import pytest
 
-from apnawin.engines.udpgw_protocol import decode_udpgw_payload, encode_datagram
+from apnawin.engines.udpgw_protocol import decode_udpgw_payload, encode_datagram, encode_keepalive
 from apnawin.engines.udpgw_stream import (
     Socks5ConnectConfig,
     Socks5ProtocolError,
@@ -157,3 +157,33 @@ def test_udpgw_stream_requires_connection_before_sending() -> None:
     )
     with pytest.raises(UdpGwTransportError, match="not connected"):
         stream.send_keepalive()
+
+
+def test_receive_packet_restores_socket_timeout_after_temporary_override() -> None:
+    class TimeoutSocket:
+        def __init__(self):
+            self.timeout = 9.0
+            self.chunks = [encode_keepalive()]
+
+        def fileno(self):
+            return 123
+
+        def gettimeout(self):
+            return self.timeout
+
+        def settimeout(self, value):
+            self.timeout = value
+
+        def recv(self, size):
+            return self.chunks.pop(0)
+
+    fake_socket = TimeoutSocket()
+    stream = UdpGwStreamClient(
+        Socks5ConnectConfig("127.0.0.1", 1080, "udpgw.example.test", 7300)
+    )
+    stream._socket = fake_socket
+
+    packet = stream.receive_packet(timeout=0.05)
+
+    assert packet.is_keepalive
+    assert fake_socket.timeout == 9.0
