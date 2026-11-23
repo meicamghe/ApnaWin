@@ -176,3 +176,21 @@ After the contract is known, implement QUIC and DTLS as separate transport adapt
 ### 7.5 Scope and release boundary
 
 This audit changes the engineering plan and does not claim a successful live connection. No Windows installer, portable release, new product build, or PR merge is authorized by this work. PR #6 remains open, Draft and unmerged.
+
+
+## 2026-11-23 implementation audit: current engine contracts
+
+A source-level audit of the current branch confirms the following implementation boundaries:
+
+- `Transport` currently exposes only `XRAY`, `OPENVPN`, `SOCKS`, and `APNA_SSH`. It does not yet model the Xray wire protocols as separate transports. This is appropriate only if Xray is treated as one engine with a typed outbound profile; it is not a protocol registry for all Android-native engines.
+- `XrayProcessRunner` is a process supervisor, not a config generator. Its validator accepts a bounded set of remote outbound protocol names (VLESS, VMess, Trojan, Shadowsocks, SOCKS, HTTP, WireGuard, Hysteria, MASQUE) and rejects direct/unsupported outbound protocols in the strict TUN path. It does not validate the complete protocol-specific settings schema or create credentials/security/transport objects.
+- `build_apna_xray_tun_config()` is specifically the APNA SSH bridge frontend: one Xray TUN inbound and one SOCKS outbound to the loopback gateway. It must remain separate from a future remote-Xray outbound builder; replacing its SOCKS outbound with a guessed remote protocol would break the existing SSH/UDPGW data path.
+- `ApnaTunnelEngine` owns the SSH session, loopback SOCKS/UDPGW, Xray TUN process, DNS probe, TCP egress probe and rollback. Its readiness checks are intentionally stronger than process-started state. It is Windows-only and requires UDPGW configuration for full-tunnel mode.
+- `MultiTransportTunnelEngine` and `TransportEngineRouter` are dispatch/lifecycle wrappers. They select only explicitly registered `Transport` keys; neither discovers Android native libraries nor maps APNA catalog categories to engines.
+- `ConnectionProfile` currently carries only name, transport, endpoint host and endpoint port. It cannot represent UUID/password/method, TLS/Reality, WebSocket/gRPC/QUIC, WireGuard keys/peers, or OpenVPN credentials/configuration. Those values must be introduced through typed, secret-aware engine configuration objects rather than overloaded into the generic endpoint fields.
+
+### Engineering decision
+
+The next safe implementation unit is a separate, typed Xray remote-outbound configuration layer plus its schema-focused tests. It must not alter `build_apna_xray_tun_config()` or claim that an APNA catalog category maps to VLESS/VMess/etc. The builder should accept explicit protocol-specific settings, reject missing/contradictory security and transport fields, serialize deterministic JSON, and pass the existing strict TUN policy only when used as a TUN outbound. Protocol schemas must be checked against the exact Xray-core version selected for the Windows runtime before implementation; the APK's embedded Xray module version is evidence about the Android binary, not automatically the Windows runtime version.
+
+OpenVPN, QUIC and DTLS remain separate engine work items. The current source does not yet provide their complete lifecycle adapters. No Windows build, installer, release, PR merge, or connectivity claim was made as part of this audit.
