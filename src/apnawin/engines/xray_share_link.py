@@ -21,7 +21,7 @@ from apnawin.engines.xray_process import inspect_tun_inbound
 
 _DEFAULT_DNS = ("1.1.1.1", "2606:4700:4700::1111")
 _SUPPORTED_SCHEMES = frozenset({"vless", "vmess", "trojan", "ss"})
-_SUPPORTED_NETWORKS = frozenset({"tcp", "ws", "grpc", "httpupgrade"})
+_SUPPORTED_NETWORKS = frozenset({"tcp", "ws", "grpc", "httpupgrade", "xhttp"})
 _SUPPORTED_SECURITY = frozenset({"none", "tls", "reality"})
 _NAME_RE = re.compile(r"[^\w .()\[\]-]+", re.UNICODE)
 
@@ -135,9 +135,9 @@ def _stream_settings(
         raise XrayShareLinkError(f"Unsupported Xray network transport: {network}")
     if security not in _SUPPORTED_SECURITY or (security == "reality" and not allow_reality):
         raise XrayShareLinkError(f"Unsupported Xray stream security: {security}")
-    if security == "reality" and network not in {"tcp", "grpc"}:
+    if security == "reality" and network not in {"tcp", "grpc", "xhttp"}:
         raise XrayShareLinkError(
-            "REALITY security is supported only with TCP or gRPC by this importer"
+            "REALITY security is supported only with TCP, gRPC or XHTTP by this importer"
         )
 
     settings: dict = {"network": network, "security": security}
@@ -163,8 +163,20 @@ def _stream_settings(
         upgrade_host = query.get("host", "")
         upgrade = {"path": path}
         if upgrade_host:
+            _host_port(upgrade_host, 443)
             upgrade["host"] = upgrade_host
         settings["httpupgradeSettings"] = upgrade
+    elif network == "xhttp":
+        path = _transport_path(query.get("path", "/"), "XHTTP")
+        xhttp_host = query.get("host", "")
+        mode = query.get("mode", "auto") or "auto"
+        if mode not in {"auto", "packet-up", "stream-up", "stream-one"}:
+            raise XrayShareLinkError("Unsupported XHTTP mode")
+        xhttp = {"path": path, "mode": mode}
+        if xhttp_host:
+            _host_port(xhttp_host, 443)
+            xhttp["host"] = xhttp_host
+        settings["xhttpSettings"] = xhttp
 
     if security == "tls":
         if query.get("allowInsecure", "").lower() in {"1", "true", "yes"}:
@@ -295,6 +307,7 @@ def _parse_vmess(parsed) -> tuple[str, int, dict, dict]:
         "path": str(document.get("path") or "/"),
         "sni": str(document.get("sni") or document.get("host") or host),
         "fp": str(document.get("fp") or ""),
+        "mode": str(document.get("mode") or "auto"),
         "profile_name": str(document.get("ps") or ""),
     }
     if query["type"] == "grpc":
