@@ -269,10 +269,12 @@ def _parse_vmess(parsed) -> tuple[str, int, dict, dict]:
         alter_id = int(raw_alter_id)
     except (TypeError, ValueError) as exc:
         raise XrayShareLinkError("VMess alterId must be an integer") from exc
-    if not 0 <= alter_id <= 65535:
-        raise XrayShareLinkError("VMess alterId is outside the supported range")
+    if alter_id != 0:
+        raise XrayShareLinkError(
+            "Xray VMess is AEAD-only; non-zero alterId is not supported"
+        )
     cipher = str(document.get("scy") or "auto")
-    if cipher not in {"auto", "aes-128-gcm", "chacha20-poly1305", "none", "zero"}:
+    if cipher not in {"auto", "aes-128-gcm", "chacha20-poly1305"}:
         raise XrayShareLinkError("Unsupported VMess cipher")
     raw_tls = document.get("tls", "")
     if not isinstance(raw_tls, str):
@@ -291,7 +293,7 @@ def _parse_vmess(parsed) -> tuple[str, int, dict, dict]:
     }
     if query["type"] == "grpc":
         query["serviceName"] = query["path"].lstrip("/")
-    user = {"id": user_id, "alterId": alter_id, "security": cipher}
+    user = {"id": user_id, "security": cipher}
     outbound = {
         "tag": "proxy",
         "protocol": "vmess",
