@@ -413,15 +413,19 @@ def import_xray_share_link(uri: str) -> ImportedXrayProfile:
     if not isinstance(uri, str) or not uri.strip() or len(uri) > 131072:
         raise XrayShareLinkError("Share link is empty or exceeds the size limit")
     text = uri.strip()
+    if any(ord(character) < 32 or ord(character) == 127 for character in text):
+        raise XrayShareLinkError("Share link contains control characters")
     scheme = text.split(":", 1)[0].lower()
     if scheme not in _SUPPORTED_SCHEMES:
         raise XrayShareLinkError("Supported share-link schemes: vless, vmess, trojan and ss")
-    if scheme == "vmess":
+    try:
         parsed = urlsplit(text)
+    except ValueError as exc:
+        raise XrayShareLinkError("Share link URL is malformed") from exc
+    if scheme == "vmess":
         host, port, outbound, query = _parse_vmess(parsed)
         fragment = parsed.fragment or query.get("profile_name", "")
     else:
-        parsed = urlsplit(text)
         if parsed.scheme.lower() != scheme:
             raise XrayShareLinkError("Share-link scheme is invalid")
         if scheme == "vless":
