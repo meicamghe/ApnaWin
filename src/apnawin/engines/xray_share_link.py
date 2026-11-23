@@ -163,7 +163,7 @@ def _stream_settings(
         settings["wsSettings"] = {"path": path, "headers": headers}
     elif network == "grpc":
         service_name = query.get("serviceName", query.get("path", ""))
-        if len(service_name) > 512 or any(ord(ch) < 32 for ch in service_name):
+        if len(service_name) > 512 or any(ord(ch) < 32 or ord(ch) == 127 for ch in service_name):
             raise XrayShareLinkError("gRPC service name is invalid")
         authority = _safe_option_text(
             query.get("authority", query.get("host", "")),
@@ -263,6 +263,8 @@ def _stream_settings(
 
 def _parse_vless(parsed) -> tuple[str, int, dict, dict]:
     host, port = _url_endpoint(parsed)
+    if parsed.password is not None:
+        raise XrayShareLinkError("VLESS link must not contain a password field")
     user_id = unquote(parsed.username or "")
     try:
         normalized_id = str(uuid.UUID(user_id))
@@ -370,7 +372,11 @@ def _parse_vmess(parsed) -> tuple[str, int, dict, dict]:
 def _parse_trojan(parsed) -> tuple[str, int, dict, dict]:
     host, port = _url_endpoint(parsed)
     password = unquote(parsed.username or "")
-    if not password or len(password) > 1024 or any(ord(ch) < 32 for ch in password):
+    if (
+        not password
+        or len(password) > 1024
+        or any(ord(ch) < 32 or ord(ch) == 127 for ch in password)
+    ):
         raise XrayShareLinkError("Trojan link must contain a valid password")
     query = _query(parsed)
     network = query.get("type", query.get("network", "tcp"))
