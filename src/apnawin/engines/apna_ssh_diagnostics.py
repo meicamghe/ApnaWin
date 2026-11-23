@@ -5,8 +5,9 @@ enable additional algorithms or weaken Paramiko's negotiated security policy.
 """
 from __future__ import annotations
 
-import paramiko
 import re
+
+import paramiko
 from paramiko.message import Message
 
 
@@ -91,7 +92,7 @@ def cipher_diagnostic_suffix(error: BaseException) -> str:
 def _read_server_cipher_proposals_from_error(details: str) -> tuple[str, ...]:
     """Extract cipher names from the two bounded diagnostic proposal lists."""
     match = re.search(
-        r"client->server=\\[([^]]*)\\];\\s*server->client=\\[([^]]*)\\]",
+        r"client->server=\[([^]]*)\];\s*server->client=\[([^]]*)\]",
         details,
     )
     if match is None:
