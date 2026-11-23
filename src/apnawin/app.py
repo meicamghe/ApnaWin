@@ -627,6 +627,13 @@ class MainWindow(QMainWindow):
         self.profile_details = QLabel("No profile selected.")
         self.profile_details.setTextFormat(Qt.TextFormat.PlainText)
         self.profile_details.setWordWrap(True)
+        self.apna_insecure_tls_check = QCheckBox(
+            "Allow self-signed TLS certificates for this APNA profile (compatibility mode)"
+        )
+        self.apna_insecure_tls_check.setEnabled(False)
+        self.apna_insecure_tls_check.toggled.connect(
+            self._set_selected_apna_tls_compatibility
+        )
 
         # Keep a hidden compatibility handle; profile creation is not exposed in the UI.
         self.add_button = QPushButton("Add")
@@ -722,6 +729,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.profile_list)
         layout.addLayout(profile_actions)
         layout.addWidget(self.profile_details)
+        layout.addWidget(self.apna_insecure_tls_check)
         layout.addWidget(self.connect_button)
         layout.addWidget(self.disconnect_button)
         layout.addStretch(1)
@@ -964,9 +972,13 @@ class MainWindow(QMainWindow):
             self.profile_storage_writable and selected
             and self.profiles[row].transport is Transport.APNA_SSH
         )
+        self.apna_insecure_tls_check.blockSignals(True)
+        self.apna_insecure_tls_check.setChecked(False)
+        self.apna_insecure_tls_check.setEnabled(False)
         if not selected:
             self.import_xray_config_button.setEnabled(False)
             self.profile_details.setText("No profile selected.")
+            self.apna_insecure_tls_check.blockSignals(False)
             self._update_connection_controls()
             return
         profile = self.profiles[row]
@@ -998,7 +1010,10 @@ class MainWindow(QMainWindow):
         if has_apna_config and profile.transport is Transport.APNA_SSH:
             try:
                 config = self.apna_profile_store.load(profile)
+                self.apna_insecure_tls_check.setChecked(config.payload.allow_insecure_tls)
+                self.apna_insecure_tls_check.setEnabled(self.profile_storage_writable)
                 details += (
+                    f"\nTLS certificate verification: {'disabled (compatibility mode)' if config.payload.allow_insecure_tls else 'system verification'}"
                     "\nAPNA SSH settings: encrypted for this Windows user"
                     f"\nPayload transport: {config.payload.mode.value}"
                     f"\nPayload endpoint: {config.payload.connect_host}:{config.payload.connect_port}"
@@ -1011,8 +1026,40 @@ class MainWindow(QMainWindow):
                     details += "\nSSH host key: system known_hosts verification"
             except (OSError, ValueError, TypeError) as exc:
                 details += f"\nAPNA encrypted settings unavailable ({type(exc).__name__})"
+        self.apna_insecure_tls_check.blockSignals(False)
         self.profile_details.setText(details)
         self._update_connection_controls()
+
+    def _set_selected_apna_tls_compatibility(self, enabled: bool) -> None:
+        """Persist the selected APNA profile TLS compatibility choice."""
+        row = self.profile_list.currentRow()
+        if not self.profile_storage_writable or not 0 <= row < len(self.profiles):
+            return
+        profile = self.profiles[row]
+        if profile.transport is not Transport.APNA_SSH:
+            return
+        try:
+            config = self.apna_profile_store.load(profile)
+            updated_payload = replace(config.payload, allow_insecure_tls=bool(enabled))
+            self.apna_profile_store.save(profile, replace(config, payload=updated_payload))
+        except (OSError, TypeError, ValueError) as exc:
+            self.apna_insecure_tls_check.blockSignals(True)
+            try:
+                self.apna_insecure_tls_check.setChecked(False)
+            finally:
+                self.apna_insecure_tls_check.blockSignals(False)
+            QMessageBox.warning(
+                self,
+                "Could not save APNA TLS compatibility setting",
+                f"The encrypted APNA profile was not changed. ({type(exc).__name__}: {exc})",
+            )
+            return
+        mode = "enabled" if enabled else "disabled"
+        self.status_label.setText(
+            f"Self-signed TLS compatibility {mode} for {profile.name}. "
+            "This affects TLS certificate checks only; SNI and SSH authentication are unchanged."
+        )
+        self._show_selected_profile(row)
 
     def _verify_selected_apna_host_key(self) -> None:
         """Probe and explicitly pin the selected APNA SSH host key."""
