@@ -226,6 +226,19 @@ def test_rejects_runtime_incompatible_reality_and_vision_combinations(uri):
         import_xray_share_link(uri)
 
 
+@pytest.mark.parametrize(
+    "uri",
+    [
+        f"vless://{UUID}@edge.example.test:443?type=httpupgrade&path=%2F" + ("a" * 2049),
+        f"vless://{UUID}@edge.example.test:443?type=httpupgrade&path=%2Fbad%7Fpath",
+        f"vless://{UUID}@edge.example.test:443?type=ws&path=%2Fbad%01path",
+    ],
+)
+def test_rejects_invalid_or_oversized_transport_paths(uri):
+    with pytest.raises(XrayShareLinkError, match="path is invalid"):
+        import_xray_share_link(uri)
+
+
 def test_vless_vision_flow_accepts_tcp_with_reality():
     result = import_xray_share_link(
         f"vless://{UUID}@edge.example.test:443?type=tcp&security=reality"
