@@ -18,6 +18,20 @@ The importer rejects duplicate JSON keys, non-finite constants, invalid UTF-8, m
 
 The Connect button remains disabled. A fixed-path, Program Files-installed UAC helper and desktop-side process supervisor are now implemented. Before signaling ready, the helper verifies the protected Xray/Wintun runtime manifest, validates the TUN config with Xray, refuses to reuse an existing adapter, and waits for the adapter, effective IPv4/IPv6 default routes and configured DNS to remain healthy. It continues monitoring those local conditions and gracefully stops Xray after repeated failures. The helper additionally requires a certificate-validated TLS handshake to one of two independent public endpoints through the system TUN route before reporting ready. This proves basic IPv4 egress from a non-Xray process through the configured tunnel; it does not prove APNA-specific application traffic, IPv6 egress, or all leak cases. The desktop UI is not yet wired to the supervisor, and clean-machine WFP leak plus crash/reboot cleanup acceptance tests are still pending.
 
+## Share-link import contract
+
+The separate share-link parser in `src/apnawin/engines/xray_share_link.py` accepts VLESS, VMess, Trojan and Shadowsocks URI forms and converts them into the same encrypted TUN-profile path. Supported stream transports are TCP, WebSocket, gRPC, HTTPUpgrade and XHTTP; TLS and the supported TCP/gRPC/XHTTP REALITY combinations are validated before config creation.
+
+Import is deliberately strict:
+- Duplicate query parameters and duplicate VMess JSON keys are rejected rather than silently selecting one value.
+- TLS certificate verification cannot be disabled through a share link. TLS SNI, ALPN, REALITY fields and transport paths are bounded and checked for control characters.
+- Trojan credentials must be one URL user-info value; a literal colon in the password must be percent-encoded. Shadowsocks passwords reject control characters and invalid UTF-8 credential encodings.
+- Unrecognized URL paths on authority-based VLESS/Trojan links are rejected instead of being silently ignored.
+- VMess non-zero `alterId`, unsupported cipher methods, unsupported transports and SIP003 Shadowsocks plugins are rejected.
+- REALITY public keys and short IDs are structurally validated. A structurally valid link is not proof that the remote endpoint is reachable or that its credentials are correct.
+
+The importer does not enable legacy SSH/Xray cryptography, infer APNA catalog category mappings, or claim a connection based on successful parsing. The pinned Xray executable's `run -test` is the configuration compatibility gate; a real tunnel still requires endpoint reachability and routed-traffic acceptance.
+
 ## User workflow
 
 1. Add or select an XRAY profile.
