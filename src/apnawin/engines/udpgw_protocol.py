@@ -149,18 +149,34 @@ class PacketProtoDecoder:
         return len(self._buffer)
 
     def feed(self, data: bytes | bytearray | memoryview) -> tuple[bytes, ...]:
-        incoming = bytes(data)
-        self._buffer.extend(incoming)
+        # Process arbitrarily coalesced TCP reads in bounded chunks. Extending
+        # the buffer with the entire read first would let one oversized read
+        # allocate unbounded memory before the frame-length check ran.
+        incoming = memoryview(data).cast("B")
         frames: list[bytes] = []
-        while len(self._buffer) >= 2:
-            frame_length = _PACKETPROTO_HEADER.unpack_from(self._buffer)[0]
-            if not 3 <= frame_length <= self._max_payload_bytes:
-                raise UdpGwProtocolError("Invalid PacketProto frame length")
-            frame_end = 2 + frame_length
-            if len(self._buffer) < frame_end:
+        offset = 0
+        buffer_limit = self._max_payload_bytes + 2
+
+        while offset < len(incoming) or len(self._buffer) >= 2:
+            if offset < len(incoming):
+                available = buffer_limit - len(self._buffer)
+                if available <= 0:
+                    raise UdpGwProtocolError("PacketProto receive buffer exceeds its limit")
+                chunk_size = min(available, len(incoming) - offset)
+                self._buffer.extend(incoming[offset : offset + chunk_size])
+                offset += chunk_size
+
+            while len(self._buffer) >= 2:
+                frame_length = _PACKETPROTO_HEADER.unpack_from(self._buffer)[0]
+                if not 3 <= frame_length <= self._max_payload_bytes:
+                    raise UdpGwProtocolError("Invalid PacketProto frame length")
+                frame_end = 2 + frame_length
+                if len(self._buffer) < frame_end:
+                    break
+                frames.append(bytes(self._buffer[2:frame_end]))
+                del self._buffer[:frame_end]
+
+            if offset == len(incoming) and len(self._buffer) < 2:
                 break
-            frames.append(bytes(self._buffer[2:frame_end]))
-            del self._buffer[:frame_end]
-        if len(self._buffer) > self._max_payload_bytes + 2:
-            raise UdpGwProtocolError("PacketProto receive buffer exceeds its limit")
+
         return tuple(frames)
