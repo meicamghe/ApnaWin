@@ -7,6 +7,7 @@
 
 ## Latest verified checkpoint — 2026-11-23
 
+- Implementation checkpoint `b351ef9`: added `ApnaDiagnosticTransport` to the unauthenticated host-key probe and authenticated SSH session; the KEXINIT peer cipher offers are reported in cipher-mismatch errors without changing enabled algorithms. Unit coverage and CI are being validated.
 - Current user-test follow-up: a diagnostic Paramiko transport is being added to report both directional cipher lists from the peer SSH KEXINIT and the client-enabled cipher list when negotiation fails. This is diagnostic only; it does not enable CBC/3DES or alter the algorithm policy. CI validation is pending.
 
 - PR #6 remains open and Draft. Do not merge or convert it from Draft without explicit user approval.
