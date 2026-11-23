@@ -419,3 +419,37 @@ def test_engine_refresh_marks_lost_apna_ssh_session_as_error():
     assert "APNA SSH" in engine.last_error
     engine.disconnect()
     assert engine.state is ConnectionState.DISCONNECTED
+
+
+def test_engine_retries_encrypted_config_cleanup_without_restarting_network_resources():
+    events = []
+    engine, store, supervisor, sessions = _engine(events)
+    engine.connect(_profile())
+    config_name = next(iter(store.saved))
+    original_remove = store.remove
+    failures = {"remaining": 1}
+
+    def fail_once(name):
+        events.append("config-remove-attempt")
+        if failures["remaining"]:
+            failures["remaining"] -= 1
+            raise OSError("DPAPI-backed config store is temporarily unavailable")
+        original_remove(name)
+
+    store.remove = fail_once
+    with pytest.raises(ApnaTunnelEngineError, match="encrypted config cleanup failed"):
+        engine.disconnect()
+
+    assert engine.state is ConnectionState.ERROR
+    assert not supervisor.has_process
+    assert sessions[0] is not None
+    assert config_name in store.saved
+    assert events[-3:] == [
+        "xray-stop", "session-disconnect", "config-remove-attempt"
+    ]
+
+    engine.disconnect()
+
+    assert engine.state is ConnectionState.DISCONNECTED
+    assert not store.saved
+    assert events[-2:] == ["config-remove-attempt", "config-remove"]
