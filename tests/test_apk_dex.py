@@ -358,6 +358,18 @@ def test_parse_native_library_loads_ignores_unrelated_strings_and_dynamic_values
     assert apk_dex._parse_native_library_loads(output) == []
 
 
+def test_parse_native_library_loads_invalidates_move_result_registers():
+    output = (
+        ".method public static load()V\n"
+        '    const-string v0, "not-a-library"\n'
+        "    invoke-static {}, Ljava/lang/System;->currentTimeMillis()J\n"
+        "    move-result-object v0\n"
+        "    invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    assert apk_dex._parse_native_library_loads(output) == []
+
+
 def test_inspector_scans_manifest_application_class_for_native_loads(tmp_path, monkeypatch):
     apk = tmp_path / "application-loader.apk"
     apk.write_bytes(b"placeholder")
