@@ -366,7 +366,13 @@ def test_ssh_session_rejects_invalid_channel_timeout(value):
 def test_connect_preserves_actionable_ssh_stage_errors(failure, message):
     client_socket, peer = socket.socketpair()
 
+    clients = []
+
     class RaisingSshClient:
+        def __init__(self):
+            self.close_calls = 0
+            clients.append(self)
+
         def load_system_host_keys(self):
             return None
 
@@ -380,9 +386,11 @@ def test_connect_preserves_actionable_ssh_stage_errors(failure, message):
             raise failure
 
         def close(self):
-            # Simulate a secondary cleanup failure. The original SSH-stage
-            # exception must remain the one surfaced to the caller.
-            raise OSError("simulated SSH client cleanup failure")
+            self.close_calls += 1
+            if self.close_calls == 1:
+                # Simulate a secondary cleanup failure. The original SSH-stage
+                # exception must remain visible and the client must stay owned.
+                raise OSError("simulated SSH client cleanup failure")
 
     session = ApnaSshSession(
         ApnaSshConfig(
@@ -406,6 +414,12 @@ def test_connect_preserves_actionable_ssh_stage_errors(failure, message):
         with pytest.raises(ApnaSshError, match=message):
             session.connect()
         assert client_socket.fileno() == -1
+        assert clients[0].close_calls == 1
+        assert session._ssh_client is clients[0]
+        # A later owner cleanup retries the retained client successfully.
+        session.close()
+        assert clients[0].close_calls == 2
+        assert session._ssh_client is None
     finally:
         peer.close()
 
