@@ -624,7 +624,10 @@ def test_tls_direct_opt_in_compatibility_uses_tls_but_disables_certificate_check
             return sock
 
     monkeypatch.setattr(ssl, "SSLContext", CompatibilityContext)
-    connector = ApnaPayloadSocketConnector(socket_factory=lambda *_a, **_k: client)
+    connector = ApnaPayloadSocketConnector(
+        socket_factory=lambda *_a, **_k: client,
+        tls_context=object(),  # avoid create_default_context; the opt-in path builds its own context
+    )
     config = PayloadSocketConfig(
         mode=PayloadSocketMode.TLS_DIRECT,
         connect_host="xm63.example.test",
