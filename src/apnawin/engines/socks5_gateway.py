@@ -173,9 +173,10 @@ def parse_socks5_udp_datagram(data: bytes) -> tuple[str, int, bytes]:
         if not length or len(data) < offset + length + 2:
             raise Socks5GatewayError("Invalid SOCKS5 domain UDP datagram")
         try:
-            host = data[offset : offset + length].decode("idna")
+            host = data[offset : offset + length].decode("ascii")
         except UnicodeError as exc:
             raise Socks5GatewayError("Invalid SOCKS5 domain encoding") from exc
+        host = _validate_socks5_domain(host)
         offset += length
     else:
         raise Socks5GatewayError("SOCKS5 UDP datagram uses an unsupported address type")
