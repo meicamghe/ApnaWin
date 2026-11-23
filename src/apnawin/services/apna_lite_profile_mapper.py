@@ -6,6 +6,7 @@ rejected rather than silently treated as SSH.
 """
 from __future__ import annotations
 
+import base64
 import re
 import secrets
 from dataclasses import dataclass
@@ -86,17 +87,57 @@ def _catalog_bool(value: object, field: str) -> bool:
 
 
 def _payload_requests_websocket_upgrade(template: str) -> bool:
-    """Recognize an Upgrade header across APNA's literal and tokenized CRLF forms."""
+    """Return true only for a complete RFC 6455 client handshake template.
+
+    An Upgrade header by itself is not enough to make HTTP 101 a valid
+    continuation into the SSH byte stream. The runtime WebSocket adapter
+    requires GET/HTTP/1.1 plus the mandatory Upgrade, Connection, key and
+    version headers; keep the mapper's accepted-status policy consistent.
+    """
     normalized = re.sub(
         r"\[(?:crlf|lf|cr)\]",
         "\n",
         template,
         flags=re.IGNORECASE,
     )
-    return re.search(
-        r"(?im)^[ \t]*upgrade[ \t]*:[ \t]*websocket(?:[ \t]*,|[ \t]*$)",
-        normalized,
-    ) is not None
+    lines = normalized.splitlines()
+    if not lines:
+        return False
+    request_line = lines[0].split()
+    if len(request_line) != 3 or request_line[0] != "GET" or request_line[2] != "HTTP/1.1":
+        return False
+
+    headers: dict[str, list[str]] = {}
+    for line in lines[1:]:
+        if not line:
+            break
+        if ":" not in line:
+            return False
+        name, value = line.split(":", 1)
+        key = name.strip().lower()
+        if not key:
+            return False
+        headers.setdefault(key, []).append(value.strip())
+
+    def one(name: str) -> str | None:
+        values = headers.get(name, [])
+        return values[0] if len(values) == 1 else None
+
+    upgrade = one("upgrade")
+    connection = one("connection")
+    websocket_key = one("sec-websocket-key")
+    websocket_version = one("sec-websocket-version")
+    if not upgrade or "websocket" not in {part.strip().lower() for part in upgrade.split(",")}:
+        return False
+    if not connection or "upgrade" not in {part.strip().lower() for part in connection.split(",")}:
+        return False
+    if websocket_version != "13" or not websocket_key:
+        return False
+    try:
+        decoded_key = base64.b64decode(websocket_key, validate=True)
+    except (ValueError, UnicodeError):
+        return False
+    return len(decoded_key) == 16
 
 
 def list_apna_lite_ssh_servers(catalog: dict) -> list[dict]:
