@@ -100,3 +100,19 @@ def test_text_frames_are_rejected_for_ssh_stream():
     finally:
         stream.close()
         server.close()
+
+
+def test_close_frame_is_echoed_and_underlying_socket_is_released():
+    client, server = socket.socketpair()
+    stream = WebSocketStreamSocket(client)
+    server.sendall(b"\x88\x02\x03\xe8")
+    try:
+        assert stream.recv(1) == b""
+        opcode, payload = _read_client_frame(server)
+        assert opcode == 0x8
+        assert payload == b"\x03\xe8"
+        stream.close()
+        assert client.fileno() == -1
+    finally:
+        stream.close()
+        server.close()

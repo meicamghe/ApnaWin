@@ -28,6 +28,7 @@ class WebSocketStreamSocket:
         self._send_lock = threading.Lock()
         self._fragmented = False
         self._closed = False
+        self._socket_closed = False
         self._close_sent = False
 
     @property
@@ -107,6 +108,8 @@ class WebSocketStreamSocket:
         payload = self._read_exact(length)
 
         if opcode == 0x8:
+            if len(payload) == 1:
+                raise WebSocketStreamError("WebSocket close frame cannot contain a one-byte status payload")
             if not self._close_sent:
                 try:
                     self._send_frame(0x8, payload)
@@ -167,7 +170,8 @@ class WebSocketStreamSocket:
         self._socket.shutdown(how)
 
     def close(self) -> None:
-        if self._closed:
+        if self._socket_closed:
             return
         self._closed = True
+        self._socket_closed = True
         self._socket.close()
