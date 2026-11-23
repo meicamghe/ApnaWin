@@ -295,6 +295,7 @@ def test_vless_vision_flow_accepts_tcp_with_reality():
     "parameters",
     [
         "pbk=key&sid=abcd",
+        "pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+&sid=abcd",
         "pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=abc",
         "pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=0123456789abcdef00",
     ],
