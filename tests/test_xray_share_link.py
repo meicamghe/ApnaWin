@@ -263,6 +263,39 @@ def test_share_link_query_has_a_bounded_parameter_count():
         import_xray_share_link(uri)
 
 
+def test_trojan_rejects_unescaped_second_userinfo_field():
+    with pytest.raises(XrayShareLinkError, match="single URL user-info"):
+        import_xray_share_link("trojan://secret:ignored@edge.example.test:443?security=tls")
+
+
+def test_trojan_accepts_colon_when_percent_encoded_in_password():
+    result = import_xray_share_link(
+        "trojan://secret%3Avalue@edge.example.test:443?security=tls"
+    )
+    outbound = outbound_for(result)
+    assert outbound["settings"]["servers"][0]["password"] == "secret:value"
+
+
+@pytest.mark.parametrize(
+    "uri",
+    [
+        "ss://aes-256-gcm:secret%0Ainjected@ss.example.test:8388",
+        "ss://aes-256-gcm:secret%7Finjected@ss.example.test:8388",
+    ],
+)
+def test_shadowsocks_rejects_control_characters_in_password(uri):
+    with pytest.raises(XrayShareLinkError, match="control characters"):
+        import_xray_share_link(uri)
+
+
+def test_shadowsocks_invalid_utf8_credentials_raise_safe_import_error():
+    encoded = base64.urlsafe_b64encode(
+        b"\\xff@ss.example.test:8388"
+    ).decode().rstrip("=")
+    with pytest.raises(XrayShareLinkError, match="UTF-8"):
+        import_xray_share_link(f"ss://{encoded}")
+
+
 def test_trojan_rejects_case_insensitive_no_tls_security():
     uri = "trojan://secret@edge.example.test:443?security=NONE"
     with pytest.raises(XrayShareLinkError, match="TLS or Reality"):
