@@ -270,3 +270,11 @@ def test_maps_only_an_explicit_provider_ca_bundle_path():
         ca_bundle_file="trusted-provider-ca.pem",
     )
     assert mapped.session_config.payload.ca_bundle_file == "trusted-provider-ca.pem"
+
+
+def test_maps_explicit_insecure_tls_compatibility_mode():
+    mapped = build_apna_lite_ssh_profile(
+        _catalog(), _server(), _payload(sslws="true", port="443"),
+        host_selector=_first, allow_insecure_tls=True,
+    )
+    assert mapped.session_config.payload.allow_insecure_tls is True
