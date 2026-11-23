@@ -81,6 +81,23 @@ def test_packetproto_decoder_handles_fragmented_and_coalesced_frames() -> None:
     assert decoder.buffered_bytes == 0
 
 
+def test_packetproto_decoder_handles_large_coalesced_reads_with_bounded_buffer():
+    frames = tuple(encode_keepalive() for _ in range(20000))
+    combined = b"".join(frames)
+    decoder = PacketProtoDecoder()
+    decoded = decoder.feed(combined)
+    assert len(decoded) == len(frames)
+    assert all(decode_udpgw_payload(frame).is_keepalive for frame in decoded)
+    assert decoder.buffered_bytes == 0
+
+
+def test_packetproto_decoder_rejects_oversized_declared_frame_before_buffer_growth():
+    decoder = PacketProtoDecoder(max_payload_bytes=32)
+    with pytest.raises(UdpGwProtocolError, match="frame length"):
+        decoder.feed(b"\\xff\\xff" + b"x" * 100000)
+    assert decoder.buffered_bytes <= 34
+
+
 def test_packetproto_decoder_waits_for_complete_frame() -> None:
     frame = encode_keepalive()
     decoder = PacketProtoDecoder()
