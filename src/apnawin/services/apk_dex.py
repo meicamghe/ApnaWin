@@ -260,7 +260,42 @@ def _parse_native_library_loads(output: str) -> list[str]:
             continue
         # A write to a tracked destination invalidates the previous literal.
         fields = line.strip().split(None, 1)
-        if len(fields) == 2 and fields[0].startswith(("move", "const", "new-", "iget", "sget", "aget")):
+        # DEX instructions that write their first register operand invalidate
+        # a previously tracked const-string. In particular, move-result-object
+        # can overwrite a register between a literal and System.loadLibrary().
+        writes_first_register = (
+            "move",
+            "const",
+            "new-",
+            "iget",
+            "sget",
+            "aget",
+            "array-length",
+            "instance-of",
+            "cmp",
+            "neg-",
+            "not-",
+            "int-to-",
+            "long-to-",
+            "float-to-",
+            "double-to-",
+            "add-",
+            "sub-",
+            "mul-",
+            "div-",
+            "rem-",
+            "and-",
+            "or-",
+            "xor-",
+            "shl-",
+            "shr-",
+            "ushr-",
+        )
+        if (
+            len(fields) == 2
+            and fields[0].startswith(writes_first_register)
+            and not fields[0].startswith(("invoke-", "iput", "sput", "aput"))
+        ):
             destination = fields[1].split(",", 1)[0].strip()
             registers.pop(destination, None)
     return sorted(libraries)
