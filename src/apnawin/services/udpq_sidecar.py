@@ -1,8 +1,8 @@
-"""Experimental Hysteria-v1/UDPQ client sidecar lifecycle.
+"""Experimental StarUDP-compatible Windows client sidecar lifecycle.
 
-This service only starts the local SOCKS5 sidecar. It is intentionally not
-registered as a VPN transport until APNA's protected ALPN/config mapping is
-verified and the sidecar is composed with the existing Xray/Wintun TUN engine.
+This service owns the sidecar process and its short-lived config. The separate
+UdpqTunnelEngine composes it with Xray/Wintun. Generic profile support does not
+assert that APNA's protected runtime configuration has been fully mapped.
 """
 from __future__ import annotations
 
