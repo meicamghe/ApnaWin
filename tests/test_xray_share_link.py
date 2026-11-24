@@ -651,6 +651,20 @@ def test_wireguard_rejects_non_endpoint_uri_components(endpoint):
         import_wireguard_config(config)
 
 
+
+@pytest.mark.parametrize(
+    "allowed_ips",
+    ["0.0.0.0/0", "::/0", "10.0.0.0/8, ::/0", "0.0.0.0/0, 2001:db8::/32"],
+)
+def test_wireguard_full_tunnel_requires_both_default_routes(allowed_ips):
+    config = _wireguard_sample().replace(
+        "AllowedIPs = 0.0.0.0/0, ::/0",
+        f"AllowedIPs = {allowed_ips}",
+    )
+    with pytest.raises(XrayShareLinkError, match="default AllowedIPs route"):
+        import_wireguard_config(config)
+
+
 def _masque_sample() -> str:
     return json.dumps({
         "protocol": "masque",
