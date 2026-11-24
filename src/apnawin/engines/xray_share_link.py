@@ -133,6 +133,130 @@ def _safe_option_text(value: str, field: str, *, max_length: int, allow_empty: b
     return value
 
 
+
+def _xhttp_range(value: object, field: str, *, minimum: int = 0, maximum: int = 10000000) -> object:
+    """Validate Xray integer or inclusive low-high range fields."""
+    if isinstance(value, bool):
+        raise XrayShareLinkError(f"XHTTP {field} is invalid")
+    if isinstance(value, int):
+        if not minimum <= value <= maximum:
+            raise XrayShareLinkError(f"XHTTP {field} is outside the supported range")
+        return value
+    if isinstance(value, str) and re.fullmatch(r"[0-9]{1,8}(?:-[0-9]{1,8})?", value):
+        parts = [int(part) for part in value.split("-", 1)]
+        if not minimum <= parts[0] <= maximum or (len(parts) == 2 and not parts[0] <= parts[1] <= maximum):
+            raise XrayShareLinkError(f"XHTTP {field} is outside the supported range")
+        return value
+    raise XrayShareLinkError(f"XHTTP {field} must be an integer or numeric range")
+
+
+def _xhttp_headers(value: object) -> dict[str, str]:
+    if not isinstance(value, dict) or len(value) > 32:
+        raise XrayShareLinkError("XHTTP headers must be a bounded object")
+    result = {}
+    for key, item in value.items():
+        if not isinstance(key, str) or not re.fullmatch(r"[!#$%&'*+.^_|~0-9A-Za-z-]{1,128}", key):
+            raise XrayShareLinkError("XHTTP header name is invalid")
+        if not isinstance(item, str) or len(item) > 4096 or any(ord(ch) < 32 and ch != "\t" or ord(ch) == 127 for ch in item):
+            raise XrayShareLinkError("XHTTP header value is invalid")
+        result[key] = item
+    return result
+
+
+def _parse_xhttp_extra(raw: str) -> dict:
+    if not isinstance(raw, str) or not raw or len(raw) > 32768:
+        raise XrayShareLinkError("XHTTP extra is empty or exceeds the size limit")
+    try:
+        extra = json.loads(raw, object_pairs_hook=_unique_json_object, parse_constant=_reject_json_constant)
+    except (json.JSONDecodeError, XrayShareLinkError) as exc:
+        raise XrayShareLinkError("XHTTP extra must be valid unambiguous JSON") from exc
+    if not isinstance(extra, dict):
+        raise XrayShareLinkError("XHTTP extra must be a JSON object")
+    allowed = {
+        "headers", "xPaddingBytes", "noGRPCHeader", "noSSEHeader",
+        "scMaxEachPostBytes", "scMinPostsIntervalMs", "scMaxBufferedPosts",
+        "scStreamUpServerSecs", "xmux", "downloadSettings",
+    }
+    if set(extra) - allowed:
+        raise XrayShareLinkError("XHTTP extra contains unsupported fields")
+    result = {}
+    if "headers" in extra:
+        result["headers"] = _xhttp_headers(extra["headers"])
+    if "xPaddingBytes" in extra:
+        result["xPaddingBytes"] = _xhttp_range(extra["xPaddingBytes"], "xPaddingBytes", maximum=1000000)
+    for key in ("noGRPCHeader", "noSSEHeader"):
+        if key in extra:
+            if not isinstance(extra[key], bool):
+                raise XrayShareLinkError(f"XHTTP {key} must be boolean")
+            result[key] = extra[key]
+    for key, minimum, maximum in (
+        ("scMaxEachPostBytes", 1, 100000000),
+        ("scMinPostsIntervalMs", 0, 600000),
+        ("scMaxBufferedPosts", 0, 100000),
+        ("scStreamUpServerSecs", 0, 86400),
+    ):
+        if key in extra:
+            result[key] = _xhttp_range(extra[key], key, minimum=minimum, maximum=maximum)
+    if "xmux" in extra:
+        xmux = extra["xmux"]
+        if not isinstance(xmux, dict) or set(xmux) - {
+            "maxConcurrency", "maxConnections", "cMaxReuseTimes",
+            "hMaxRequestTimes", "hMaxReusableSecs", "hKeepAlivePeriod",
+        }:
+            raise XrayShareLinkError("XHTTP xmux contains unsupported fields")
+        safe_mux = {}
+        for key in ("maxConcurrency", "maxConnections", "cMaxReuseTimes", "hMaxRequestTimes", "hMaxReusableSecs"):
+            if key in xmux:
+                safe_mux[key] = _xhttp_range(xmux[key], f"xmux.{key}", maximum=1000000)
+        if "hKeepAlivePeriod" in xmux:
+            value = xmux["hKeepAlivePeriod"]
+            if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 86400:
+                raise XrayShareLinkError("XHTTP xmux.hKeepAlivePeriod is invalid")
+            safe_mux["hKeepAlivePeriod"] = value
+        result["xmux"] = safe_mux
+    if "downloadSettings" in extra:
+        download = extra["downloadSettings"]
+        if not isinstance(download, dict) or set(download) - {
+            "address", "port", "network", "security", "tlsSettings", "xhttpSettings",
+        }:
+            raise XrayShareLinkError("XHTTP downloadSettings contains unsupported fields")
+        address, port = _host_port(download.get("address"), download.get("port"))
+        if download.get("network") != "xhttp" or download.get("security") != "tls":
+            raise XrayShareLinkError("XHTTP downloadSettings currently requires XHTTP over verified TLS")
+        tls = download.get("tlsSettings", {})
+        if not isinstance(tls, dict) or set(tls) - {"serverName", "alpn", "allowInsecure", "fingerprint"}:
+            raise XrayShareLinkError("XHTTP download TLS settings contain unsupported fields")
+        if tls.get("allowInsecure", False) is not False:
+            raise XrayShareLinkError("Insecure XHTTP download TLS is not supported")
+        server_name = _safe_option_text(tls.get("serverName", address), "XHTTP download TLS server name", max_length=253, allow_empty=False)
+        _host_port(server_name, 443)
+        alpn = tls.get("alpn", ["h2"])
+        if not isinstance(alpn, list) or not 1 <= len(alpn) <= 3 or any(item not in {"h2", "h3", "http/1.1"} for item in alpn):
+            raise XrayShareLinkError("XHTTP download TLS ALPN is invalid")
+        tls_config = {"serverName": server_name, "alpn": alpn, "allowInsecure": False}
+        if "fingerprint" in tls:
+            fp = tls["fingerprint"]
+            if not isinstance(fp, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", fp):
+                raise XrayShareLinkError("XHTTP download TLS fingerprint is invalid")
+            tls_config["fingerprint"] = fp
+        xhttp = download.get("xhttpSettings")
+        if not isinstance(xhttp, dict) or set(xhttp) - {"host", "path", "mode"}:
+            raise XrayShareLinkError("XHTTP download xhttpSettings are invalid")
+        path = _transport_path(xhttp.get("path", "/"), "XHTTP download")
+        mode = xhttp.get("mode", "auto")
+        if mode not in {"auto", "packet-up", "stream-up", "stream-one", "stream-down"}:
+            raise XrayShareLinkError("XHTTP download mode is unsupported")
+        normalized_xhttp = {"path": path, "mode": mode}
+        if xhttp.get("host"):
+            _host_port(xhttp["host"], 443)
+            normalized_xhttp["host"] = xhttp["host"]
+        result["downloadSettings"] = {
+            "address": address, "port": port, "network": "xhttp", "security": "tls",
+            "tlsSettings": tls_config, "xhttpSettings": normalized_xhttp,
+        }
+    return result
+
+
 def _stream_settings(
     network: str,
     security: str,
@@ -194,6 +318,8 @@ def _stream_settings(
         if xhttp_host:
             _host_port(xhttp_host, 443)
             xhttp["host"] = xhttp_host
+        if "extra" in query:
+            xhttp["extra"] = _parse_xhttp_extra(query["extra"])
         settings["xhttpSettings"] = xhttp
 
 
