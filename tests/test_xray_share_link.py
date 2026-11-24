@@ -603,10 +603,10 @@ def test_wireguard_rejects_ambiguous_multi_peer_routing(
     second_public_key, second_allowed_ips, error
 ):
     config = _wireguard_sample() + (
-        "\\n[Peer]\\n"
-        f"PublicKey = {second_public_key}\\n"
-        "Endpoint = wg-backup.example.test:51820\\n"
-        f"AllowedIPs = {second_allowed_ips}\\n"
+        "\n[Peer]\n"
+        f"PublicKey = {second_public_key}\n"
+        "Endpoint = wg-backup.example.test:51820\n"
+        f"AllowedIPs = {second_allowed_ips}\n"
     )
     with pytest.raises(XrayShareLinkError, match=error):
         import_wireguard_config(config)
