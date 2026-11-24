@@ -790,8 +790,9 @@ def test_all_import_paths_are_exposed_from_one_import_menu(tmp_path, qapp):
         "Fetch live APNA catalog…",
         "Open manual APNA catalog download…",
         "Xray JSON (VLESS / VMess / Trojan / UDP-capable)…",
-        "Xray share link (VLESS / VMess / Trojan / Shadowsocks / Hysteria 2)…",
+        "Xray share link (VLESS / VMess / Trojan / Shadowsocks / Hysteria 2 / SOCKS / HTTP)…",
         "WireGuard configuration (.conf)…",
+        "Xray MASQUE outbound JSON…",
     ]
     assert window.import_xray_config_button.isHidden()
     assert window.import_apna_apk_button.isHidden()
@@ -799,6 +800,7 @@ def test_all_import_paths_are_exposed_from_one_import_menu(tmp_path, qapp):
     assert window.import_xray_action.isEnabled() is False
     assert window.import_xray_share_action.isEnabled() is True
     assert window.import_wireguard_action.isEnabled() is True
+    assert window.import_masque_action.isEnabled() is True
     assert window.import_apna_file_action.isEnabled() is (os.name == "nt")
     assert window.import_apna_live_action.isEnabled() is (os.name == "nt")
     assert window.download_apna_manual_action.isEnabled() is (os.name == "nt")
