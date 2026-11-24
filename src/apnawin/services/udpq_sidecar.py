@@ -212,7 +212,13 @@ def load_udpq_runtime_sha256(manifest_path: str | Path) -> str:
         or not isinstance(document.get("udpq"), dict)
     ):
         raise ValueError("The installed runtime manifest has no UDPQ entry")
-    digest = document["udpq"].get("executable_sha256")
+    udpq = document["udpq"]
+    if (
+        udpq.get("source_commit") != _UDPQ_SOURCE_COMMIT
+        or udpq.get("patch_sha256") != _UDPQ_REDACTION_PATCH_SHA256
+    ):
+        raise ValueError("The installed UDPQ runtime provenance is not the reviewed build")
+    digest = udpq.get("executable_sha256")
     if (
         not isinstance(digest, str)
         or len(digest) != 64
