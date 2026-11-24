@@ -15,7 +15,7 @@ import socket
 import subprocess
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable
 
@@ -99,6 +99,13 @@ def parse_server_port_spec(value: str) -> tuple[int, str | None]:
     return first_port, None if len(seen) == 1 else canonical
 
 
+def _select_free_loopback_port(host: str) -> int:
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    with socket.socket(family, socket.SOCK_STREAM) as listener:
+        listener.bind((host, 0))
+        return int(listener.getsockname()[1])
+
+
 def _format_host_port(host: str, port: int | str) -> str:
     if ":" in host and not host.startswith("["):
         return f"[{host}]:{port}"
@@ -136,7 +143,10 @@ class UdpqClientConfig:
         object.__setattr__(self, "server_name", _validate_host(self.server_name, "server_name"))
         if self.socks_host not in {"127.0.0.1", "::1"}:
             raise ValueError("SOCKS5 listener must bind to an IP loopback address")
-        _validate_port(self.socks_port, "socks_port")
+        if isinstance(self.socks_port, bool) or not isinstance(self.socks_port, int):
+            raise TypeError("socks_port must be an integer")
+        if not 0 <= self.socks_port <= 65535:
+            raise ValueError("socks_port must be 0 (automatic) or between 1 and 65535")
         if self.protocol not in {"udp", "wechat", "wechat-video"}:
             raise ValueError(
                 "Windows supports only the upstream UDP, wechat, and wechat-video packet modes; faketcp is Linux-only"
@@ -180,6 +190,8 @@ class UdpqClientConfig:
 
     def to_json_bytes(self) -> bytes:
         """Return upstream-compatible JSON with certificate verification enabled."""
+        if self.socks_port == 0:
+            raise ValueError("SOCKS5 port 0 must be allocated by UdpqSidecarSupervisor before serialization")
         config = {
             "server": _format_host_port(self.server_host, self.server_port_spec or self.server_port),
             "protocol": self.protocol,
@@ -400,7 +412,12 @@ class UdpqSidecarSupervisor:
                 if digest.hexdigest() != self.expected_sha256:
                     raise ValueError("The UDPQ sidecar SHA-256 does not match the installed runtime manifest")
 
-        config_path = self._write_private_config(config.to_json_bytes())
+        runtime_config = (
+            replace(config, socks_port=_select_free_loopback_port(config.socks_host))
+            if config.socks_port == 0
+            else config
+        )
+        config_path = self._write_private_config(runtime_config.to_json_bytes())
         self._config_path = config_path
         try:
             self._process = self._process_factory(
@@ -415,11 +432,11 @@ class UdpqSidecarSupervisor:
                         f"UDPQ sidecar exited before SOCKS5 readiness (exit code {exit_code})"
                     )
                 if self._socks_probe(
-                    config.socks_host, config.socks_port, min(1.0, self.startup_timeout)
+                    runtime_config.socks_host, runtime_config.socks_port, min(1.0, self.startup_timeout)
                 ):
                     config_path.unlink(missing_ok=True)
                     self._config_path = None
-                    self._socks_address = (config.socks_host, config.socks_port)
+                    self._socks_address = (runtime_config.socks_host, runtime_config.socks_port)
                     return self._socks_address
                 if self._monotonic() >= deadline:
                     raise TimeoutError("UDPQ sidecar did not expose a ready SOCKS5 listener")
