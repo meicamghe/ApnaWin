@@ -1,4 +1,4 @@
-"""Generate the strict Xray/Wintun TUN config for an APNA SSH SOCKS bridge."""
+"""Generate a strict Xray/Wintun TUN config for a loopback SOCKS bridge."""
 from __future__ import annotations
 
 import ipaddress
@@ -23,8 +23,7 @@ def build_apna_xray_tun_config(
 ) -> bytes:
     """Build an Xray TUN config whose only outbound is the local APNA SOCKS bridge.
 
-    TCP uses SOCKS CONNECT. Xray's SOCKS outbound uses SOCKS5 UDP ASSOCIATE for
-    UDP; the local APNA gateway maps that to the SSH-carried BadVPN UDPGW stream.
+    TCP uses SOCKS CONNECT. UDP uses SOCKS5 UDP ASSOCIATE to the local proxy.
     """
     if (
         not isinstance(local_socks_address, tuple)
@@ -57,7 +56,10 @@ def build_apna_xray_tun_config(
         or any(ord(char) < 32 or ord(char) == 127 for char in description)
     ):
         raise ValueError("description must be 1 to 128 printable characters")
-    if not isinstance(outbound_tag, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", outbound_tag):
+    if (
+        not isinstance(outbound_tag, str)
+        or not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", outbound_tag)
+    ):
         raise ValueError("outbound_tag must contain 1 to 64 safe tag characters")
 
     dns = []
