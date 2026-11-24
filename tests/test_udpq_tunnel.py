@@ -123,7 +123,7 @@ def test_udpq_tunnel_composes_sidecar_with_xray_tun():
     assert xray.validated_profile.transport is Transport.XRAY
     assert xray.validated_profile.endpoint_host == "127.0.0.1"
     assert xray.validated_profile.endpoint_port == 10808
-    config = json.loads(store.saved["udpq-test"])
+    config = json.loads(store.saved[xray.validated_profile.name])
     assert config["outbounds"][0]["tag"] == "udpq-socks"
     assert config["inbounds"][0]["settings"]["desc"] == "ApnaWin UDPQ tunnel"
 
@@ -133,7 +133,7 @@ def test_udpq_tunnel_composes_sidecar_with_xray_tun():
     assert engine.state is ConnectionState.DISCONNECTED
     assert not sidecar.is_running
     assert xray.state is ConnectionState.DISCONNECTED
-    assert store.removed == ["udpq-test"]
+    assert store.removed == [xray.validated_profile.name]
 
 
 def test_udpq_tunnel_rejects_endpoint_mismatch():
