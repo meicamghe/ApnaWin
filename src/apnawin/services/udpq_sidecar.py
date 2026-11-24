@@ -206,6 +206,8 @@ def load_udpq_runtime_sha256(manifest_path: str | Path) -> str:
         raise ValueError("The installed runtime manifest is invalid JSON") from exc
     if (
         not isinstance(document, dict)
+        or isinstance(document.get("schema_version"), bool)
+        or not isinstance(document.get("schema_version"), int)
         or document.get("schema_version") != 1
         or not isinstance(document.get("udpq"), dict)
     ):
