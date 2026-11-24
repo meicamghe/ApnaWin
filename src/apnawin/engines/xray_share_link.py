@@ -914,6 +914,15 @@ def import_wireguard_config(
             record["keepAlive"] = int(keepalive)
         peer_records.append(record)
     assert first_endpoint is not None
+    allowed_networks = [
+        ipaddress.ip_network(prefix)
+        for peer_record in peer_records
+        for prefix in peer_record["allowedIPs"]
+    ]
+    if not any(network.version == 4 and network.prefixlen == 0 for network in allowed_networks):
+        raise XrayShareLinkError("WireGuard full-tunnel config requires an IPv4 default AllowedIPs route")
+    if not any(network.version == 6 and network.prefixlen == 0 for network in allowed_networks):
+        raise XrayShareLinkError("WireGuard full-tunnel config requires an IPv6 default AllowedIPs route")
     settings = {
         "secretKey": private_key,
         "address": normalized_addresses,
