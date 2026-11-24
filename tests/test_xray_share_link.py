@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import subprocess
+from urllib.parse import quote
 
 import pytest
 
@@ -820,4 +821,101 @@ def test_mkcp_configs_are_accepted_by_pinned_xray_runtime(uri, tmp_path):
     )
     assert completed.returncode == 0, (
         f"Xray rejected mKCP config: {completed.stdout[-2000:]} {completed.stderr[-2000:]}"
+    )
+
+
+def test_xhttp_import_preserves_validated_extra_and_xmux_options():
+    extra = {
+        "headers": {"User-Agent": "ApnaWin/1.0"},
+        "xPaddingBytes": "100-1000",
+        "noGRPCHeader": False,
+        "scMaxEachPostBytes": 1000000,
+        "xmux": {"maxConcurrency": "16-32", "hMaxReusableSecs": "1800-3000"},
+    }
+    uri = (
+        f"vless://{UUID}@xhttp.example.test:443?type=xhttp&security=tls"
+        f"&sni=xhttp.example.test&extra={quote(json.dumps(extra))}"
+    )
+    result = import_xray_share_link(uri)
+    xhttp = outbound_for(result)["streamSettings"]["xhttpSettings"]
+    assert xhttp["extra"]["headers"]["User-Agent"] == "ApnaWin/1.0"
+    assert xhttp["extra"]["xPaddingBytes"] == "100-1000"
+    assert xhttp["extra"]["xmux"]["maxConcurrency"] == "16-32"
+
+
+def test_xhttp_import_supports_tls_download_settings():
+    extra = {
+        "downloadSettings": {
+            "address": "download.example.test",
+            "port": 443,
+            "network": "xhttp",
+            "security": "tls",
+            "tlsSettings": {"serverName": "download.example.test", "alpn": ["h2"]},
+            "xhttpSettings": {"path": "/down", "mode": "auto"},
+        }
+    }
+    uri = (
+        f"vless://{UUID}@xhttp.example.test:443?type=xhttp&security=tls"
+        f"&sni=xhttp.example.test&mode=stream-up&extra={quote(json.dumps(extra))}"
+    )
+    result = import_xray_share_link(uri)
+    download = outbound_for(result)["streamSettings"]["xhttpSettings"]["extra"]["downloadSettings"]
+    assert download["address"] == "download.example.test"
+    assert download["xhttpSettings"]["path"] == "/down"
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"xPaddingBytes": "1000-100"},
+        {"xmux": {"unknownField": 1}},
+        {"headers": {"Bad Header": "value"}},
+        {"noGRPCHeader": "false"},
+        {"downloadSettings": {"address": "download.example.test", "port": 443, "network": "tcp", "security": "tls"}},
+        {"downloadSettings": {"address": "download.example.test", "port": 443, "network": "xhttp", "security": "tls", "tlsSettings": {"allowInsecure": True}, "xhttpSettings": {"path": "/down"}}},
+    ],
+)
+def test_xhttp_import_rejects_invalid_extra_options(extra):
+    uri = (
+        f"vless://{UUID}@xhttp.example.test:443?type=xhttp&security=tls"
+        f"&extra={quote(json.dumps(extra))}"
+    )
+    with pytest.raises(XrayShareLinkError):
+        import_xray_share_link(uri)
+
+
+@pytest.mark.skipif(
+    not os.environ.get("APNAWIN_XRAY_EXECUTABLE"),
+    reason="Pinned Xray runtime validation is enabled only in the dedicated CI job",
+)
+@pytest.mark.parametrize("with_download", [False, True])
+def test_xhttp_extra_configs_are_accepted_by_pinned_runtime(with_download, tmp_path):
+    executable = os.environ["APNAWIN_XRAY_EXECUTABLE"]
+    extra = {"headers": {"User-Agent": "ApnaWin/1.0"}, "xmux": {"maxConcurrency": "16-32"}}
+    if with_download:
+        extra["downloadSettings"] = {
+            "address": "download.example.test",
+            "port": 443,
+            "network": "xhttp",
+            "security": "tls",
+            "tlsSettings": {"serverName": "download.example.test", "alpn": ["h2"]},
+            "xhttpSettings": {"path": "/down", "mode": "auto"},
+        }
+    uri = (
+        f"vless://{UUID}@xhttp.example.test:443?type=xhttp&security=tls"
+        f"&sni=xhttp.example.test&extra={quote(json.dumps(extra))}"
+    )
+    result = import_xray_share_link(uri)
+    config_path = tmp_path / "xray-xhttp-extra.json"
+    config_path.write_bytes(result.config_bytes)
+    completed = subprocess.run(
+        [executable, "run", "-test", "-c", str(config_path)],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert completed.returncode == 0, (
+        f"Xray rejected XHTTP extra config: {completed.stdout[-2000:]} {completed.stderr[-2000:]}"
     )
