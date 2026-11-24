@@ -181,6 +181,12 @@ class UdpqImportDialog(QDialog):
         self.auth_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.alpn_edit = QLineEdit("hysteria")
         self.sni_edit = QLineEdit()
+        self.protocol_combo = QComboBox()
+        self.protocol_combo.addItem("UDP", "udp")
+        self.protocol_combo.addItem("WeChat", "wechat")
+        self.protocol_combo.addItem("WeChat video", "wechat-video")
+        self.obfs_edit = QLineEdit()
+        self.obfs_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.up_spin = QSpinBox()
         self.up_spin.setRange(1, 100000)
         self.up_spin.setValue(10)
@@ -199,6 +205,8 @@ class UdpqImportDialog(QDialog):
         form.addRow("Authentication string", self.auth_edit)
         form.addRow("ALPN", self.alpn_edit)
         form.addRow("TLS server name (SNI)", self.sni_edit)
+        form.addRow("Packet transport", self.protocol_combo)
+        form.addRow("Obfuscation password (optional)", self.obfs_edit)
         form.addRow("Upload limit (Mbps)", self.up_spin)
         form.addRow("Download limit (Mbps)", self.down_spin)
         form.addRow("Custom CA certificate", self.ca_button)
@@ -207,6 +215,7 @@ class UdpqImportDialog(QDialog):
         warning = QLabel(
             "This imports a generic StarUDP/Hysteria-v1-family profile, not an APNA server profile. "
             "The default ALPN is the public source default; APNA's protected runtime may override it. "
+            "Windows supports UDP and WeChat packet modes; FakeTCP is Linux-only in the pinned source. "
             "TLS certificate verification is always enabled. Use only server settings you are authorized to use."
         )
         warning.setWordWrap(True)
@@ -253,7 +262,8 @@ class UdpqImportDialog(QDialog):
             socks_host="127.0.0.1",
             socks_port=10808,
             ca_file=self.ca_edit.text().strip() or None,
-            protocol="udp",
+            protocol=str(self.protocol_combo.currentData()),
+            obfs=self.obfs_edit.text(),
         )
         profile = ConnectionProfile(
             name=name,
