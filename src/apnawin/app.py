@@ -43,7 +43,7 @@ from apnawin.engines.xray_process import (
 from apnawin.storage.profile_store import load_profiles, save_profiles
 from apnawin.storage.xray_config_store import XrayConfigStore
 from apnawin.engines.xray_tunnel import XrayTunnelEngine
-from apnawin.engines.xray_share_link import import_xray_share_link
+from apnawin.engines.xray_share_link import import_xray_share_link, import_wireguard_config
 from apnawin.engines.apna_host_key import scan_apna_ssh_host_key
 from apnawin.engines.apna_tunnel_engine import ApnaTunnelEngine
 from apnawin.engines.multi_transport import MultiTransportTunnelEngine
@@ -660,6 +660,10 @@ class MainWindow(QMainWindow):
             "Xray share link (VLESS / VMess / Trojan / Shadowsocks)…"
         )
         self.import_xray_share_action.triggered.connect(self._import_xray_share_link)
+        self.import_wireguard_action = self.import_menu.addAction(
+            "WireGuard configuration (.conf)…"
+        )
+        self.import_wireguard_action.triggered.connect(self._import_wireguard_config)
         self.import_button.setMenu(self.import_menu)
         self.export_button = QPushButton("Export…")
         self.export_button.clicked.connect(self._export_profiles)
@@ -1501,6 +1505,64 @@ class MainWindow(QMainWindow):
         self.catalog_progress_label.show()
         if report:
             show_copyable_error(self, "APNA catalog import report", f"Source: {source_label}\n" + report)
+
+
+    def _import_wireguard_config(self) -> None:
+        """Import a standard WireGuard configuration into the encrypted Xray profile store."""
+        if not self.profile_storage_writable:
+            return
+        filename, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Import WireGuard configuration",
+            "",
+            "WireGuard configuration (*.conf);;All files (*)",
+        )
+        if not filename:
+            return
+        imported = None
+        stored = False
+        try:
+            with Path(filename).open("r", encoding="utf-8-sig", newline="") as stream:
+                content = stream.read(262145)
+            if len(content) > 262144:
+                raise ValueError("WireGuard configuration exceeds the size limit")
+            imported = import_wireguard_config(
+                content, profile_name=Path(filename).stem
+            )
+            if any(
+                item.name.casefold() == imported.profile.name.casefold()
+                for item in self.profiles
+            ):
+                raise ValueError("A profile with this name already exists")
+            self.xray_config_store.save(imported.profile.name, imported.config_bytes)
+            stored = True
+            updated = [*self.profiles, imported.profile]
+            if not self._save_profiles(updated):
+                self.xray_config_store.remove(imported.profile.name)
+                return
+        except (OSError, UnicodeError, TypeError, ValueError) as exc:
+            if stored and imported is not None:
+                try:
+                    self.xray_config_store.remove(imported.profile.name)
+                except (OSError, TypeError, ValueError):
+                    QMessageBox.critical(
+                        self,
+                        "WireGuard import rollback failed",
+                        "Profile metadata was not saved and encrypted config cleanup failed. "
+                        "Check the encrypted profile store before retrying.",
+                    )
+                    return
+            QMessageBox.warning(
+                self,
+                "WireGuard import failed",
+                f"The configuration was not imported. ({type(exc).__name__}: {exc})",
+            )
+            return
+        self._refresh_profiles(len(self.profiles) - 1)
+        self.status_label.setText(
+            "WireGuard profile imported. Private and preshared keys are encrypted "
+            "for this Windows user; DNS and full-tunnel routing use the Xray TUN policy."
+        )
 
     def _import_xray_share_link(self) -> None:
         """Create an encrypted full-tunnel profile from a supported Xray share link."""
