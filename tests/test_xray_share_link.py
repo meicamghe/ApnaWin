@@ -578,6 +578,20 @@ def test_wireguard_import_rejects_invalid_settings(mutation):
         import_wireguard_config(mutation(_wireguard_sample()))
 
 
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda text: text.replace("DNS = 1.1.1.1, 2606:4700:4700::1111", "DNS = 1.1.1.1, 1.1.1.1"),
+        lambda text: text.replace("DNS = 1.1.1.1, 2606:4700:4700::1111", "DNS = 224.0.0.1"),
+        lambda text: text.replace("Address = 10.66.0.2/32, fd00::2/128", "Address = 10.66.0.2/32, 10.66.0.2/24"),
+        lambda text: text.replace("AllowedIPs = 0.0.0.0/0, ::/0", "AllowedIPs = 0.0.0.0/0, 0.0.0.0/0"),
+    ],
+)
+def test_wireguard_import_rejects_duplicate_or_unusable_network_fields(mutation):
+    with pytest.raises(XrayShareLinkError):
+        import_wireguard_config(mutation(_wireguard_sample()))
+
+
 @pytest.mark.skipif(
     not os.environ.get("APNAWIN_XRAY_EXECUTABLE"),
     reason="Pinned Xray runtime validation is enabled only in the dedicated CI job",
