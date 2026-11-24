@@ -91,8 +91,10 @@ class UdpqClientConfig:
         if self.socks_host not in {"127.0.0.1", "::1"}:
             raise ValueError("SOCKS5 listener must bind to an IP loopback address")
         _validate_port(self.socks_port, "socks_port")
-        if self.protocol != "udp":
-            raise ValueError("Only the verified UDP transport mode is currently supported")
+        if self.protocol not in {"udp", "wechat", "wechat-video"}:
+            raise ValueError(
+                "Windows supports only the upstream UDP, wechat, and wechat-video packet modes; faketcp is Linux-only"
+            )
         for field in ("up_mbps", "down_mbps"):
             value = getattr(self, field)
             if isinstance(value, bool) or not isinstance(value, int):
