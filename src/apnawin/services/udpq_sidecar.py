@@ -119,8 +119,8 @@ class UdpqClientConfig:
             raise ValueError("obfs cannot contain control characters")
         if isinstance(self.hop_interval, bool) or not isinstance(self.hop_interval, int):
             raise TypeError("hop_interval must be an integer")
-        if not 0 <= self.hop_interval <= 86400:
-            raise ValueError("hop_interval must be between 0 and 86400 seconds")
+        if self.hop_interval != 0 and not 8 <= self.hop_interval <= 86400:
+            raise ValueError("hop_interval must be 0 or between 8 and 86400 seconds")
         if not isinstance(self.fast_open, bool) or not isinstance(self.lazy_start, bool):
             raise TypeError("fast_open and lazy_start must be booleans")
         if self.ca_file is not None:
