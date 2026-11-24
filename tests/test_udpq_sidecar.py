@@ -90,8 +90,8 @@ def test_udpq_socks_listener_must_be_loopback(tmp_path, host):
         _config(tmp_path, socks_host=host)
 
 
-@pytest.mark.parametrize("protocol", ["faketcp", "wechat", "wechat-video", ""])
-def test_unverified_packet_transports_are_rejected(tmp_path, protocol):
+@pytest.mark.parametrize("protocol", ["faketcp", "unknown", ""])
+def test_windows_unsupported_packet_transports_are_rejected(tmp_path, protocol):
     with pytest.raises(ValueError, match="Only the verified UDP"):
         _config(tmp_path, protocol=protocol)
 
@@ -228,3 +228,9 @@ def test_udpq_supervisor_rejects_non_pe_sidecar(tmp_path):
 
     with pytest.raises(ValueError, match="Windows PE"):
         supervisor.start(_config(tmp_path))
+
+
+@pytest.mark.parametrize("protocol", ["udp", "wechat", "wechat-video"])
+def test_windows_supported_packet_transports_are_serialized(tmp_path, protocol):
+    payload = json.loads(_config(tmp_path, protocol=protocol).to_json_bytes())
+    assert payload["protocol"] == protocol
