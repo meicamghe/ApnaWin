@@ -28,7 +28,7 @@ The installer copies the complete verified folder to Program Files and applies t
 
 Use Import… → UDPQ / StarUDP profile (experimental)…. Enter values supplied by a StarUDP-compatible server operator:
 
-- server hostname and port;
+- server hostname and port list/range, for example 443,8443-8445 (UDP mode only; maximum 32 expanded ports);
 - exact authentication string;
 - server ALPN and TLS SNI;
 - upload/download rate limits;
