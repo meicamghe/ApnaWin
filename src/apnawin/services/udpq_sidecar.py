@@ -6,6 +6,7 @@ verified and the sidecar is composed with the existing Xray/Wintun TUN engine.
 """
 from __future__ import annotations
 
+import hashlib
 import ipaddress
 import json
 import math
@@ -189,6 +190,7 @@ class UdpqSidecarSupervisor:
         sleeper: Callable[[float], None] = time.sleep,
         monotonic: Callable[[], float] = time.monotonic,
         platform_name: str | None = None,
+        expected_sha256: str | None = None,
     ) -> None:
         self.executable = Path(executable).expanduser().absolute()
         self.private_dir = (
@@ -205,6 +207,13 @@ class UdpqSidecarSupervisor:
         self._sleep = sleeper
         self._monotonic = monotonic
         self._platform_name = os.name if platform_name is None else platform_name
+        if expected_sha256 is not None and (
+            not isinstance(expected_sha256, str)
+            or len(expected_sha256) != 64
+            or any(char not in "0123456789abcdefABCDEF" for char in expected_sha256)
+        ):
+            raise ValueError("expected_sha256 must be a 64-character hexadecimal digest")
+        self.expected_sha256 = expected_sha256.lower() if expected_sha256 else None
         self._process = None
         self._config_path: Path | None = None
         self._socks_address: tuple[str, int] | None = None
@@ -270,6 +279,13 @@ class UdpqSidecarSupervisor:
         with self.executable.open("rb") as executable_stream:
             if executable_stream.read(2) != b"MZ":
                 raise ValueError("The UDPQ sidecar must be a Windows PE executable")
+            if self.expected_sha256 is not None:
+                executable_stream.seek(0)
+                digest = hashlib.sha256()
+                for chunk in iter(lambda: executable_stream.read(1024 * 1024), b""):
+                    digest.update(chunk)
+                if digest.hexdigest() != self.expected_sha256:
+                    raise ValueError("The UDPQ sidecar SHA-256 does not match the installed runtime manifest")
 
         config_path = self._write_private_config(config.to_json_bytes())
         self._config_path = config_path
