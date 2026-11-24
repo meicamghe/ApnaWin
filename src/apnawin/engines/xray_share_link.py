@@ -20,7 +20,7 @@ from apnawin.engines.xray_process import inspect_tun_inbound
 
 
 _DEFAULT_DNS = ("1.1.1.1", "2606:4700:4700::1111")
-_SUPPORTED_SCHEMES = frozenset({"vless", "vmess", "trojan", "ss"})
+_SUPPORTED_SCHEMES = frozenset({"vless", "vmess", "trojan", "ss", "hysteria2", "hy2"})
 _SUPPORTED_NETWORKS = frozenset({"tcp", "ws", "grpc", "httpupgrade", "xhttp"})
 _SUPPORTED_SECURITY = frozenset({"none", "tls", "reality"})
 _NAME_RE = re.compile(r"[^\w .()\[\]-]+", re.UNICODE)
@@ -454,10 +454,174 @@ def _parse_shadowsocks(parsed) -> tuple[str, int, dict, dict]:
     return host, port, outbound, query
 
 
+
+def _parse_hysteria2(parsed) -> tuple[str, int, dict, dict]:
+    """Translate the interoperable Hysteria 2 URI subset supported by Xray."""
+    if parsed.path not in {"", "/"}:
+        raise XrayShareLinkError("Hysteria 2 share link contains an unsupported URL path")
+    host, port = _url_endpoint(parsed)
+    auth = unquote(parsed.username or "")
+    if parsed.password is not None:
+        auth += ":" + unquote(parsed.password)
+    if not auth or len(auth) > 1024 or any(ord(ch) < 32 or ord(ch) == 127 for ch in auth):
+        raise XrayShareLinkError("Hysteria 2 link must contain valid authentication credentials")
+    query = _query(parsed)
+    if query.get("insecure", "0").lower() not in {"0", "false", "no"}:
+        raise XrayShareLinkError("Insecure Hysteria 2 TLS is not supported")
+    unsupported = {"obfs", "obfs-password", "pinSHA256", "ech"} & query.keys()
+    if unsupported:
+        names = ", ".join(sorted(unsupported))
+        raise XrayShareLinkError(f"Xray Hysteria 2 importer does not support: {names}")
+    server_name = _safe_option_text(
+        query.get("sni", host), "Hysteria 2 TLS server name",
+        max_length=253, allow_empty=False,
+    )
+    outbound = {
+        "tag": "proxy",
+        "protocol": "hysteria",
+        "settings": {"version": 2, "address": host, "port": port},
+        "streamSettings": {
+            "method": "hysteria",
+            "security": "tls",
+            "tlsSettings": {"serverName": server_name, "allowInsecure": False},
+            "hysteriaSettings": {"version": 2, "auth": auth},
+        },
+    }
+    return host, port, outbound, query
+
+
+def _wireguard_key(value: str, field: str) -> str:
+    if not isinstance(value, str) or not value or len(value) > 128:
+        raise XrayShareLinkError(f"WireGuard {field} is invalid")
+    try:
+        decoded = base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise XrayShareLinkError(f"WireGuard {field} must be Base64") from exc
+    if len(decoded) != 32:
+        raise XrayShareLinkError(f"WireGuard {field} must decode to 32 bytes")
+    return base64.b64encode(decoded).decode("ascii")
+
+
+def import_wireguard_config(
+    text: str, *, profile_name: str = "WireGuard"
+) -> ImportedXrayProfile:
+    """Import a standard single/multi-peer WireGuard INI config into Xray TUN."""
+    if not isinstance(text, str) or not text.strip() or len(text) > 262144:
+        raise XrayShareLinkError("WireGuard configuration is empty or exceeds the size limit")
+    if any(ord(ch) < 32 and ch not in "\r\n\t" or ord(ch) == 127 for ch in text):
+        raise XrayShareLinkError("WireGuard configuration contains control characters")
+    sections: list[tuple[str, dict[str, str]]] = []
+    current: dict[str, str] | None = None
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(("#", ";")):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1].strip().casefold()
+            if section not in {"interface", "peer"}:
+                raise XrayShareLinkError("WireGuard config contains an unsupported section")
+            current = {}
+            sections.append((section, current))
+            continue
+        if current is None or "=" not in line:
+            raise XrayShareLinkError("WireGuard config contains a malformed setting")
+        key, value = (part.strip() for part in line.split("=", 1))
+        key = key.casefold()
+        if key in current:
+            raise XrayShareLinkError(f"WireGuard config contains duplicate {key} setting")
+        current[key] = value
+    interfaces = [item for name, item in sections if name == "interface"]
+    peers = [item for name, item in sections if name == "peer"]
+    if len(interfaces) != 1 or not peers:
+        raise XrayShareLinkError("WireGuard config requires one Interface and at least one Peer")
+    interface = interfaces[0]
+    allowed_interface = {"privatekey", "address", "dns", "mtu"}
+    if set(interface) - allowed_interface:
+        raise XrayShareLinkError("WireGuard Interface contains unsupported settings")
+    private_key = _wireguard_key(interface.get("privatekey", ""), "private key")
+    addresses = [item.strip() for item in interface.get("address", "").split(",") if item.strip()]
+    if not addresses or len(addresses) > 8:
+        raise XrayShareLinkError("WireGuard Interface requires one to eight IP addresses")
+    try:
+        import ipaddress
+        normalized_addresses = [str(ipaddress.ip_interface(item)) for item in addresses]
+    except ValueError as exc:
+        raise XrayShareLinkError("WireGuard Interface Address contains an invalid IP prefix") from exc
+    dns_raw = interface.get("dns", "")
+    dns_servers = [item.strip() for item in dns_raw.split(",") if item.strip()]
+    try:
+        normalized_dns = [str(ipaddress.ip_address(item)) for item in dns_servers]
+    except ValueError as exc:
+        raise XrayShareLinkError("WireGuard DNS entries must be IP addresses") from exc
+    if len(normalized_dns) > 16:
+        raise XrayShareLinkError("WireGuard DNS list exceeds the size limit")
+    mtu = 1420
+    if "mtu" in interface:
+        if not re.fullmatch(r"[0-9]{3,4}", interface["mtu"]):
+            raise XrayShareLinkError("WireGuard MTU must be an integer")
+        mtu = int(interface["mtu"])
+        if not 576 <= mtu <= 9000:
+            raise XrayShareLinkError("WireGuard MTU is outside the supported range")
+    peer_records = []
+    first_endpoint: tuple[str, int] | None = None
+    for peer in peers:
+        if set(peer) - {"publickey", "presharedkey", "endpoint", "allowedips", "persistentkeepalive"}:
+            raise XrayShareLinkError("WireGuard Peer contains unsupported settings")
+        public_key = _wireguard_key(peer.get("publickey", ""), "peer public key")
+        endpoint_value = peer.get("endpoint", "")
+        try:
+            endpoint = urlsplit("//" + endpoint_value)
+            endpoint_host, endpoint_port = _url_endpoint(endpoint)
+        except (ValueError, XrayShareLinkError) as exc:
+            raise XrayShareLinkError("WireGuard Peer Endpoint is invalid") from exc
+        if first_endpoint is None:
+            first_endpoint = (endpoint_host, endpoint_port)
+        allowed_raw = [item.strip() for item in peer.get("allowedips", "").split(",") if item.strip()]
+        if not allowed_raw or len(allowed_raw) > 64:
+            raise XrayShareLinkError("WireGuard Peer requires one to 64 AllowedIPs prefixes")
+        try:
+            allowed_ips = [str(ipaddress.ip_network(item, strict=False)) for item in allowed_raw]
+        except ValueError as exc:
+            raise XrayShareLinkError("WireGuard AllowedIPs contains an invalid IP prefix") from exc
+        record = {
+            "endpoint": f"{endpoint_host}:{endpoint_port}",
+            "publicKey": public_key,
+            "allowedIPs": allowed_ips,
+        }
+        if "presharedkey" in peer:
+            record["preSharedKey"] = _wireguard_key(peer["presharedkey"], "preshared key")
+        if "persistentkeepalive" in peer:
+            keepalive = peer["persistentkeepalive"]
+            if not re.fullmatch(r"[0-9]{1,5}", keepalive) or int(keepalive) > 65535:
+                raise XrayShareLinkError("WireGuard PersistentKeepalive is invalid")
+            record["keepAlive"] = int(keepalive)
+        peer_records.append(record)
+    assert first_endpoint is not None
+    settings = {
+        "secretKey": private_key,
+        "address": normalized_addresses,
+        "peers": peer_records,
+        "mtu": mtu,
+        "noKernelTun": False,
+    }
+    if normalized_dns:
+        settings["remoteDNS"] = normalized_dns
+    outbound = {"tag": "proxy", "protocol": "wireguard", "settings": settings}
+    profile = ConnectionProfile(
+        _name(profile_name, "wireguard", first_endpoint[0], first_endpoint[1]),
+        Transport.XRAY, first_endpoint[0], first_endpoint[1],
+    )
+    return ImportedXrayProfile(
+        profile=profile,
+        config_bytes=build_xray_tun_config(outbound),
+        protocol="wireguard",
+    )
+
+
 def build_xray_tun_config(outbound: dict, *, adapter_name: str = "ApnaWin") -> bytes:
     """Wrap one validated remote Xray outbound in ApnaWin's strict dual-stack TUN."""
     if not isinstance(outbound, dict) or outbound.get("protocol") not in {
-        "vless", "vmess", "trojan", "shadowsocks"
+        "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard"
     }:
         raise XrayShareLinkError("Unsupported Xray outbound protocol")
     if (
@@ -500,7 +664,7 @@ def import_xray_share_link(uri: str) -> ImportedXrayProfile:
         raise XrayShareLinkError("Share link contains control characters")
     scheme = text.split(":", 1)[0].lower()
     if scheme not in _SUPPORTED_SCHEMES:
-        raise XrayShareLinkError("Supported share-link schemes: vless, vmess, trojan and ss")
+        raise XrayShareLinkError("Supported share-link schemes: vless, vmess, trojan, ss and hysteria2")
     try:
         parsed = urlsplit(text)
     except ValueError as exc:
@@ -508,6 +672,9 @@ def import_xray_share_link(uri: str) -> ImportedXrayProfile:
     if scheme == "vmess":
         host, port, outbound, query = _parse_vmess(parsed)
         fragment = parsed.fragment or query.get("profile_name", "")
+    elif scheme in {"hysteria2", "hy2"}:
+        host, port, outbound, query = _parse_hysteria2(parsed)
+        fragment = parsed.fragment
     else:
         if parsed.scheme.lower() != scheme:
             raise XrayShareLinkError("Share-link scheme is invalid")
