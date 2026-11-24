@@ -43,3 +43,22 @@ The importer does not enable legacy SSH/Xray cryptography, infer APNA catalog ca
 The Xray runtime supports protocol outbounds including VLESS, VMess, Trojan, Shadowsocks, SOCKS, HTTP, WireGuard, Hysteria and MASQUE when the installed Xray build supports the supplied configuration. The actual runtime `run -test` remains authoritative. UDP is protocol/transport-dependent: APNA profiles remain visible when the catalog omits `server_udp_port`; those profiles can carry TCP traffic, while UDP forwarding and transparent DNS require a published UDPGW endpoint. Standalone APNA catalog categories such as `ocsudp`, Trojan, V2Ray and Xray are not guessed into credentials or transport settings from their category labels.
 
 No APNA endpoint, credential, server list or authentication format is inferred from the profile's host and port fields.
+
+## Non-SSH live Windows acceptance matrix — 2026-11-24
+
+The imported Xray-family profiles use the same supervised Windows TUN, dual-stack route and WFP leak-protection path. Validate each imported profile independently; a successful Xray `run -test` proves configuration compatibility only.
+
+| Profile family | Protocol-specific evidence required | Important boundary |
+|---|---|---|
+| VLESS / VMess / Trojan | Successful server handshake and authenticated HTTPS request through the tunnel; exercise the selected TCP/WS/gRPC/HTTPUpgrade/XHTTP/mKCP transport | A valid share link and Xray config test do not prove the server accepts its UUID/password, TLS/REALITY identity or transport path |
+| Shadowsocks | Successful encrypted session using the selected supported cipher, then routed TCP and UDP tests where the endpoint supports UDP | SIP003 plugins are rejected; verify the server's actual cipher and password |
+| Hysteria 2 | Successful QUIC session, authenticated traffic, packet-loss/reconnect behavior and non-DNS UDP round-trip | The importer requires verified TLS and rejects unsupported obfuscation, ECH and pinning options |
+| WireGuard | Successful peer handshake, transfer counters increasing in both directions, and routed IPv4/IPv6 traffic | Verify peer AllowedIPs, endpoint, keys and DNS from the provider-issued config; multiple peers must be tested with the intended routing policy |
+| MASQUE | Successful CONNECT-IP session over the configured verified TLS/HTTP/2 or HTTP/3 path, followed by routed IPv4/IPv6 traffic | The current importer accepts one outbound, no Mux, and only the validated TLS subset |
+| HTTP / HTTPS proxy | Successful authenticated or unauthenticated TCP request through the proxy | These are TCP proxy outbounds, not encrypted VPN protocols; plain HTTP is unencrypted and UDP tunneling is not claimed |
+| SOCKS5 | Successful authenticated or unauthenticated TCP request through SOCKS5 | This importer path is TCP-only and is not a standalone encrypted VPN protocol |
+
+For every profile, record separately: imported protocol and transport, Xray runtime validation, server handshake, HTTPS over IPv4, HTTPS over IPv6, DNS resolver and physical-interface leak observations, a controlled non-DNS UDP flow where the protocol supports it, disconnect, and route/DNS restoration. Do not use a successful DNS query as a substitute for a non-DNS UDP test.
+
+The UI's generic startup egress probes establish that the helper can reach independent IPv4 and IPv6 TLS endpoints through the configured TUN path. They do not independently prove that the selected provider accepted the profile or that every application protocol is forwarded correctly. Profiles that cannot carry a required traffic class must be documented as limited; they must never fall back to direct physical-interface routing.
+
