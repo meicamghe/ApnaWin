@@ -297,6 +297,109 @@ def _parse_vless(parsed) -> tuple[str, int, dict, dict]:
     return host, port, outbound, query
 
 
+
+def import_masque_config(text: str, *, profile_name: str = "MASQUE") -> ImportedXrayProfile:
+    """Import one documented Xray MASQUE outbound into the strict ApnaWin TUN."""
+    if not isinstance(text, str) or not text.strip() or len(text) > 262144:
+        raise XrayShareLinkError("MASQUE JSON is empty or exceeds the size limit")
+    try:
+        document = json.loads(text, object_pairs_hook=_unique_json_object, parse_constant=_reject_json_constant)
+    except (json.JSONDecodeError, XrayShareLinkError) as exc:
+        raise XrayShareLinkError("MASQUE configuration must be valid unambiguous JSON") from exc
+    if not isinstance(document, dict):
+        raise XrayShareLinkError("MASQUE configuration must be a JSON object")
+    if "outbounds" in document:
+        outbounds = document.get("outbounds")
+        if not isinstance(outbounds, list) or len(outbounds) != 1:
+            raise XrayShareLinkError("MASQUE import accepts exactly one outbound")
+        outbound = outbounds[0]
+    else:
+        outbound = document
+    if not isinstance(outbound, dict) or outbound.get("protocol") != "masque":
+        raise XrayShareLinkError("JSON must contain one Xray MASQUE outbound")
+    if set(outbound) - {"protocol", "settings", "streamSettings", "tag", "mux"}:
+        raise XrayShareLinkError("MASQUE outbound contains unsupported top-level fields")
+    if "mux" in outbound and (
+        not isinstance(outbound["mux"], dict) or outbound["mux"].get("enabled", False) is not False
+    ):
+        raise XrayShareLinkError("MASQUE outbound does not support Mux")
+    settings, stream = outbound.get("settings"), outbound.get("streamSettings")
+    if not isinstance(settings, dict) or not isinstance(stream, dict):
+        raise XrayShareLinkError("MASQUE outbound requires settings and streamSettings")
+    if set(settings) - {"address", "port", "remoteDNS"}:
+        raise XrayShareLinkError("MASQUE settings contain unsupported fields")
+    host, port = _host_port(settings.get("address"), settings.get("port"))
+    dns = settings.get("remoteDNS", [])
+    if not isinstance(dns, list) or len(dns) > 16:
+        raise XrayShareLinkError("MASQUE remoteDNS must contain at most 16 IP addresses")
+    try:
+        import ipaddress
+        dns = [str(ipaddress.ip_address(item)) for item in dns]
+    except (TypeError, ValueError) as exc:
+        raise XrayShareLinkError("MASQUE remoteDNS entries must be IP addresses") from exc
+    if set(stream) - {"network", "method", "security", "tlsSettings", "masqueSettings"}:
+        raise XrayShareLinkError("MASQUE streamSettings contain unsupported fields")
+    if stream.get("network", stream.get("method")) != "masque" or stream.get("network") not in {None, "masque"} or stream.get("method") not in {None, "masque"}:
+        raise XrayShareLinkError("MASQUE outbound requires a consistent masque transport")
+    if stream.get("security") != "tls":
+        raise XrayShareLinkError("MASQUE requires TLS; REALITY and plaintext are unsupported")
+    tls, masque = stream.get("tlsSettings"), stream.get("masqueSettings")
+    if not isinstance(tls, dict) or not isinstance(masque, dict):
+        raise XrayShareLinkError("MASQUE requires tlsSettings and masqueSettings")
+    if set(tls) - {"serverName", "alpn", "allowInsecure", "fingerprint"}:
+        raise XrayShareLinkError("MASQUE TLS settings contain unsupported fields")
+    if tls.get("allowInsecure", False) is not False:
+        raise XrayShareLinkError("Insecure MASQUE TLS is not supported")
+    server_name = _safe_option_text(tls.get("serverName", host), "MASQUE TLS server name", max_length=253, allow_empty=False)
+    _host_port(server_name, 443)
+    alpn = tls.get("alpn", ["h3"])
+    if not isinstance(alpn, list) or not 1 <= len(alpn) <= 2 or any(item not in {"h2", "h3"} for item in alpn):
+        raise XrayShareLinkError("MASQUE TLS ALPN must contain h2 and/or h3")
+    tls_settings = {"serverName": server_name, "alpn": alpn, "allowInsecure": False}
+    if "fingerprint" in tls:
+        fp = tls["fingerprint"]
+        if not isinstance(fp, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", fp):
+            raise XrayShareLinkError("MASQUE TLS fingerprint is invalid")
+        tls_settings["fingerprint"] = fp
+    if set(masque) - {"host", "path", "user", "pass", "headers"}:
+        raise XrayShareLinkError("MASQUE settings contain unsupported fields")
+    authority = _safe_option_text(masque.get("host", server_name), "MASQUE HTTP authority", max_length=253, allow_empty=False)
+    _host_port(authority, 443)
+    path = _safe_option_text(masque.get("path", "/.well-known/masque/ip/{target}/{ipproto}/"), "MASQUE CONNECT-IP path", max_length=2048, allow_empty=False)
+    residue = re.sub(r"\{(?:target|ipproto|\?target,ipproto)\}", "", path)
+    if not path.startswith("/") or "{" in residue or "}" in residue:
+        raise XrayShareLinkError("MASQUE path contains unsupported template variables")
+    user, password = masque.get("user", ""), masque.get("pass", "")
+    if not isinstance(user, str) or not isinstance(password, str) or bool(user) != bool(password) or ":" in user:
+        raise XrayShareLinkError("MASQUE requires both username and password; username cannot contain colon")
+    if any(ord(ch) < 32 or ord(ch) == 127 for value in (user, password) for ch in value):
+        raise XrayShareLinkError("MASQUE credentials contain control characters")
+    headers = masque.get("headers", {})
+    if not isinstance(headers, dict) or len(headers) > 64:
+        raise XrayShareLinkError("MASQUE headers must be a bounded JSON object")
+    safe_headers = {}
+    for key, value in headers.items():
+        if not isinstance(key, str) or not re.fullmatch(r"[!#$%&'*+.^_|~0-9A-Za-z-]{1,128}", key):
+            raise XrayShareLinkError("MASQUE header name is invalid")
+        if not isinstance(value, str) or len(value) > 8192 or any(ord(ch) < 32 and ch != "\t" or ord(ch) == 127 for ch in value):
+            raise XrayShareLinkError("MASQUE header value is invalid")
+        safe_headers[key] = value
+    outbound_config = {
+        "tag": "proxy", "protocol": "masque",
+        "settings": {"address": host, "port": port, **({"remoteDNS": dns} if dns else {})},
+        "streamSettings": {
+            "network": "masque", "security": "tls", "tlsSettings": tls_settings,
+            "masqueSettings": {
+                "host": authority, "path": path,
+                **({"user": user, "pass": password} if user else {}),
+                **({"headers": safe_headers} if safe_headers else {}),
+            },
+        },
+    }
+    profile = ConnectionProfile(_name(profile_name, "masque", host, port), Transport.XRAY, host, port)
+    return ImportedXrayProfile(profile, build_xray_tun_config(outbound_config), "masque")
+
+
 def _parse_vmess(parsed) -> tuple[str, int, dict, dict]:
     encoded = parsed.netloc or parsed.path
     if "@" in encoded:
@@ -632,7 +735,7 @@ def import_wireguard_config(
 def build_xray_tun_config(outbound: dict, *, adapter_name: str = "ApnaWin") -> bytes:
     """Wrap one validated remote Xray outbound in ApnaWin's strict dual-stack TUN."""
     if not isinstance(outbound, dict) or outbound.get("protocol") not in {
-        "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard"
+        "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "masque"
     }:
         raise XrayShareLinkError("Unsupported Xray outbound protocol")
     if (
