@@ -107,18 +107,32 @@ class UdpqTunnelEngine:
         self._state = ConnectionState.CONNECTING
         self.last_error = None
         self._profile = profile
-        socks_address = (config.socks_host, config.socks_port)
-        xray_profile = ConnectionProfile(
-            name=_xray_config_key(profile.name),
-            transport=Transport.XRAY,
-            endpoint_host=config.socks_host,
-            endpoint_port=config.socks_port,
-        )
-        self._xray_profile = xray_profile
+        self._xray_profile = None
+        xray_profile = None
         config_saved = False
         try:
+            # The supervisor chooses a free loopback port when the stored port is 0.
+            observed_socks = self.sidecar.start(config)
+            if (
+                not isinstance(observed_socks, tuple)
+                or len(observed_socks) != 2
+                or observed_socks[0] != config.socks_host
+                or isinstance(observed_socks[1], bool)
+                or not isinstance(observed_socks[1], int)
+                or not 1 <= observed_socks[1] <= 65535
+                or (config.socks_port != 0 and observed_socks[1] != config.socks_port)
+            ):
+                raise RuntimeError("UDPQ sidecar exposed an unexpected SOCKS5 endpoint")
+
+            xray_profile = ConnectionProfile(
+                name=_xray_config_key(profile.name),
+                transport=Transport.XRAY,
+                endpoint_host=observed_socks[0],
+                endpoint_port=observed_socks[1],
+            )
+            self._xray_profile = xray_profile
             xray_config = build_apna_xray_tun_config(
-                socks_address,
+                observed_socks,
                 dns_servers=self.dns_servers,
                 adapter_name=self.adapter_name,
                 description="ApnaWin UDPQ tunnel",
@@ -127,9 +141,6 @@ class UdpqTunnelEngine:
             self.xray_config_store.save(xray_profile.name, xray_config)
             config_saved = True
             self.xray_engine.validate_profile(xray_profile)
-            observed_socks = self.sidecar.start(config)
-            if observed_socks != socks_address:
-                raise RuntimeError("UDPQ sidecar exposed an unexpected SOCKS5 endpoint")
             self.xray_engine.connect(xray_profile)
             if self.xray_engine.state is not ConnectionState.CONNECTED:
                 raise RuntimeError("Xray/Wintun did not confirm CONNECTED for UDPQ")
@@ -145,7 +156,7 @@ class UdpqTunnelEngine:
                     self.sidecar.stop()
                 except Exception as cleanup_exc:
                     cleanup_errors.append(f"UDPQ sidecar cleanup: {cleanup_exc}")
-            if not cleanup_errors and config_saved:
+            if not cleanup_errors and config_saved and xray_profile is not None:
                 try:
                     self.xray_config_store.remove(xray_profile.name)
                 except Exception as cleanup_exc:
