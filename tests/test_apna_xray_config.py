@@ -81,7 +81,7 @@ def test_supports_named_sidecar_description_and_outbound_tag() -> None:
     ("kwargs", "message"),
     [
         ({"description": ""}, "description"),
-        ({"description": "bad\\nvalue"}, "description"),
+        ({"description": "bad\nvalue"}, "description"),
         ({"outbound_tag": "bad/tag"}, "outbound_tag"),
     ],
 )
