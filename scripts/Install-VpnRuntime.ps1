@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory = $true)]
     [string] $Destination,
-    [string] $UdpqClientPath
+    [string] $UdpqClientPath,
+    [string] $UdpqPatchPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -123,6 +124,10 @@ try {
         if (-not (Test-Path -LiteralPath $udpqSource -PathType Leaf)) {
             throw "UDPQ client binary does not exist: $udpqSource"
         }
+        if (-not $UdpqPatchPath -or -not (Test-Path -LiteralPath $UdpqPatchPath -PathType Leaf)) {
+            throw "The UDPQ source patch file is required to record build provenance."
+        }
+        $patchHash = (Get-FileHash -LiteralPath $UdpqPatchPath -Algorithm SHA256).Hash.ToLowerInvariant()
         Assert-PeX64 $udpqSource "udpq-client.exe"
         $udpqTarget = Join-Path $engine "udpq-client.exe"
         Copy-Item -LiteralPath $udpqSource -Destination $udpqTarget -Force
@@ -130,6 +135,7 @@ try {
             source = "starrising321/starudp"
             source_commit = "23fa29bb4fad600330b30e2b703b8029ef091446"
             license = "MIT"
+            patch_sha256 = $patchHash
             executable_sha256 = (Get-FileHash -LiteralPath $udpqTarget -Algorithm SHA256).Hash.ToLowerInvariant()
         }
     }
