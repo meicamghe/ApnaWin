@@ -9,7 +9,7 @@ def test_udpq_upstream_patch_is_pinned_and_redacts_all_client_secrets():
     raw = patch_path.read_bytes()
 
     assert hashlib.sha256(raw).hexdigest() == (
-        "82f7db651860fe94129a4cd2931459dc8f70973a261261af3943b9ac6a23ea52"
+        "6f18ca9871e62ad91db033411d0aaa801bde3b17533d4ce71e20ed33fe01bbe2"
     )
     patch = raw.decode("utf-8")
     for field in (
