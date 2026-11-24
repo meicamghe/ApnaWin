@@ -788,6 +788,7 @@ def test_all_import_paths_are_exposed_from_one_import_menu(tmp_path, qapp):
     assert action_texts == [
         "APNA encrypted catalog / APK…",
         "Fetch live APNA catalog…",
+        "UDPQ / StarUDP profile (experimental)…",
         "Open manual APNA catalog download…",
         "Xray JSON (VLESS / VMess / Trojan / UDP-capable)…",
         "Xray share link (VLESS / VMess / Trojan / Shadowsocks / Hysteria 2 / SOCKS / HTTP)…",
