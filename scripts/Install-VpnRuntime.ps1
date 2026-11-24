@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [string] $Destination
+    [string] $Destination,
+    [string] $UdpqClientPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -115,6 +116,21 @@ try {
             archive_sha256 = $WintunArchiveSha256
             dll_sha256 = (Get-FileHash -LiteralPath (Join-Path $engine "wintun.dll") -Algorithm SHA256).Hash.ToLowerInvariant()
             signer = $signature.SignerCertificate.Subject
+        }
+    }
+    if ($UdpqClientPath) {
+        $udpqSource = [System.IO.Path]::GetFullPath($UdpqClientPath)
+        if (-not (Test-Path -LiteralPath $udpqSource -PathType Leaf)) {
+            throw "UDPQ client binary does not exist: $udpqSource"
+        }
+        Assert-PeX64 $udpqSource "udpq-client.exe"
+        $udpqTarget = Join-Path $engine "udpq-client.exe"
+        Copy-Item -LiteralPath $udpqSource -Destination $udpqTarget -Force
+        $manifest.udpq = [ordered]@{
+            source = "starrising321/starudp"
+            source_commit = "23fa29bb4fad600330b30e2b703b8029ef091446"
+            license = "MIT"
+            executable_sha256 = (Get-FileHash -LiteralPath $udpqTarget -Algorithm SHA256).Hash.ToLowerInvariant()
         }
     }
     $manifestJson = $manifest | ConvertTo-Json -Depth 5
