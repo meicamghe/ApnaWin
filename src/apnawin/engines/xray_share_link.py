@@ -475,10 +475,14 @@ def _parse_hysteria2(parsed) -> tuple[str, int, dict, dict]:
     if unsupported:
         names = ", ".join(sorted(unsupported))
         raise XrayShareLinkError(f"Xray Hysteria 2 importer does not support: {names}")
+    unknown = query.keys() - {"insecure", "sni"}
+    if unknown:
+        raise XrayShareLinkError("Hysteria 2 link contains unsupported query parameters")
     server_name = _safe_option_text(
         query.get("sni", host), "Hysteria 2 TLS server name",
         max_length=253, allow_empty=False,
     )
+    _host_port(server_name, 443)
     outbound = {
         "tag": "proxy",
         "protocol": "hysteria",
@@ -547,7 +551,7 @@ def import_wireguard_config(
         raise XrayShareLinkError("WireGuard Interface requires one to eight IP addresses")
     try:
         import ipaddress
-        normalized_addresses = [str(ipaddress.ip_interface(item)) for item in addresses]
+        normalized_addresses = [str(ipaddress.ip_interface(item).ip) for item in addresses]
     except ValueError as exc:
         raise XrayShareLinkError("WireGuard Interface Address contains an invalid IP prefix") from exc
     dns_raw = interface.get("dns", "")
