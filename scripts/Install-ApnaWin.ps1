@@ -15,7 +15,8 @@ if (-not (Test-Path -LiteralPath (Join-Path $source "ApnaWinElevator.exe") -Path
 $engine = Join-Path $source "engine"
 if (-not (Test-Path -LiteralPath (Join-Path $engine "xray.exe") -PathType Leaf) -or
     -not (Test-Path -LiteralPath (Join-Path $engine "wintun.dll") -PathType Leaf) -or
-    -not (Test-Path -LiteralPath (Join-Path $engine "runtime-manifest.json") -PathType Leaf)) {
+    -not (Test-Path -LiteralPath (Join-Path $engine "runtime-manifest.json") -PathType Leaf) -or
+    -not (Test-Path -LiteralPath (Join-Path $engine "udpq-client.exe") -PathType Leaf)) {
     throw "The verified Xray/Wintun runtime folder or its integrity manifest is missing."
 }
 
@@ -64,11 +65,23 @@ try {
         "ApnaWinElevator.exe",
         "engine/xray.exe",
         "engine/wintun.dll",
-        "engine/runtime-manifest.json"
+        "engine/runtime-manifest.json",
+        "engine/udpq-client.exe"
     )) {
         if (-not (Test-Path -LiteralPath (Join-Path $staging $required) -PathType Leaf)) {
             throw "Staged installation is missing required file: $required"
         }
+    }
+
+    $manifestPath = Join-Path $staging "engine/runtime-manifest.json"
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    $expectedUdpqHash = [string]$manifest.udpq.executable_sha256
+    if ($expectedUdpqHash -notmatch "^[0-9a-fA-F]{64}$") {
+        throw "Runtime manifest has no valid UDPQ executable SHA-256."
+    }
+    $actualUdpqHash = (Get-FileHash -LiteralPath (Join-Path $staging "engine/udpq-client.exe") -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualUdpqHash -ne $expectedUdpqHash.ToLowerInvariant()) {
+        throw "Staged UDPQ executable does not match the runtime manifest."
     }
 
     # Stop the desktop process before swapping directories. User settings are
