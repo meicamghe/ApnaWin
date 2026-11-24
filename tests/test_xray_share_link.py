@@ -605,3 +605,32 @@ def test_new_protocol_configs_are_accepted_by_pinned_xray_runtime(protocol_input
         f"Xray rejected {protocol_input} config: "
         f"{completed.stdout[-2000:]} {completed.stderr[-2000:]}"
     )
+
+
+@pytest.mark.parametrize(
+    "uri",
+    [
+        "hy2://@hy.example.test:443",
+        "hy2://secret@hy.example.test:443?unknown-option=1",
+    ],
+)
+def test_hysteria2_rejects_missing_auth_and_unknown_options(uri):
+    with pytest.raises(XrayShareLinkError):
+        import_xray_share_link(uri)
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "user@wg.example.test:51820",
+        "wg.example.test:51820/path",
+        "wg.example.test:51820?query=1",
+        "wg.example.test:51820#fragment",
+    ],
+)
+def test_wireguard_rejects_non_endpoint_uri_components(endpoint):
+    config = _wireguard_sample().replace(
+        "wg.example.test:51820", endpoint
+    )
+    with pytest.raises(XrayShareLinkError, match="Endpoint"):
+        import_wireguard_config(config)
