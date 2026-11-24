@@ -59,11 +59,50 @@ def _validate_port(port: int, field: str) -> None:
         raise ValueError(f"{field} must be between 1 and 65535")
 
 
-def _format_host_port(host: str, port: int) -> str:
+def parse_server_port_spec(value: str) -> tuple[int, str | None]:
+    """Parse bounded StarUDP comma/range port syntax without unbounded expansion."""
+    if not isinstance(value, str) or not value or value != value.strip() or len(value) > 255:
+        raise ValueError("server port specification must be a non-empty string of at most 255 characters")
+    if any(char not in "0123456789,-" for char in value):
+        raise ValueError("server port specification may contain only digits, commas and hyphens")
+    tokens = value.split(",")
+    if not 1 <= len(tokens) <= 16 or any(not token for token in tokens):
+        raise ValueError("server port specification must contain 1 to 16 port entries")
+    normalized = []
+    seen = set()
+    total = 0
+    first_port = None
+    for token in tokens:
+        parts = token.split("-")
+        if len(parts) == 1:
+            start = end = int(parts[0])
+        elif len(parts) == 2 and all(parts):
+            start, end = int(parts[0]), int(parts[1])
+            if start > end:
+                raise ValueError("server port ranges must be ascending")
+        else:
+            raise ValueError("server port range syntax is invalid")
+        if not 1 <= start <= 65535 or not 1 <= end <= 65535:
+            raise ValueError("server ports must be between 1 and 65535")
+        count = end - start + 1
+        total += count
+        if total > 32:
+            raise ValueError("server port specification cannot expand to more than 32 ports")
+        for port in range(start, end + 1):
+            if port in seen:
+                raise ValueError("server port specification cannot contain duplicates or overlapping ranges")
+            seen.add(port)
+        if first_port is None:
+            first_port = start
+        normalized.append(str(start) if start == end else f"{start}-{end}")
+    canonical = ",".join(normalized)
+    return first_port, None if len(seen) == 1 else canonical
+
+
+def _format_host_port(host: str, port: int | str) -> str:
     if ":" in host and not host.startswith("["):
         return f"[{host}]:{port}"
     return f"{host}:{port}"
-
 
 @dataclass(frozen=True, slots=True)
 class UdpqClientConfig:
@@ -79,6 +118,7 @@ class UdpqClientConfig:
     socks_host: str
     socks_port: int
     ca_file: str | None = None
+    server_port_spec: str | None = None
     protocol: str = "udp"
     obfs: str = ""
     hop_interval: int = 10
@@ -88,6 +128,11 @@ class UdpqClientConfig:
     def __post_init__(self) -> None:
         object.__setattr__(self, "server_host", _validate_host(self.server_host, "server_host"))
         _validate_port(self.server_port, "server_port")
+        if self.server_port_spec is not None:
+            first_port, normalized_spec = parse_server_port_spec(self.server_port_spec)
+            if first_port != self.server_port:
+                raise ValueError("server_port must match the first port in server_port_spec")
+            object.__setattr__(self, "server_port_spec", normalized_spec)
         object.__setattr__(self, "server_name", _validate_host(self.server_name, "server_name"))
         if self.socks_host not in {"127.0.0.1", "::1"}:
             raise ValueError("SOCKS5 listener must bind to an IP loopback address")
@@ -96,6 +141,8 @@ class UdpqClientConfig:
             raise ValueError(
                 "Windows supports only the upstream UDP, wechat, and wechat-video packet modes; faketcp is Linux-only"
             )
+        if self.server_port_spec is not None and self.protocol != "udp":
+            raise ValueError("StarUDP port hopping is available only with the UDP packet mode")
         for field in ("up_mbps", "down_mbps"):
             value = getattr(self, field)
             if isinstance(value, bool) or not isinstance(value, int):
@@ -134,7 +181,7 @@ class UdpqClientConfig:
     def to_json_bytes(self) -> bytes:
         """Return upstream-compatible JSON with certificate verification enabled."""
         config = {
-            "server": _format_host_port(self.server_host, self.server_port),
+            "server": _format_host_port(self.server_host, self.server_port_spec or self.server_port),
             "protocol": self.protocol,
             "auth_str": self.auth_str,
             "alpn": self.alpn,
