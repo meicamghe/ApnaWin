@@ -5,12 +5,21 @@ The caller must provide an explicit, validated UDPQ profile configuration.
 """
 from __future__ import annotations
 
+import ipaddress
 from typing import Callable, Iterable
 
 from apnawin.domain.profile import ConnectionProfile, Transport
 from apnawin.domain.state import ConnectionState
 from apnawin.engines.apna_xray_config import build_apna_xray_tun_config
 from apnawin.services.udpq_sidecar import UdpqClientConfig, UdpqSidecarSupervisor
+
+
+def _host_identity(host: str) -> str:
+    candidate = host[1:-1] if host.startswith("[") and host.endswith("]") else host
+    try:
+        return str(ipaddress.ip_address(candidate))
+    except ValueError:
+        return candidate.rstrip(".").casefold()
 
 
 class UdpqTunnelEngine:
@@ -58,8 +67,7 @@ class UdpqTunnelEngine:
         if not isinstance(config, UdpqClientConfig):
             raise TypeError("UDPQ config resolver must return UdpqClientConfig")
         if (
-            config.server_host.casefold().rstrip(".")
-            != profile.endpoint_host.casefold().rstrip(".")
+            _host_identity(config.server_host) != _host_identity(profile.endpoint_host)
             or config.server_port != profile.endpoint_port
         ):
             raise ValueError("UDPQ config endpoint does not match the selected profile")
@@ -77,8 +85,10 @@ class UdpqTunnelEngine:
         self._candidate_config = config
 
     def connect(self, profile: ConnectionProfile) -> None:
-        if self._state not in {ConnectionState.DISCONNECTED, ConnectionState.ERROR}:
-            raise RuntimeError(f"Cannot start UDPQ while state is {self._state.value}")
+        if self._state is not ConnectionState.DISCONNECTED:
+            raise RuntimeError(
+                f"Cannot start UDPQ while state is {self._state.value}; disconnect first"
+            )
         if self._candidate_profile != profile or self._candidate_config is None:
             self.validate_profile(profile)
         config = self._candidate_config
@@ -167,6 +177,8 @@ class UdpqTunnelEngine:
 
     def disconnect(self) -> None:
         if self._state is ConnectionState.DISCONNECTED:
+            self._candidate_profile = None
+            self._candidate_config = None
             return
         self._state = ConnectionState.DISCONNECTING
         profile = self._profile or self._candidate_profile
