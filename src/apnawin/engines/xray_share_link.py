@@ -90,7 +90,7 @@ def _url_endpoint(parsed) -> tuple[str, int]:
         host, port = parsed.hostname, parsed.port
     except ValueError as exc:
         raise XrayShareLinkError("Share link contains an invalid server endpoint") from exc
-    return _host_port(host, port)
+    return _host_port(host, port if port is not None else 443)
 
 
 def _host_port(host: str | None, port: int | None) -> tuple[str, int]:
@@ -584,7 +584,7 @@ def import_wireguard_config(
         except ValueError as exc:
             raise XrayShareLinkError("WireGuard AllowedIPs contains an invalid IP prefix") from exc
         record = {
-            "endpoint": f"{endpoint_host}:{endpoint_port}",
+            "endpoint": f"[{endpoint_host}]:{endpoint_port}" if ":" in endpoint_host else f"{endpoint_host}:{endpoint_port}",
             "publicKey": public_key,
             "allowedIPs": allowed_ips,
         }
