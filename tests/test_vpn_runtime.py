@@ -48,6 +48,27 @@ def test_runtime_verification_accepts_matching_manifest_and_binaries(tmp_path):
     assert verify_vpn_runtime(root) == expected
 
 
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda raw: raw[:-1] + b',"schema_version":1}',
+        lambda raw: raw.replace(
+            b'"version": "26.11.9"',
+            b'"version": "26.11.9", "version": "26.11.10"',
+            1,
+        ),
+        lambda raw: raw.replace(b'"schema_version": 1', b'"schema_version": NaN', 1),
+    ],
+)
+def test_runtime_verification_rejects_ambiguous_or_nonstandard_json(tmp_path, mutate):
+    root = tmp_path / "engine"
+    manifest = _write_runtime(root)
+    raw = json.dumps(manifest).encode("utf-8")
+    (root / "runtime-manifest.json").write_bytes(mutate(raw))
+    with pytest.raises(VpnRuntimeIntegrityError, match="invalid"):
+        verify_vpn_runtime(root)
+
+
 def test_runtime_verification_rejects_modified_xray_or_wintun(tmp_path):
     root = tmp_path / "engine"
     _write_runtime(root)
