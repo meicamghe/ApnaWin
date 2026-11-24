@@ -116,6 +116,7 @@ jobs:
                   "up_mbps": 10,
                   "down_mbps": 10,
                   "alpn": "hysteria",
+                  "auth": {"mode": "password", "config": {"password": "loopback-test-secret"}},
               }, f)
           with open(client_cfg, "w", encoding="utf-8") as f:
               json.dump({
@@ -125,6 +126,7 @@ jobs:
                   "down_mbps": 10,
                   "alpn": "hysteria",
                   "server_name": "localhost",
+                  "auth_str": "loopback-test-secret",
                   "ca": cert,
                   "insecure": False,
                   "socks5": {
