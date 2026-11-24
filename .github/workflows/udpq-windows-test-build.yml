@@ -10,6 +10,7 @@ on:
       - "native/udpq/**"
       - "tools/build_udpq_sidecar.sh"
       - "pyproject.toml"
+      - ".gitattributes"
       - ".github/workflows/udpq-windows-test-build.yml"
 
 permissions:
