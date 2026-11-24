@@ -64,3 +64,27 @@ def test_accepts_custom_ipv6_loopback_socks_gateway_and_dns() -> None:
 def test_rejects_invalid_tun_options(kwargs, message) -> None:
     with pytest.raises(ValueError, match=message):
         build_apna_xray_tun_config(("127.0.0.1", 1080), **kwargs)
+
+
+def test_supports_named_sidecar_description_and_outbound_tag() -> None:
+    raw = build_apna_xray_tun_config(
+        ("127.0.0.1", 23457),
+        description="ApnaWin UDPQ tunnel",
+        outbound_tag="udpq-socks",
+    )
+    config = json.loads(raw)
+    assert config["inbounds"][0]["settings"]["desc"] == "ApnaWin UDPQ tunnel"
+    assert config["outbounds"][0]["tag"] == "udpq-socks"
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"description": ""}, "description"),
+        ({"description": "bad\\nvalue"}, "description"),
+        ({"outbound_tag": "bad/tag"}, "outbound_tag"),
+    ],
+)
+def test_rejects_unsafe_sidecar_tun_labels(kwargs, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        build_apna_xray_tun_config(("127.0.0.1", 1080), **kwargs)
