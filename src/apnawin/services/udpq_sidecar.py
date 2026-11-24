@@ -22,6 +22,10 @@ from typing import Callable
 from apnawin.engines.windows_job import WindowsJobProcess
 
 
+_UDPQ_SOURCE_COMMIT = "23fa29bb4fad600330b30e2b703b8029ef091446"
+_UDPQ_REDACTION_PATCH_SHA256 = "6f18ca9871e62ad91db033411d0aaa801bde3b17533d4ce71e20ed33fe01bbe2"
+
+
 def _validate_host(host: str, field: str) -> str:
     if not isinstance(host, str) or not host or host != host.strip():
         raise ValueError(f"{field} must be a non-empty host")
