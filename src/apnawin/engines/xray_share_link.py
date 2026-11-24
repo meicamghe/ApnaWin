@@ -20,7 +20,7 @@ from apnawin.engines.xray_process import inspect_tun_inbound
 
 
 _DEFAULT_DNS = ("1.1.1.1", "2606:4700:4700::1111")
-_SUPPORTED_SCHEMES = frozenset({"vless", "vmess", "trojan", "ss", "hysteria2", "hy2"})
+_SUPPORTED_SCHEMES = frozenset({"vless", "vmess", "trojan", "ss", "hysteria2", "hy2", "socks", "socks5", "http", "https"})
 _SUPPORTED_NETWORKS = frozenset({"tcp", "ws", "grpc", "httpupgrade", "xhttp"})
 _SUPPORTED_SECURITY = frozenset({"none", "tls", "reality"})
 _NAME_RE = re.compile(r"[^\w .()\[\]-]+", re.UNICODE)
@@ -768,7 +768,7 @@ def import_wireguard_config(
 def build_xray_tun_config(outbound: dict, *, adapter_name: str = "ApnaWin") -> bytes:
     """Wrap one validated remote Xray outbound in ApnaWin's strict dual-stack TUN."""
     if not isinstance(outbound, dict) or outbound.get("protocol") not in {
-        "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "masque"
+        "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard", "masque", "socks", "http"
     }:
         raise XrayShareLinkError("Unsupported Xray outbound protocol")
     if (
@@ -811,7 +811,7 @@ def import_xray_share_link(uri: str) -> ImportedXrayProfile:
         raise XrayShareLinkError("Share link contains control characters")
     scheme = text.split(":", 1)[0].lower()
     if scheme not in _SUPPORTED_SCHEMES:
-        raise XrayShareLinkError("Supported share-link schemes: vless, vmess, trojan, ss and hysteria2")
+        raise XrayShareLinkError("Supported share-link schemes: vless, vmess, trojan, ss, hysteria2, socks and http")
     try:
         parsed = urlsplit(text)
     except ValueError as exc:
@@ -821,6 +821,12 @@ def import_xray_share_link(uri: str) -> ImportedXrayProfile:
         fragment = parsed.fragment or query.get("profile_name", "")
     elif scheme in {"hysteria2", "hy2"}:
         host, port, outbound, query = _parse_hysteria2(parsed)
+        fragment = parsed.fragment
+    elif scheme in {"socks", "socks5"}:
+        host, port, outbound, query = _parse_simple_proxy(parsed, "socks")
+        fragment = parsed.fragment
+    elif scheme in {"http", "https"}:
+        host, port, outbound, query = _parse_simple_proxy(parsed, "http")
         fragment = parsed.fragment
     else:
         if parsed.scheme.lower() != scheme:
