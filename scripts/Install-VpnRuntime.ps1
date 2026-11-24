@@ -135,7 +135,7 @@ try {
         Assert-PeX64 $udpqSource "udpq-client.exe"
         $udpqTarget = Join-Path $engine "udpq-client.exe"
         Copy-Item -LiteralPath $udpqSource -Destination $udpqTarget -Force
-        $manifest.udpq = [ordered]@{
+        $manifest["udpq"] = [ordered]@{
             source = "starrising321/starudp"
             source_commit = "23fa29bb4fad600330b30e2b703b8029ef091446"
             license = "MIT"
