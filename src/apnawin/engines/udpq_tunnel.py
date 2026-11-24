@@ -5,6 +5,7 @@ The caller must provide an explicit, validated UDPQ profile configuration.
 """
 from __future__ import annotations
 
+import hashlib
 import ipaddress
 from typing import Callable, Iterable
 
@@ -12,6 +13,11 @@ from apnawin.domain.profile import ConnectionProfile, Transport
 from apnawin.domain.state import ConnectionState
 from apnawin.engines.apna_xray_config import build_apna_xray_tun_config
 from apnawin.services.udpq_sidecar import UdpqClientConfig, UdpqSidecarSupervisor
+
+
+def _xray_config_key(profile_name: str) -> str:
+    digest = hashlib.sha256(profile_name.encode("utf-8")).hexdigest()[:32]
+    return f"udpq-{digest}"
 
 
 def _host_identity(host: str) -> str:
@@ -80,6 +86,8 @@ class UdpqTunnelEngine:
             raise ValueError("UDPQ tunnel engine accepts UDPQ profiles only")
         if self._state is not ConnectionState.DISCONNECTED:
             raise RuntimeError("UDPQ tunnel engine is already active")
+        if self.xray_engine.state is not ConnectionState.DISCONNECTED:
+            raise RuntimeError("Xray/Wintun engine must be disconnected before UDPQ starts")
         config = self._resolve_config(profile)
         self._candidate_profile = profile
         self._candidate_config = config
@@ -100,12 +108,13 @@ class UdpqTunnelEngine:
         self._profile = profile
         socks_address = (config.socks_host, config.socks_port)
         xray_profile = ConnectionProfile(
-            name=profile.name,
+            name=_xray_config_key(profile.name),
             transport=Transport.XRAY,
             endpoint_host=config.socks_host,
             endpoint_port=config.socks_port,
         )
         self._xray_profile = xray_profile
+        config_saved = False
         try:
             xray_config = build_apna_xray_tun_config(
                 socks_address,
@@ -114,7 +123,8 @@ class UdpqTunnelEngine:
                 description="ApnaWin UDPQ tunnel",
                 outbound_tag="udpq-socks",
             )
-            self.xray_config_store.save(profile.name, xray_config)
+            self.xray_config_store.save(xray_profile.name, xray_config)
+            config_saved = True
             self.xray_engine.validate_profile(xray_profile)
             observed_socks = self.sidecar.start(config)
             if observed_socks != socks_address:
@@ -134,9 +144,9 @@ class UdpqTunnelEngine:
                     self.sidecar.stop()
                 except Exception as cleanup_exc:
                     cleanup_errors.append(f"UDPQ sidecar cleanup: {cleanup_exc}")
-            if not cleanup_errors:
+            if not cleanup_errors and config_saved:
                 try:
-                    self.xray_config_store.remove(profile.name)
+                    self.xray_config_store.remove(xray_profile.name)
                 except Exception as cleanup_exc:
                     cleanup_errors.append(f"Xray config cleanup: {cleanup_exc}")
             self._state = ConnectionState.ERROR
@@ -195,9 +205,9 @@ class UdpqTunnelEngine:
             self._state = ConnectionState.ERROR
             self.last_error = f"UDPQ sidecar cleanup failed: {exc}"
             raise RuntimeError(self.last_error) from exc
-        if profile is not None:
+        if profile is not None and self._xray_profile is not None:
             try:
-                self.xray_config_store.remove(profile.name)
+                self.xray_config_store.remove(self._xray_profile.name)
             except Exception as exc:
                 self._state = ConnectionState.ERROR
                 self.last_error = f"UDPQ Xray config cleanup failed: {exc}"
