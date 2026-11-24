@@ -1,7 +1,8 @@
-"""Experimental UDPQ sidecar composed with the existing Xray/Wintun TUN engine.
+"""Experimental StarUDP-compatible sidecar composed with Xray/Wintun.
 
-This engine is deliberately not registered by the desktop composition root yet.
-The caller must provide an explicit, validated UDPQ profile configuration.
+The desktop composition root registers this engine only when the separately
+built Windows sidecar is present. It is not an assertion of APNA server
+compatibility; profile parameters must be supplied explicitly.
 """
 from __future__ import annotations
 
