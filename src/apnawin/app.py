@@ -48,7 +48,11 @@ from apnawin.engines.apna_host_key import scan_apna_ssh_host_key
 from apnawin.engines.apna_tunnel_engine import ApnaTunnelEngine
 from apnawin.engines.multi_transport import MultiTransportTunnelEngine
 from apnawin.engines.udpq_tunnel import UdpqTunnelEngine
-from apnawin.services.udpq_sidecar import UdpqClientConfig, UdpqSidecarSupervisor
+from apnawin.services.udpq_sidecar import (
+    UdpqClientConfig,
+    UdpqSidecarSupervisor,
+    load_udpq_runtime_sha256,
+)
 from apnawin.storage.udpq_config_store import UdpqConfigStore
 from apnawin.services.apna_lite_catalog import (
     MAX_INPUT_BYTES,
@@ -899,9 +903,18 @@ class MainWindow(QMainWindow):
             Transport.XRAY: xray_engine,
             Transport.APNA_SSH: apna_engine,
         }
-        udpq_executable = Path(program_files) / "ApnaWin" / "engine" / "udpq-client.exe"
-        if udpq_executable.is_file() and not udpq_executable.is_symlink():
-            udpq_sidecar = UdpqSidecarSupervisor(udpq_executable)
+        engine_dir = Path(program_files) / "ApnaWin" / "engine"
+        udpq_executable = engine_dir / "udpq-client.exe"
+        runtime_manifest = engine_dir / "runtime-manifest.json"
+        try:
+            udpq_sha256 = load_udpq_runtime_sha256(runtime_manifest)
+        except (OSError, ValueError):
+            udpq_sha256 = None
+        if udpq_sha256 and udpq_executable.is_file() and not udpq_executable.is_symlink():
+            udpq_sidecar = UdpqSidecarSupervisor(
+                udpq_executable,
+                expected_sha256=udpq_sha256,
+            )
             udpq_engine = UdpqTunnelEngine(
                 udpq_sidecar,
                 xray_engine,
