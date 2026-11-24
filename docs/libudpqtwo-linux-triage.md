@@ -291,3 +291,22 @@ After extracting APNA's ARM64 split and the UDP Thunder 1.5 ARM32 split:
       /tmp/apnawin-udpqtwo/udp-thunder__armeabi-v7a__libudpqtwo.so__HASH.so
 
 Replace the final two paths with the exact filenames printed by the inventory command. The JSON output includes a Go-symbol Jaccard score and common wire/config fingerprints. It explicitly labels these as heuristic fingerprints, not proof of exact source revision, runtime ownership, authentication values or server compatibility.
+
+
+## Fresh primary-DEX call-site pass (base.apk SHA-256 unchanged)
+
+A bounded DEX string/reference pass was run on the supplied base APK (SHA-256 b1f650b168665b0728b1be0e25a0c722cd77ec873e1a1c7e2711a78aa1012a6d). The readable classes.dex is 13,774,224 bytes, SHA-256 c34250d70882cd68a68d9138b6bebe3eac1e1fe8cc27c1f3a604adf22ab4fa01.
+
+### Confirmed readable call sites
+
+- prince.open.vpn.service.vpn.Pdnsd.run() calls Runtime.exec; its method constants include libpdnsd.so and " -v9 -c ". This is the pdnsd child-process path.
+- prince.open.vpn.service.vpn.Tun2Socks.run() calls Runtime.exec; its method constants include libtun2socks.so, sock_path and --udpgw-transparent-dns. This is the tun2socks child-process path and corroborates the BadVPN/UDPGW route.
+- VpnUtils.findProcessId() and VpnUtils.killProcess() contain process-list/kill commands. These are process-management helpers, not evidence of UDPQ ownership.
+- The primary DEX contains no literal libudpqtwo.so, udpqtwo, starudp, or hysteria string in the inspected string pool.
+- Readable System.loadLibrary call sites include datastore_shared_counter. LIAPP class com.liapp.x contains obfuscated System.load/System.loadLibrary call sites and encoded strings including the protected DEX name bxdtcxfzx.
+
+### Consequence for native ownership
+
+The readable primary DEX explicitly owns the pdnsd and tun2socks child-process paths, but it does not expose a libudpqtwo.so launch site. This is consistent with the protected LIAPP DEX containing the additional UDPQ process setup, but it does not prove which service invokes it or what JSON/config values are passed.
+
+The protected DEX was not decrypted or bypassed. The next legitimate evidence sources are the installed ARM64 split's ELF entrypoint and ordinary Android process/service logs while the app is used normally. Do not infer libudpqtwo.so ownership from the pdnsd/tun2socks call sites.
