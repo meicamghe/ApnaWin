@@ -400,6 +400,39 @@ def import_masque_config(text: str, *, profile_name: str = "MASQUE") -> Imported
     return ImportedXrayProfile(profile, build_xray_tun_config(outbound_config), "masque")
 
 
+
+def _parse_simple_proxy(parsed, protocol: str) -> tuple[str, int, dict, dict]:
+    """Import HTTP(S) or SOCKS5 proxy URI; these outbounds are TCP-only."""
+    if parsed.path not in {"", "/"}:
+        raise XrayShareLinkError("Proxy URI contains an unsupported path")
+    host, port = _url_endpoint(parsed)
+    username = unquote(parsed.username or "")
+    password = unquote(parsed.password or "")
+    if bool(username) != bool(password):
+        raise XrayShareLinkError("Proxy authentication requires both username and password")
+    for value in (username, password):
+        if len(value) > 1024 or any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+            raise XrayShareLinkError("Proxy credentials are invalid")
+    query = _query(parsed)
+    is_tls_http = parsed.scheme.lower() == "https"
+    if protocol == "socks" and query:
+        raise XrayShareLinkError("SOCKS proxy URI query parameters are not supported")
+    if protocol == "http" and query.keys() - ({"sni"} if is_tls_http else set()):
+        raise XrayShareLinkError("HTTP proxy URI contains unsupported query parameters")
+    server = {"address": host, "port": port}
+    if username:
+        server["users"] = [{"user": username, "pass": password}]
+    outbound = {"tag": "proxy", "protocol": protocol, "settings": {"servers": [server]}}
+    if is_tls_http:
+        server_name = _safe_option_text(query.get("sni", host), "HTTPS proxy TLS server name", max_length=253, allow_empty=False)
+        _host_port(server_name, 443)
+        outbound["streamSettings"] = {
+            "network": "tcp", "security": "tls",
+            "tlsSettings": {"serverName": server_name, "allowInsecure": False},
+        }
+    return host, port, outbound, query
+
+
 def _parse_vmess(parsed) -> tuple[str, int, dict, dict]:
     encoded = parsed.netloc or parsed.path
     if "@" in encoded:
