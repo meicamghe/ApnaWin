@@ -178,3 +178,56 @@ adb logcat -v threadtime |
 \`\`\`
 
 The target of this pass is to identify the exported Go entrypoints and determine whether APNA's protected service passes the same config shape as UDP Thunder. A shared dependency fingerprint alone is not enough to wire the engine into ApnaWin.
+
+
+## Protocol-source match: StarUDP / Hysteria-v1 lineage
+
+A public Go repository, \`starrising321/starudp\`, was found after matching the binary's embedded Go types and config tags. Its README describes itself as an automatic installer for a UDP (Hysteria server), and its \`LICENSE.md\` identifies the source under MIT (with a separate GPL-tag caveat).
+
+Sources:
+- [StarUDP repository](https://github.com/starrising321/starudp)
+- [Wire protocol definitions](https://github.com/starrising321/starudp/blob/main/core/cs/protocol.go)
+- [Client handshake and stream handling](https://github.com/starrising321/starudp/blob/main/core/cs/client.go)
+- [Server handshake and stream handling](https://github.com/starrising321/starudp/blob/main/core/cs/server.go)
+- [Client config and TLS/QUIC setup](https://github.com/starrising321/starudp/blob/main/app/cmd/client.go)
+- [Client/server JSON config schema](https://github.com/starrising321/starudp/blob/main/app/cmd/config.go)
+
+The APNA and UDP Thunder 1.5 \`libudpqtwo.so\` executables both contain the exact Go type names and field/tag fingerprints used by \`starudp/core/cs/protocol.go\`:
+
+- \`clientHello\` with \`Rate\`, \`AuthLen\`, \`Auth\`;
+- \`serverHello\` with \`OK\`, \`Rate\`, \`MessageLen\`, \`Message\`;
+- \`clientRequest\` with \`UDP\`, \`HostLen\`, \`Host\`, \`Port\`;
+- \`serverResponse\` with \`OK\`, \`UDPSessionID\`, \`MessageLen\`, \`Message\`;
+- \`udpMessage\` with \`SessionID\`, \`HostLen\`, \`Host\`, \`Port\`, \`MsgID\`, \`FragID\`, \`FragCount\`, \`DataLen\`, \`Data\`;
+- the \`struc:"sizeof=Auth"\`, \`struc:"sizeof=Host"\`, \`struc:"sizeof=Message"\` and \`struc:"sizeof=Data"\` tags.
+
+Both target executables also contain the StarUDP/Hysteria-style JSON config tags, including \`server\`, \`protocol\`, \`auth\`, \`alpn\`, \`server_name\`, \`insecure\`, \`socks5\`, \`tun\`, \`up\`, \`down\`, \`obfs\`, \`fast_open\`, \`lazy_start\`, \`recv_window_conn\`, \`relay_tcps\`, \`relay_udps\`, \`tproxy_udp\`, \`redirect_tcp\` and \`disable_mtu_discovery\`.
+
+This is a direct wire-structure and config-schema match, not merely a dependency match. It makes a Hysteria-v1/StarUDP-derived QUIC engine the leading protocol-family identification for APNA's \`libudpqtwo.so\`.
+
+### Reconstructed protocol from the matching public source
+
+The matching source defines \`protocolVersion = 3\`. Its client sequence is:
+
+1. Establish QUIC over UDP with TLS 1.3 and the configured ALPN.
+2. Open a control stream and send the one-byte protocol version \`3\`.
+3. Pack \`clientHello\` containing upload/download rates and the authentication byte string.
+4. Unpack \`serverHello\`; a rejected authentication closes the QUIC connection with application error code 2.
+5. For each TCP destination, open a QUIC stream and send \`clientRequest{UDP:false, Host, Port}\`; read \`serverResponse\` before piping bytes.
+6. For UDP, open a QUIC stream and send \`clientRequest{UDP:true}\`; read the server-assigned \`UDPSessionID\`. UDP payloads then travel as QUIC DATAGRAM messages carrying \`udpMessage\`, with fragmentation fields \`MsgID\`, \`FragID\`, \`FragCount\` when needed.
+
+The source defaults ALPN to \`hysteria\`, but the literal \`hysteria\` string was not found in either target \`libudpqtwo.so\` binary. APNA may override ALPN from its protected runtime configuration or use a modified default. Do not hardcode it until the APNA launch/config path is established.
+
+### Important executable-format correction
+
+Both target files are **Go PIE executables packaged with a \`.so\` suffix**, not ordinary JNI shared libraries:
+
+- APNA: ELF64/AArch64, \`ET_DYN\`, non-zero entry point \`0x1be520\`, interpreter \`/system/bin/linker64\`.
+- UDP Thunder 1.5: ELF32/ARM, \`ET_DYN\`, non-zero entry point \`0x8f8d0\`, interpreter \`/system/bin/linker\`.
+- Neither target exports \`JNI_OnLoad\` or \`Java_*\` JNI entrypoints. Their dynamic symbol tables expose Go/cgo runtime symbols and \`main.main\`.
+
+This strongly suggests Android launches the file as a child executable from the app's native-library directory rather than calling it through JNI. The protected LIAPP DEX still prevents us from proving the exact process command line and runtime JSON config.
+
+### Engineering consequence
+
+ApnaWin can build a Windows x64 sidecar from the matching MIT-licensed Go source lineage, then expose a loopback SOCKS5 TCP+UDP listener to the existing Wintun/Xray TUN pipeline. Before calling it APNA-compatible, the remaining checks are the APNA ALPN, exact config values/arguments, auth bytes, transport/obfuscation selection and a real authorized-server handshake. The source's protocol version and structures are now strong implementation evidence, but no live APNA server session has been demonstrated.
