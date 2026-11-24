@@ -554,7 +554,7 @@ def test_import_wireguard_ini_builds_xray_wireguard_outbound():
     assert result.profile.transport is Transport.XRAY
     assert outbound["protocol"] == "wireguard"
     settings = outbound["settings"]
-    assert settings["address"] == ["10.66.0.2/32", "fd00::2/128"]
+    assert settings["address"] == ["10.66.0.2", "fd00::2"]
     assert settings["mtu"] == 1380
     assert settings["remoteDNS"] == ["1.1.1.1", "2606:4700:4700::1111"]
     assert settings["peers"][0]["endpoint"] == "wg.example.test:51820"
