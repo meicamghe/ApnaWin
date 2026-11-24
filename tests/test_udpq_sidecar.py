@@ -9,6 +9,7 @@ from apnawin.services.udpq_sidecar import (
     UdpqClientConfig,
     UdpqSidecarSupervisor,
     load_udpq_runtime_sha256,
+    parse_server_port_spec,
 )
 
 
@@ -313,3 +314,31 @@ def test_runtime_manifest_rejects_unreviewed_udpq_source_patch(tmp_path):
 def test_udpq_rejects_upstream_invalid_port_hop_intervals(tmp_path, interval):
     with pytest.raises(ValueError, match="hop_interval"):
         _config(tmp_path, hop_interval=interval)
+
+
+def test_udpq_serializes_bounded_multi_port_ranges(tmp_path):
+    config = _config(tmp_path, server_port_spec="443,8443-8445")
+    payload = json.loads(config.to_json_bytes())
+    assert payload["server"] == "vpn.example.test:443,8443-8445"
+    assert config.server_port == 443
+    assert config.server_port_spec == "443,8443-8445"
+
+
+@pytest.mark.parametrize(
+    "spec",
+    ["", "443,", "443,,8443", "8445-8443", "0", "65536", "443-475", "443,443", "443-445,445-446", "443/udp", "443 8443"],
+)
+def test_udpq_rejects_invalid_or_unbounded_port_specs(spec):
+    with pytest.raises(ValueError):
+        parse_server_port_spec(spec)
+
+
+def test_udpq_rejects_port_hopping_with_wechat_modes(tmp_path):
+    with pytest.raises(ValueError, match="only with the UDP"):
+        _config(tmp_path, protocol="wechat", server_port_spec="443,8443")
+
+
+def test_udpq_normalizes_single_port_spec_to_default(tmp_path):
+    config = _config(tmp_path, server_port_spec="00443")
+    assert config.server_port == 443
+    assert config.server_port_spec is None
