@@ -47,6 +47,9 @@ from apnawin.engines.xray_share_link import import_xray_share_link, import_wireg
 from apnawin.engines.apna_host_key import scan_apna_ssh_host_key
 from apnawin.engines.apna_tunnel_engine import ApnaTunnelEngine
 from apnawin.engines.multi_transport import MultiTransportTunnelEngine
+from apnawin.engines.udpq_tunnel import UdpqTunnelEngine
+from apnawin.services.udpq_sidecar import UdpqClientConfig, UdpqSidecarSupervisor
+from apnawin.storage.udpq_config_store import UdpqConfigStore
 from apnawin.services.apna_lite_catalog import (
     MAX_INPUT_BYTES,
     decode_apna_lite_apk_catalog,
@@ -159,6 +162,106 @@ class ProfileDialog(QDialog):
 
 
 
+
+
+class UdpqImportDialog(QDialog):
+    """Import a manual StarUDP-compatible profile; APNA compatibility is not implied."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Import UDPQ / StarUDP profile (experimental)")
+        self.setMinimumWidth(480)
+
+        self.name_edit = QLineEdit("UDPQ profile")
+        self.host_edit = QLineEdit()
+        self.port_spin = QSpinBox()
+        self.port_spin.setRange(1, 65535)
+        self.port_spin.setValue(443)
+        self.auth_edit = QLineEdit()
+        self.auth_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.alpn_edit = QLineEdit("hysteria")
+        self.sni_edit = QLineEdit()
+        self.up_spin = QSpinBox()
+        self.up_spin.setRange(1, 100000)
+        self.up_spin.setValue(10)
+        self.down_spin = QSpinBox()
+        self.down_spin.setRange(1, 100000)
+        self.down_spin.setValue(20)
+        self.ca_edit = QLineEdit()
+        self.ca_edit.setReadOnly(True)
+        self.ca_button = QPushButton("Choose trusted CA…")
+        self.ca_button.clicked.connect(self._choose_ca)
+
+        form = QFormLayout()
+        form.addRow("Profile name", self.name_edit)
+        form.addRow("Server host", self.host_edit)
+        form.addRow("Server port", self.port_spin)
+        form.addRow("Authentication string", self.auth_edit)
+        form.addRow("ALPN", self.alpn_edit)
+        form.addRow("TLS server name (SNI)", self.sni_edit)
+        form.addRow("Upload limit (Mbps)", self.up_spin)
+        form.addRow("Download limit (Mbps)", self.down_spin)
+        form.addRow("Custom CA certificate", self.ca_button)
+        form.addRow("CA path", self.ca_edit)
+
+        warning = QLabel(
+            "This imports a generic StarUDP/Hysteria-v1-family profile, not an APNA server profile. "
+            "The default ALPN is the public source default; APNA's protected runtime may override it. "
+            "TLS certificate verification is always enabled. Use only server settings you are authorized to use."
+        )
+        warning.setWordWrap(True)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self._accept_if_valid)
+        buttons.rejected.connect(self.reject)
+        layout = QVBoxLayout(self)
+        layout.addLayout(form)
+        layout.addWidget(warning)
+        layout.addWidget(buttons)
+
+    def _choose_ca(self) -> None:
+        filename, _selected_filter = QFileDialog.getOpenFileName(
+            self, "Select trusted CA certificate", "",
+            "PEM certificates (*.pem *.crt *.cer);;All files (*)",
+        )
+        if filename:
+            self.ca_edit.setText(filename)
+
+    def _accept_if_valid(self) -> None:
+        try:
+            self.to_profile_and_config()
+        except (OSError, TypeError, ValueError) as exc:
+            QMessageBox.warning(self, "Invalid UDPQ profile", str(exc))
+            return
+        self.accept()
+
+    def to_profile_and_config(self):
+        host = self.host_edit.text().strip()
+        name = self.name_edit.text().strip()
+        if not name:
+            raise ValueError("Profile name is required")
+        config = UdpqClientConfig(
+            server_host=host,
+            server_port=self.port_spin.value(),
+            auth_str=self.auth_edit.text(),
+            alpn=self.alpn_edit.text().strip(),
+            server_name=self.sni_edit.text().strip() or host,
+            up_mbps=self.up_spin.value(),
+            down_mbps=self.down_spin.value(),
+            socks_host="127.0.0.1",
+            socks_port=10808,
+            ca_file=self.ca_edit.text().strip() or None,
+            protocol="udp",
+        )
+        profile = ConnectionProfile(
+            name=name,
+            transport=Transport.UDPQ,
+            endpoint_host=config.server_host,
+            endpoint_port=config.server_port,
+        )
+        return profile, config
 
 
 class ApnaCatalogImportDialog(QDialog):
@@ -573,6 +676,7 @@ class MainWindow(QMainWindow):
         xray_config_store: XrayConfigStore | None = None,
         apna_profile_store: ApnaProfileStore | None = None,
         connection_controller: ConnectionController | None = None,
+        udpq_profile_store: UdpqConfigStore | None = None,
     ) -> None:
         super().__init__()
         self.setWindowTitle("ApnaWin")
@@ -585,6 +689,10 @@ class MainWindow(QMainWindow):
         self.apna_profile_store = apna_profile_store or ApnaProfileStore(
             self.profiles_path.with_name("apna-profiles.json")
         )
+        self.udpq_profile_store = udpq_profile_store or UdpqConfigStore(
+            self.profiles_path.with_name("udpq-profiles.json")
+        )
+        self.udpq_runtime_available = False
         self.connection_controller = connection_controller or self._create_live_connection_controller()
         self._connection_worker = None
         self._catalog_worker = None
@@ -652,6 +760,10 @@ class MainWindow(QMainWindow):
         self.import_apna_file_action.triggered.connect(self._import_apna_apk)
         self.import_apna_live_action = self.import_menu.addAction("Fetch live APNA catalog…")
         self.import_apna_live_action.triggered.connect(self._fetch_live_apna_catalog)
+        self.import_udpq_action = self.import_menu.addAction(
+            "UDPQ / StarUDP profile (experimental)…"
+        )
+        self.import_udpq_action.triggered.connect(self._import_udpq_profile)
         self.download_apna_manual_action = self.import_menu.addAction("Open manual APNA catalog download…")
         self.download_apna_manual_action.triggered.connect(self._open_manual_apna_download)
         self.import_xray_action = self.import_menu.addAction("Xray JSON (VLESS / VMess / Trojan / UDP-capable)…")
@@ -773,10 +885,22 @@ class MainWindow(QMainWindow):
             self.xray_config_store,
             apna_supervisor,
         )
-        engine = MultiTransportTunnelEngine({
+        engines = {
             Transport.XRAY: xray_engine,
             Transport.APNA_SSH: apna_engine,
-        })
+        }
+        udpq_executable = Path(program_files) / "ApnaWin" / "engine" / "udpq-client.exe"
+        if udpq_executable.is_file() and not udpq_executable.is_symlink():
+            udpq_sidecar = UdpqSidecarSupervisor(udpq_executable)
+            udpq_engine = UdpqTunnelEngine(
+                udpq_sidecar,
+                xray_engine,
+                self.xray_config_store,
+                self.udpq_profile_store.load,
+            )
+            engines[Transport.UDPQ] = udpq_engine
+            self.udpq_runtime_available = True
+        engine = MultiTransportTunnelEngine(engines)
         return ConnectionController(engine)
 
     def _update_connection_controls(self):
@@ -791,12 +915,15 @@ class MainWindow(QMainWindow):
                     has_config = self.xray_config_store.has_config(profile.name)
                 elif profile.transport is Transport.APNA_SSH:
                     has_config = self.apna_profile_store.has_config(profile.name)
+                elif profile.transport is Transport.UDPQ:
+                    has_config = self.udpq_profile_store.has_config(profile.name)
             except (OSError, ValueError):
                 has_config = False
         state = controller.state if controller is not None else ConnectionState.DISCONNECTED
         self.connect_button.setEnabled(
             not busy and controller is not None and profile is not None
-            and profile.transport in {Transport.XRAY, Transport.APNA_SSH}
+            and profile.transport in {Transport.XRAY, Transport.APNA_SSH, Transport.UDPQ}
+            and (profile.transport is not Transport.UDPQ or self.udpq_runtime_available)
             and has_config and state is ConnectionState.DISCONNECTED
         )
         self.disconnect_button.setEnabled(
@@ -811,6 +938,8 @@ class MainWindow(QMainWindow):
             )
         if hasattr(self, "import_xray_share_action"):
             self.import_xray_share_action.setEnabled(self.profile_storage_writable)
+        if hasattr(self, "import_udpq_action"):
+            self.import_udpq_action.setEnabled(self.profile_storage_writable and os.name == "nt")
         self._update_catalog_import_actions()
 
     def _connect_selected_profile(self):
@@ -819,7 +948,8 @@ class MainWindow(QMainWindow):
         row = self.profile_list.currentRow()
         if (
             0 <= row < len(self.profiles)
-            and self.profiles[row].transport in {Transport.XRAY, Transport.APNA_SSH}
+            and self.profiles[row].transport in {Transport.XRAY, Transport.APNA_SSH, Transport.UDPQ}
+            and (self.profiles[row].transport is not Transport.UDPQ or self.udpq_runtime_available)
         ):
             self._start_connection_worker("connect", self.profiles[row])
 
@@ -992,6 +1122,7 @@ class MainWindow(QMainWindow):
         profile = self.profiles[row]
         has_xray_config = False
         has_apna_config = False
+        has_udpq_config = False
         try:
             has_xray_config = self.xray_config_store.has_config(profile.name)
         except (OSError, ValueError) as exc:
@@ -1006,6 +1137,13 @@ class MainWindow(QMainWindow):
                 "Encrypted APNA profile storage is unavailable. "
                 f"({type(exc).__name__})"
             )
+        try:
+            has_udpq_config = self.udpq_profile_store.has_config(profile.name)
+        except (OSError, ValueError) as exc:
+            self.status_label.setText(
+                "Encrypted UDPQ config storage is unavailable. "
+                f"({type(exc).__name__})"
+            )
         self.import_xray_config_button.setEnabled(
             self.profile_storage_writable and profile.transport == Transport.XRAY
         )
@@ -1015,6 +1153,17 @@ class MainWindow(QMainWindow):
         )
         if has_xray_config and profile.transport is Transport.XRAY:
             details += "\nXray TUN config: imported and encrypted for this Windows user"
+        if has_udpq_config and profile.transport is Transport.UDPQ:
+            try:
+                config = self.udpq_profile_store.load(profile.name)
+                details += (
+                    "\\nUDPQ credentials/config: encrypted for this Windows user"
+                    f"\\nALPN: {config.alpn}  •  TLS SNI: {config.server_name}"
+                    f"\\nPacket transport: {config.protocol}  •  UDP enabled"
+                    "\\nTLS certificate verification: enabled"
+                )
+            except (OSError, ValueError, TypeError, KeyError) as exc:
+                details += f"\\nUDPQ encrypted settings unavailable ({type(exc).__name__})"
         if has_apna_config and profile.transport is Transport.APNA_SSH:
             try:
                 config = self.apna_profile_store.load(profile)
@@ -1174,6 +1323,11 @@ class MainWindow(QMainWindow):
             and original.transport is Transport.APNA_SSH
             and profile.transport is Transport.APNA_SSH
         )
+        renamed_udpq = (
+            renamed_config
+            and original.transport is Transport.UDPQ
+            and profile.transport is Transport.UDPQ
+        )
         if renamed_xray:
             try:
                 self.xray_config_store.rename(original.name, profile.name)
@@ -1185,6 +1339,16 @@ class MainWindow(QMainWindow):
                     f"could not be moved. ({type(exc).__name__})",
                 )
                 return
+        if original.transport is Transport.UDPQ and profile.transport is Transport.UDPQ and (
+            original.endpoint_host != profile.endpoint_host
+            or original.endpoint_port != profile.endpoint_port
+        ):
+            QMessageBox.warning(
+                self, "UDPQ profile is bound to encrypted settings",
+                "Changing the server endpoint invalidates the encrypted UDPQ settings. "
+                "Import a new UDPQ profile for a different endpoint.",
+            )
+            return
         if renamed_apna:
             try:
                 self.apna_profile_store.rename(original, profile)
@@ -1197,6 +1361,15 @@ class MainWindow(QMainWindow):
                 )
                 return
 
+        if renamed_udpq:
+            try:
+                self.udpq_profile_store.rename(original.name, profile.name)
+            except (OSError, TypeError, ValueError) as exc:
+                QMessageBox.warning(
+                    self, "Could not rename encrypted UDPQ settings",
+                    f"The profile was not changed. ({type(exc).__name__})",
+                )
+                return
         if self._save_profiles(updated):
             if original.transport is Transport.XRAY and profile.transport is not Transport.XRAY:
                 try:
@@ -1206,6 +1379,14 @@ class MainWindow(QMainWindow):
                         self,
                         "Encrypted config cleanup",
                         f"The profile was saved, but its unused Xray config remains stored. ({type(exc).__name__})",
+                    )
+            if original.transport is Transport.UDPQ and profile.transport is not Transport.UDPQ:
+                try:
+                    self.udpq_profile_store.remove(original.name)
+                except (OSError, ValueError) as exc:
+                    QMessageBox.warning(
+                        self, "Encrypted config cleanup",
+                        f"The profile was saved, but its unused UDPQ settings remain stored. ({type(exc).__name__})",
                     )
             if original.transport is Transport.APNA_SSH and profile.transport is not Transport.APNA_SSH:
                 try:
@@ -1511,6 +1692,47 @@ class MainWindow(QMainWindow):
             show_copyable_error(self, "APNA catalog import report", f"Source: {source_label}\n" + report)
 
 
+    def _import_udpq_profile(self) -> None:
+        """Import a generic StarUDP-compatible profile with DPAPI-protected secrets."""
+        if not self.profile_storage_writable:
+            return
+        dialog = UdpqImportDialog(self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        profile = None
+        stored = False
+        try:
+            profile, config = dialog.to_profile_and_config()
+            if any(item.name.casefold() == profile.name.casefold() for item in self.profiles):
+                raise ValueError("A profile with this name already exists")
+            self.udpq_profile_store.save(profile, config)
+            stored = True
+            updated = [*self.profiles, profile]
+            if not self._save_profiles(updated):
+                self.udpq_profile_store.remove(profile.name)
+                return
+            self._refresh_profiles(len(updated) - 1)
+            self.status_label.setText(
+                "UDPQ profile imported. APNA protocol parameters remain unverified; "
+                "a successful connection must be tested against an authorized compatible server."
+            )
+        except (OSError, TypeError, ValueError) as exc:
+            if stored and profile is not None:
+                try:
+                    self.udpq_profile_store.remove(profile.name)
+                except (OSError, TypeError, ValueError):
+                    QMessageBox.critical(
+                        self, "UDPQ import rollback failed",
+                        "Profile metadata was not saved and encrypted UDPQ cleanup failed. "
+                        "Inspect the UDPQ config store before retrying.",
+                    )
+                    return
+            QMessageBox.warning(
+                self, "UDPQ profile import failed",
+                f"The profile was not imported. Credentials are not included in diagnostics. "
+                f"({type(exc).__name__}: {exc})",
+            )
+
     def _import_wireguard_config(self) -> None:
         """Import a standard WireGuard configuration into the encrypted Xray profile store."""
         if not self.profile_storage_writable:
@@ -1765,6 +1987,7 @@ class MainWindow(QMainWindow):
         for label, store in (
             ("Xray", self.xray_config_store),
             ("APNA", self.apna_profile_store),
+            ("UDPQ", self.udpq_profile_store),
         ):
             try:
                 store.remove_many(profile_names)
@@ -1807,6 +2030,10 @@ class MainWindow(QMainWindow):
                 self.apna_profile_store.remove(profile.name)
             except (OSError, ValueError) as exc:
                 cleanup_errors.append(f"APNA ({type(exc).__name__})")
+            try:
+                self.udpq_profile_store.remove(profile.name)
+            except (OSError, ValueError) as exc:
+                cleanup_errors.append(f"UDPQ ({type(exc).__name__})")
             if cleanup_errors:
                 QMessageBox.warning(
                     self,
