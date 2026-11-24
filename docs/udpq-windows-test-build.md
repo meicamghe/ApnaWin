@@ -7,10 +7,10 @@ This workflow creates a **test-only portable ZIP** from the current PR branch. I
 - ApnaWin desktop executable and UAC elevated helper;
 - pinned Xray-core v26.11.9 and Wintun 0.14.1 runtimes, with their official archive hashes checked;
 - the Windows x64 UDPQ sidecar built from the MIT-licensed StarUDP source commit 23fa29bb4fad600330b30e2b703b8029ef091446;
-- a runtime manifest containing the UDPQ executable SHA-256;
+- a runtime manifest containing the pinned source commit, reviewed credential-redaction patch SHA-256 and UDPQ executable SHA-256;
 - the installer script and third-party license notices.
 
-The desktop registers the UDPQ engine only when the sidecar and its manifest hash are present and valid. The UDPQ profile's authentication data is stored using current-user DPAPI. A temporary JSON config is created only for sidecar startup and removed after the SOCKS5 listener is protocol-probed.
+The build applies a small local patch to the pinned client source so INFO-level config logging redacts authentication bytes/string, obfuscation password and local proxy credentials. The desktop registers the UDPQ engine only when the sidecar and its pinned source/patch/binary manifest values are present and valid. The UDPQ profile's authentication data is stored using current-user DPAPI. A temporary JSON config is created only for sidecar startup and removed after the SOCKS5 listener is protocol-probed.
 
 ## Install on a Windows test machine
 
