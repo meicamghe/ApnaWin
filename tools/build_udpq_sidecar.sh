@@ -28,6 +28,8 @@ fi
 
 git -C "${SOURCE_ROOT}" fetch --depth 1 origin "${STARUDP_COMMIT}"
 git -C "${SOURCE_ROOT}" checkout --detach "${STARUDP_COMMIT}"
+git -C "${SOURCE_ROOT}" reset --hard "${STARUDP_COMMIT}"
+git -C "${SOURCE_ROOT}" clean -fd
 
 actual_commit="$(git -C "${SOURCE_ROOT}" rev-parse HEAD)"
 if [[ "${actual_commit}" != "${STARUDP_COMMIT}" ]]; then
