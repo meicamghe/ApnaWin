@@ -347,10 +347,23 @@ class UdpqSidecarSupervisor:
     def socks_address(self) -> tuple[str, int] | None:
         return self._socks_address
 
+    def _cleanup_stale_configs(self) -> None:
+        """Remove orphaned plaintext configs left by a crash after one hour."""
+        cutoff = time.time() - 3600
+        for candidate in self.private_dir.glob("udpq-*.json"):
+            try:
+                if candidate.is_symlink() or not candidate.is_file():
+                    continue
+                if candidate.stat().st_mtime < cutoff:
+                    candidate.unlink()
+            except FileNotFoundError:
+                continue
+
     def _write_private_config(self, config: bytes) -> Path:
         self.private_dir.mkdir(parents=True, exist_ok=True)
-        if self.private_dir.is_symlink():
-            raise OSError("UDPQ private config directory must not be a symbolic link")
+        if self.private_dir.is_symlink() or self.private_dir.parent.is_symlink():
+            raise OSError("UDPQ private config directory and parent must not be symbolic links")
+        self._cleanup_stale_configs()
         descriptor, name = tempfile.mkstemp(
             prefix="udpq-", suffix=".json", dir=self.private_dir
         )
