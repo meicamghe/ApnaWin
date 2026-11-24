@@ -18,7 +18,7 @@ def _zip_bytes(files: dict[str, bytes]) -> bytes:
 
 
 def test_inventory_reports_target_hash_and_abi(tmp_path):
-    sample = b"\\x7fELF" + b"sample-native-bytes"
+    sample = bytes([0x7F]) + b"ELF" + b"sample-native-bytes"
     apk = tmp_path / "split_config.arm64_v8a.apk"
     apk.write_bytes(_zip_bytes({
         "lib/arm64-v8a/libudpqtwo.so": sample,
@@ -36,7 +36,7 @@ def test_inventory_reports_target_hash_and_abi(tmp_path):
 
 
 def test_inventory_finds_native_library_inside_nested_xapk(tmp_path):
-    sample = b"\\x7fELF" + b"udp-thunder-sample"
+    sample = bytes([0x7F]) + b"ELF" + b"udp-thunder-sample"
     nested_apk = _zip_bytes({"lib/arm64-v8a/libudpqtwo.so": sample})
     xapk = tmp_path / "udp-thunder-1.1.xapk"
     xapk.write_bytes(_zip_bytes({
@@ -49,11 +49,11 @@ def test_inventory_finds_native_library_inside_nested_xapk(tmp_path):
 
     assert target["nested_apk"] == "config.arm64_v8a.apk"
     assert target["abi"] == "arm64-v8a"
-    assert target["sha256"] == __import__("hashlib").sha256(sample).hexdigest()
+    assert target["sha256"] == hashlib.sha256(sample).hexdigest()
 
 
 def test_inventory_extracts_only_to_explicit_directory(tmp_path):
-    sample = b"\\x7fELF" + b"native"
+    sample = bytes([0x7F]) + b"ELF" + b"native"
     apk = tmp_path / "split.apk"
     apk.write_bytes(_zip_bytes({"lib/arm64-v8a/libudpqtwo.so": sample}))
     output = tmp_path / "extracted"
