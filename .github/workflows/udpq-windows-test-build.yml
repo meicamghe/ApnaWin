@@ -36,6 +36,7 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const branch = "vpn/dual-stack-egress-readiness";
+            const currentRunId = Number(context.runId);
             const response = await github.rest.actions.listWorkflowRunsForRepo({
               owner, repo, per_page: 100
             });
@@ -47,7 +48,7 @@ jobs:
               (latest, run) => Math.max(latest, run.id), 0
             );
             for (const run of queued) {
-              if (run.id === context.runId || run.id === keepSidecarId) continue;
+              if (run.id === currentRunId || run.id === keepSidecarId) continue;
               try {
                 await github.rest.actions.cancelWorkflowRun({
                   owner, repo, run_id: run.id
