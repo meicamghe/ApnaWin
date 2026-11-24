@@ -116,7 +116,7 @@ def test_udpq_config_rejects_control_chars_and_weak_tls_option(tmp_path):
 
 def test_udpq_supervisor_starts_probes_and_removes_plaintext_config(tmp_path):
     executable = tmp_path / "udpq-client.exe"
-    executable.write_bytes(b"test-executable")
+    executable.write_bytes(b"MZtest-executable")
     process = _FakeProcess()
     captured = {}
 
@@ -152,7 +152,7 @@ def test_udpq_supervisor_starts_probes_and_removes_plaintext_config(tmp_path):
 
 def test_udpq_supervisor_fails_closed_if_sidecar_exits_before_ready(tmp_path):
     executable = tmp_path / "udpq-client.exe"
-    executable.write_bytes(b"test-executable")
+    executable.write_bytes(b"MZtest-executable")
     process = _FakeProcess(exit_code=17)
     supervisor = UdpqSidecarSupervisor(
         executable,
@@ -172,7 +172,7 @@ def test_udpq_supervisor_fails_closed_if_sidecar_exits_before_ready(tmp_path):
 
 def test_udpq_supervisor_times_out_and_terminates_process(tmp_path):
     executable = tmp_path / "udpq-client.exe"
-    executable.write_bytes(b"test-executable")
+    executable.write_bytes(b"MZtest-executable")
     process = _FakeProcess()
     clock = [0.0]
 
