@@ -168,7 +168,7 @@ def test_udpq_tunnel_start_failure_cleans_sidecar_and_config():
     assert not sidecar.is_running
     assert sidecar.stop_calls == 1
     assert xray.state is ConnectionState.DISCONNECTED
-    assert store.removed == ["udpq-test"]
+    assert store.removed == [xray.validated_profile.name]
     assert engine.active_profile is None
 
     engine.disconnect()
@@ -199,4 +199,4 @@ def test_udpq_tunnel_detects_sidecar_exit_and_stops_in_safe_order():
 
     engine.disconnect()
     assert xray.state is ConnectionState.DISCONNECTED
-    assert store.removed == ["udpq-test"]
+    assert store.removed == [xray.validated_profile.name]
