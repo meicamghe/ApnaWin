@@ -50,6 +50,7 @@ def _serialize_config(config: UdpqClientConfig) -> bytes:
         "schema_version": 1,
         "server_host": config.server_host,
         "server_port": config.server_port,
+        "server_port_spec": config.server_port_spec,
         "auth_str": config.auth_str,
         "alpn": config.alpn,
         "server_name": config.server_name,
@@ -88,7 +89,7 @@ def _deserialize_config(raw: bytes) -> UdpqClientConfig:
     except (UnicodeError, ValueError, TypeError) as exc:
         raise ValueError("UDPQ profile plaintext is invalid JSON") from exc
     expected = {
-        "schema_version", "server_host", "server_port", "auth_str", "alpn",
+        "schema_version", "server_host", "server_port", "server_port_spec", "auth_str", "alpn",
         "server_name", "up_mbps", "down_mbps", "socks_host", "socks_port",
         "ca_file", "protocol", "obfs", "hop_interval", "fast_open", "lazy_start",
     }
