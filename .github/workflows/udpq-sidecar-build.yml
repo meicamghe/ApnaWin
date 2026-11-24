@@ -6,6 +6,7 @@ on:
     paths:
       - "tools/build_udpq_sidecar.sh"
       - "native/udpq/**"
+      - ".gitattributes"
       - ".github/workflows/udpq-sidecar-build.yml"
 
 permissions:
