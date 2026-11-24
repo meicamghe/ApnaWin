@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import json
+from pathlib import Path
 import zipfile
 
 from tools.apk_native_inventory import inspect_path, inventory_zip
@@ -29,9 +31,8 @@ def test_inventory_reports_target_hash_and_abi(tmp_path):
 
     assert target["abi"] == "arm64-v8a"
     assert target["library_name"] == "libudpqtwo.so"
-    assert target["sha256"] == __import__("hashlib").sha256(sample).hexdigest()
+    assert target["sha256"] == hashlib.sha256(sample).hexdigest()
     assert target["elf_magic"] is True
-    assert target["native_code_executed"] if "native_code_executed" in target else True
 
 
 def test_inventory_finds_native_library_inside_nested_xapk(tmp_path):
@@ -60,7 +61,7 @@ def test_inventory_extracts_only_to_explicit_directory(tmp_path):
     results = inspect_path(apk, output)
     target = next(item for item in results if item.get("target_match"))
 
-    extracted = output / target["extracted_to"].split("/")[-1]
+    extracted = Path(target["extracted_to"])
     assert extracted.read_bytes() == sample
     assert extracted.parent == output
 
