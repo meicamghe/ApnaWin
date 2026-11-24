@@ -86,7 +86,7 @@ def inventory_zip(
             item["status"] = "read"
             if library_name.lower() == TARGET_NAME:
                 item["target_match"] = True
-            if extract_dir is not None:
+            if extract_dir is not None and library_name.lower() == TARGET_NAME:
                 extract_dir.mkdir(parents=True, exist_ok=True)
                 label = safe_label(Path(nested_name or source).stem)
                 filename = f"{label}__{safe_label(abi)}__{safe_label(library_name)}__{item['sha256'][:12]}.so"
