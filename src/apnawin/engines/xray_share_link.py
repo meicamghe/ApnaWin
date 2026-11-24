@@ -1,8 +1,8 @@
-"""Import secure Xray share links into encrypted Windows TUN profiles.
+"""Import secure Xray share links and WireGuard configs into encrypted Windows TUN profiles.
 
 The bundled Xray runtime supplies the protocol implementations. This module
-normalizes supported VLESS, VMess, Trojan and Shadowsocks share links into a
-strict full-tunnel config; credentials are returned only inside config_bytes
+normalizes VLESS, VMess, Trojan, Shadowsocks and Hysteria 2 links, plus standard
+WireGuard configs, into a strict full-tunnel config; credentials are returned only inside config_bytes
 for immediate DPAPI storage and are never included in profile metadata/errors.
 """
 from __future__ import annotations
@@ -463,7 +463,9 @@ def _parse_hysteria2(parsed) -> tuple[str, int, dict, dict]:
         host, port = _host_port(parsed.hostname, parsed.port or 443)
     except ValueError as exc:
         raise XrayShareLinkError("Hysteria 2 server endpoint is invalid") from exc
-    auth = unquote(parsed.username or "")
+    if not parsed.username:
+        raise XrayShareLinkError("Hysteria 2 link must contain authentication credentials")
+    auth = unquote(parsed.username)
     if parsed.password is not None:
         auth += ":" + unquote(parsed.password)
     if not auth or len(auth) > 1024 or any(ord(ch) < 32 or ord(ch) == 127 for ch in auth):
@@ -578,6 +580,8 @@ def import_wireguard_config(
         endpoint_value = peer.get("endpoint", "")
         try:
             endpoint = urlsplit("//" + endpoint_value)
+            if endpoint.username is not None or endpoint.password is not None or endpoint.path or endpoint.query or endpoint.fragment:
+                raise ValueError("WireGuard endpoint must be host:port only")
             endpoint_host, endpoint_port = _url_endpoint(endpoint)
         except (ValueError, XrayShareLinkError) as exc:
             raise XrayShareLinkError("WireGuard Peer Endpoint is invalid") from exc
@@ -663,7 +667,7 @@ def build_xray_tun_config(outbound: dict, *, adapter_name: str = "ApnaWin") -> b
 
 
 def import_xray_share_link(uri: str) -> ImportedXrayProfile:
-    """Parse a VLESS/VMess/Trojan/Shadowsocks link without persisting plaintext secrets."""
+    """Parse a supported Xray share link without persisting plaintext secrets."""
     if not isinstance(uri, str) or not uri.strip() or len(uri) > 131072:
         raise XrayShareLinkError("Share link is empty or exceeds the size limit")
     text = uri.strip()
