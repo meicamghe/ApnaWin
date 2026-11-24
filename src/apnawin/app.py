@@ -1196,7 +1196,7 @@ class MainWindow(QMainWindow):
                     f"\nALPN: {config.alpn}  •  TLS SNI: {config.server_name}"
                     f"\nPacket transport: {config.protocol}  •  UDP enabled"
                     + (f"\nUDP port hopping: {config.server_port_spec} every {config.hop_interval}s" if config.server_port_spec else "")
-                    "\nTLS certificate verification: enabled"
+                    + "\nTLS certificate verification: enabled"
                 )
             except (OSError, ValueError, TypeError, KeyError) as exc:
                 details += f"\nUDPQ encrypted settings unavailable ({type(exc).__name__})"
