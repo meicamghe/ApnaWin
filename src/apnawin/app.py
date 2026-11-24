@@ -52,6 +52,7 @@ from apnawin.services.udpq_sidecar import (
     UdpqClientConfig,
     UdpqSidecarSupervisor,
     load_udpq_runtime_sha256,
+    parse_server_port_spec,
 )
 from apnawin.storage.udpq_config_store import UdpqConfigStore
 from apnawin.services.apna_lite_catalog import (
@@ -178,9 +179,7 @@ class UdpqImportDialog(QDialog):
 
         self.name_edit = QLineEdit("UDPQ profile")
         self.host_edit = QLineEdit()
-        self.port_spin = QSpinBox()
-        self.port_spin.setRange(1, 65535)
-        self.port_spin.setValue(443)
+        self.port_spec_edit = QLineEdit("443")
         self.auth_edit = QLineEdit()
         self.auth_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.alpn_edit = QLineEdit("hysteria")
@@ -210,7 +209,7 @@ class UdpqImportDialog(QDialog):
         form = QFormLayout()
         form.addRow("Profile name", self.name_edit)
         form.addRow("Server host", self.host_edit)
-        form.addRow("Server port", self.port_spin)
+        form.addRow("Server port(s) / range", self.port_spec_edit)
         form.addRow("Authentication string", self.auth_edit)
         form.addRow("ALPN", self.alpn_edit)
         form.addRow("TLS server name (SNI)", self.sni_edit)
@@ -263,9 +262,11 @@ class UdpqImportDialog(QDialog):
         name = self.name_edit.text().strip()
         if not name:
             raise ValueError("Profile name is required")
+        server_port, server_port_spec = parse_server_port_spec(self.port_spec_edit.text().strip())
         config = UdpqClientConfig(
             server_host=host,
-            server_port=self.port_spin.value(),
+            server_port=server_port,
+            server_port_spec=server_port_spec,
             auth_str=self.auth_edit.text(),
             alpn=self.alpn_edit.text().strip(),
             server_name=self.sni_edit.text().strip() or host,
@@ -1194,6 +1195,7 @@ class MainWindow(QMainWindow):
                     "\nUDPQ credentials/config: encrypted for this Windows user"
                     f"\nALPN: {config.alpn}  •  TLS SNI: {config.server_name}"
                     f"\nPacket transport: {config.protocol}  •  UDP enabled"
+                    + (f"\nUDP port hopping: {config.server_port_spec} every {config.hop_interval}s" if config.server_port_spec else "")
                     "\nTLS certificate verification: enabled"
                 )
             except (OSError, ValueError, TypeError, KeyError) as exc:
