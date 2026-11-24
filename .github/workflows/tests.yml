@@ -1,7 +1,7 @@
 name: Windows tests and runtime checks (no packaging)
 
-# This workflow intentionally validates source and tests only. Product packaging
-# and artifact publication remain disabled until explicitly authorized.
+# This workflow validates source and tests only. A separate PR-scoped workflow
+# uploads a short-lived UDPQ test artifact; no GitHub Release is published.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
