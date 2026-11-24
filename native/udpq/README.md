@@ -51,4 +51,6 @@ No installer or release artifact is produced.
 - Windows Job Object process ownership;
 - short-lived per-user config file, deleted after the SOCKS5 listener passes a protocol-level readiness probe.
 
-This primitive is **not yet registered as a full VPN transport**. It does not start Wintun/Xray itself. The next integration layer will compose it with the existing Xray/Wintun TUN engine, after the APNA runtime ALPN and configuration mapping are known.
+The experimental `UdpqTunnelEngine` composes this sidecar with the existing Xray/Wintun TUN engine. It starts the sidecar first, validates the loopback SOCKS5 listener, then starts Xray/Wintun; disconnect stops Xray/Wintun before the sidecar. Its synthetic Xray config key is isolated from the user's original profile name.
+
+The engine is **not yet registered in the desktop composition root**. APNA's protected runtime ALPN, authentication, rates, and packet transport selection still need to be mapped before exposing it as an APNA-compatible profile type.
