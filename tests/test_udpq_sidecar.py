@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 from pathlib import Path
 
 import pytest
@@ -342,3 +344,29 @@ def test_udpq_normalizes_single_port_spec_to_default(tmp_path):
     config = _config(tmp_path, server_port_spec="00443")
     assert config.server_port == 443
     assert config.server_port_spec is None
+
+
+def test_udpq_supervisor_cleans_orphaned_plaintext_configs(tmp_path):
+    executable = tmp_path / "udpq-client.exe"
+    executable.write_bytes(b"MZtest-executable")
+    private_dir = tmp_path / "private"
+    private_dir.mkdir()
+    stale = private_dir / "udpq-stale.json"
+    fresh = private_dir / "udpq-fresh.json"
+    stale.write_text('{"auth_str":"orphaned-secret"}', encoding="utf-8")
+    fresh.write_text('{"auth_str":"active-secret"}', encoding="utf-8")
+    old = time.time() - 7200
+    os.utime(stale, (old, old))
+
+    supervisor = UdpqSidecarSupervisor(
+        executable,
+        private_dir=private_dir,
+        process_factory=lambda _path, _args: pytest.fail("must not launch"),
+        platform_name="nt",
+    )
+    new_path = supervisor._write_private_config(b'{"auth_str":"new-secret"}')
+
+    assert not stale.exists()
+    assert fresh.exists()
+    assert new_path.exists()
+    new_path.unlink()
