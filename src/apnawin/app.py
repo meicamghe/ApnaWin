@@ -1157,13 +1157,13 @@ class MainWindow(QMainWindow):
             try:
                 config = self.udpq_profile_store.load(profile.name)
                 details += (
-                    "\\nUDPQ credentials/config: encrypted for this Windows user"
-                    f"\\nALPN: {config.alpn}  •  TLS SNI: {config.server_name}"
-                    f"\\nPacket transport: {config.protocol}  •  UDP enabled"
-                    "\\nTLS certificate verification: enabled"
+                    "\nUDPQ credentials/config: encrypted for this Windows user"
+                    f"\nALPN: {config.alpn}  •  TLS SNI: {config.server_name}"
+                    f"\nPacket transport: {config.protocol}  •  UDP enabled"
+                    "\nTLS certificate verification: enabled"
                 )
             except (OSError, ValueError, TypeError, KeyError) as exc:
-                details += f"\\nUDPQ encrypted settings unavailable ({type(exc).__name__})"
+                details += f"\nUDPQ encrypted settings unavailable ({type(exc).__name__})"
         if has_apna_config and profile.transport is Transport.APNA_SSH:
             try:
                 config = self.apna_profile_store.load(profile)
@@ -1413,6 +1413,14 @@ class MainWindow(QMainWindow):
                 self.status_label.setText(
                     "Profile save failed and encrypted APNA settings rename-back also failed; "
                     "check the encrypted APNA profile store."
+                )
+        elif renamed_udpq:
+            try:
+                self.udpq_profile_store.rename(profile.name, original.name)
+            except (OSError, TypeError, ValueError):
+                self.status_label.setText(
+                    "Profile save failed and encrypted UDPQ settings rename-back also failed; "
+                    "check the encrypted UDPQ profile store."
                 )
 
     def _import_profiles(self) -> None:
