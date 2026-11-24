@@ -46,7 +46,8 @@ class _FakeSidecar:
             raise RuntimeError("sidecar start failed")
         self.started_config = config
         self.is_running = True
-        return config.socks_host, config.socks_port
+        port = config.socks_port or 23456
+        return config.socks_host, port
 
     def stop(self):
         self.stop_calls += 1
@@ -200,3 +201,23 @@ def test_udpq_tunnel_detects_sidecar_exit_and_stops_in_safe_order():
     engine.disconnect()
     assert xray.state is ConnectionState.DISCONNECTED
     assert store.removed == [xray.validated_profile.name]
+
+
+def test_udpq_tunnel_uses_supervisor_allocated_socks_port():
+    sidecar = _FakeSidecar()
+    xray = _FakeXrayEngine()
+    store = _FakeConfigStore()
+    engine = UdpqTunnelEngine(
+        sidecar,
+        xray,
+        store,
+        lambda _name: _config(socks_port=0),
+    )
+    profile = _profile()
+
+    engine.connect(profile)
+
+    assert xray.validated_profile.endpoint_host == "127.0.0.1"
+    assert xray.validated_profile.endpoint_port == 23456
+    assert engine.state is ConnectionState.CONNECTED
+    engine.disconnect()
