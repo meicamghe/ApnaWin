@@ -271,7 +271,7 @@ The pinned source's client and server packet-connection factory maps expose four
 | wechat-video | Alias of the same WeChat packet connection factory | Supported |
 | faketcp | Linux-specific raw packet implementation; non-Linux build selects tcp_stub.go, which returns "faketcp is not supported on this platform" | Not supported |
 
-The Windows profile importer therefore exposes only UDP, WeChat and WeChat-video. FakeTCP is rejected by validation instead of silently falling back to UDP. The optional obfs field is passed through as the XPlus obfuscation password. The current UI accepts a single server port; multi-port/range hopping remains a later configuration enhancement and is not implied by the current hop_interval field.
+The Windows profile importer therefore exposes only UDP, WeChat and WeChat-video. FakeTCP is rejected by validation instead of silently falling back to UDP. The optional obfs field is passed through as the XPlus obfuscation password. The Windows profile UI accepts bounded comma-separated ports and ascending ranges for UDP mode (maximum 32 expanded ports); WeChat packet modes reject port hopping because the pinned upstream client factory does not apply its multi-port parser to those modes.
 
 
 ## Reproducible Go symbol comparison on Ubuntu
