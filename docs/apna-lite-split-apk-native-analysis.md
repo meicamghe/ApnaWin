@@ -111,3 +111,34 @@ It is therefore a candidate for one of the protected proxy/UDP services, but thi
 - [ ] Run an authorized APNA profile on Windows 10/11 and verify SSH handshake, UDPGW datagram round-trip, routed TCP/UDP, DNS, IPv4/IPv6 egress and cleanup.
 
 No credentials, decoded catalog content, server hostnames or private payloads are included in this analysis.
+
+
+## 6. ApnaWin non-SSH protocol implementation update — 2026-11-24
+
+The active Windows branch now uses the pinned Xray 26.11.9 runtime for the independently validated outbound families below. This is a runtime/configuration compatibility statement, not evidence that a particular APNA catalog category selects the same protocol.
+
+| Xray outbound / transport | ApnaWin import path | Boundary |
+|---|---|---|
+| VLESS | Standard share link | TCP, WS, gRPC, HTTPUpgrade, XHTTP, mKCP; TLS/REALITY constraints validated |
+| VMess | Standard Base64 JSON share link | AEAD-only; supported transports validated |
+| Trojan | Standard share link | TLS/REALITY and supported transports |
+| Shadowsocks | SIP002 share link | Supported AEAD and 2022 ciphers; SIP003 plugins rejected |
+| Hysteria 2 | `hysteria2://` / `hy2://` | TLS verification required; unsupported obfuscation/ECH/pinning options rejected |
+| WireGuard | Standard `.conf` file | Multiple peers, keys, addresses, DNS, MTU and AllowedIPs |
+| MASQUE | Single Xray MASQUE outbound JSON | CONNECT-IP over verified TLS with HTTP/2 or HTTP/3 ALPN; no Mux |
+| HTTP proxy | `http://` / `https://` URI | TCP only; plaintext HTTP is not encrypted |
+| SOCKS5 proxy | `socks://` / `socks5://` URI | TCP only; not a standalone encrypted VPN |
+| XHTTP | Xray VLESS/VMess/Trojan link | Bounded extra headers, padding, XMUX and verified-TLS downloadSettings |
+| mKCP | Xray link `type=kcp` / `type=mkcp` | Current kcpSettings and legacy `mkcp-legacy` UDP FinalMask translation |
+
+The pinned-runtime CI job executes `xray run -test` against generated configs for the new outbound and transport cases. The full unit suite and all five CI jobs passed on the implementation commit; this does not replace an authenticated connection to a real endpoint.
+
+Xray's local-only outbounds such as `freedom`, `blackhole`, DNS and `loopback` are not exposed as selectable remote VPN profiles. In particular, a direct/freedom outbound would violate ApnaWin's full-tunnel no-leak policy.
+
+### 6.1 Remaining native-library evidence gate
+
+`libudpqtwo.so` remains a QUIC/DTLS/SOCKS5/HTTP Go binary candidate, not a proven named protocol. Its product-level role and owning Android service are still unknown. The static evidence available here does not include a recovered Go call graph, owning service entrypoint, protocol handshake contract or an authorized runtime trace. It therefore does not justify relabeling it as TUIC, Hysteria, or another protocol, nor implementing a guessed server wire format.
+
+The Android ABI split supplies ARM64 libraries only; those binaries cannot be reused in the Windows x64 application. The implemented Hysteria 2 and MASQUE paths cover documented Xray QUIC-based tunnel protocols, but they are not asserted to be the private `libudpqtwo.so` protocol.
+
+To close this last reverse-engineering item, collect a fresh authorized trace of the Android service that loads/starts `libudpqtwo.so` (method arguments, service ownership, socket setup and handshake metadata) or provide the exact ARM64 split archive in an accessible project source. No LIAPP bypass or automatic APNA category mapping is authorized by this evidence.
