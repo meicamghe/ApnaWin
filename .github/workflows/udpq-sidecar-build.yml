@@ -33,6 +33,8 @@ jobs:
           if ($actual -ne "23fa29bb4fad600330b30e2b703b8029ef091446") {
             throw "Pinned StarUDP source commit mismatch: $actual"
           }
+          git -C $repo apply "$env:GITHUB_WORKSPACE/native/udpq/patches/redact-client-config-logs.patch"
+          if ($LASTEXITCODE -ne 0) { throw "Could not apply UDPQ credential-redaction patch" }
           "STARUDP_SOURCE=$repo" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Build client sidecar
@@ -78,6 +80,7 @@ jobs:
           git clone --no-checkout https://github.com/starrising321/starudp.git "$repo"
           git -C "$repo" checkout --detach 23fa29bb4fad600330b30e2b703b8029ef091446
           test "$(git -C "$repo" rev-parse HEAD)" = "23fa29bb4fad600330b30e2b703b8029ef091446"
+          git -C "$repo" apply "$GITHUB_WORKSPACE/native/udpq/patches/redact-client-config-logs.patch"
           echo "STARUDP_SOURCE=$repo" >> "$GITHUB_ENV"
       - name: Build Linux reference client/server
         shell: bash
