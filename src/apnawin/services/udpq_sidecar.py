@@ -175,6 +175,51 @@ def _probe_socks5(host: str, port: int, timeout: float) -> bool:
         return False
 
 
+
+def load_udpq_runtime_sha256(manifest_path: str | Path) -> str:
+    """Load the pinned UDPQ executable digest from the protected runtime manifest."""
+    path = Path(manifest_path)
+    if path.is_symlink() or not path.is_file():
+        raise FileNotFoundError("The installed runtime manifest is missing or unsafe")
+    raw = path.read_bytes()
+    if not raw or len(raw) > 64 * 1024:
+        raise ValueError("The installed runtime manifest is empty or too large")
+
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate runtime manifest key: {key}")
+            result[key] = value
+        return result
+
+    def reject_constant(value):
+        raise ValueError(f"invalid runtime manifest constant: {value}")
+
+    try:
+        document = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=unique_object,
+            parse_constant=reject_constant,
+        )
+    except (UnicodeError, ValueError, TypeError) as exc:
+        raise ValueError("The installed runtime manifest is invalid JSON") from exc
+    if (
+        not isinstance(document, dict)
+        or document.get("schema_version") != 1
+        or not isinstance(document.get("udpq"), dict)
+    ):
+        raise ValueError("The installed runtime manifest has no UDPQ entry")
+    digest = document["udpq"].get("executable_sha256")
+    if (
+        not isinstance(digest, str)
+        or len(digest) != 64
+        or any(char not in "0123456789abcdefABCDEF" for char in digest)
+    ):
+        raise ValueError("The installed runtime manifest has an invalid UDPQ SHA-256")
+    return digest.lower()
+
+
 class UdpqSidecarSupervisor:
     """Own a Windows UDPQ client process and its ephemeral private config file."""
 
