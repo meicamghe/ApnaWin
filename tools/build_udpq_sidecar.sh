@@ -9,6 +9,8 @@ readonly STARUDP_COMMIT="23fa29bb4fad600330b30e2b703b8029ef091446"
 readonly WORK_ROOT="${TMPDIR:-/tmp}/apnawin-starudp-${STARUDP_COMMIT}"
 readonly SOURCE_ROOT="${WORK_ROOT}/source"
 readonly OUTPUT_DIR="${APNAWIN_UDPQ_OUTPUT_DIR:-${TMPDIR:-/tmp}/apnawin-udpq-build}"
+readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly REDACTION_PATCH="${REPOSITORY_ROOT}/native/udpq/patches/redact-client-config-logs.patch"
 
 command -v git >/dev/null 2>&1 || {
   echo "git is required to fetch the pinned StarUDP source." >&2
@@ -33,6 +35,9 @@ if [[ "${actual_commit}" != "${STARUDP_COMMIT}" ]]; then
   exit 3
 fi
 
+git -C "${SOURCE_ROOT}" apply --check "${REDACTION_PATCH}"
+git -C "${SOURCE_ROOT}" apply "${REDACTION_PATCH}"
+
 mkdir -p "${OUTPUT_DIR}"
 (
   cd "${SOURCE_ROOT}/app"
@@ -48,4 +53,5 @@ fi
 
 echo "Built Windows x64 sidecar: ${OUTPUT_DIR}/udpq-client.exe"
 echo "Pinned source commit: ${STARUDP_COMMIT}"
+sha256sum "${REDACTION_PATCH}"
 echo "The executable has not been launched and no remote server was contacted."
