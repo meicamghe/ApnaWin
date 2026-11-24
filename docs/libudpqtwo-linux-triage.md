@@ -231,3 +231,17 @@ This strongly suggests Android launches the file as a child executable from the 
 ### Engineering consequence
 
 ApnaWin can build a Windows x64 sidecar from the matching MIT-licensed Go source lineage, then expose a loopback SOCKS5 TCP+UDP listener to the existing Wintun/Xray TUN pipeline. Before calling it APNA-compatible, the remaining checks are the APNA ALPN, exact config values/arguments, auth bytes, transport/obfuscation selection and a real authorized-server handshake. The source's protocol version and structures are now strong implementation evidence, but no live APNA server session has been demonstrated.
+
+
+### Wire serialization detail
+
+The matching source uses \`github.com/lunixbochs/struc\`. Its documented default byte order is **big-endian** unless a field explicitly overrides it. The observed \`sizeof=...\` tags therefore support the following source-derived message layout (lengths are byte counts):
+
+- Control stream starts with one byte: protocol version \`3\`.
+- \`clientHello\`: two unsigned 64-bit rate values, a 16-bit big-endian auth length, then that many auth bytes.
+- \`serverHello\`: one-byte success flag, two unsigned 64-bit rate values, a 16-bit message length, then the message.
+- \`clientRequest\`: one-byte UDP flag, 16-bit host length, host bytes, 16-bit port.
+- \`serverResponse\`: one-byte success flag, 32-bit UDP session ID, 16-bit message length, then the message.
+- \`udpMessage\`: 32-bit session ID, 16-bit host length, host bytes, 16-bit port, 16-bit message ID, one-byte fragment ID, one-byte fragment count, 16-bit data length, then payload bytes.
+
+This layout is derived from the matching public source and the embedded struct/type fingerprints. It is not yet confirmed by a packet capture from an APNA session. Implementations must enforce length limits and reject malformed/truncated frames before allocating buffers.
