@@ -90,7 +90,7 @@ def _url_endpoint(parsed) -> tuple[str, int]:
         host, port = parsed.hostname, parsed.port
     except ValueError as exc:
         raise XrayShareLinkError("Share link contains an invalid server endpoint") from exc
-    return _host_port(host, port if port is not None else 443)
+    return _host_port(host, port)
 
 
 def _host_port(host: str | None, port: int | None) -> tuple[str, int]:
@@ -459,7 +459,10 @@ def _parse_hysteria2(parsed) -> tuple[str, int, dict, dict]:
     """Translate the interoperable Hysteria 2 URI subset supported by Xray."""
     if parsed.path not in {"", "/"}:
         raise XrayShareLinkError("Hysteria 2 share link contains an unsupported URL path")
-    host, port = _url_endpoint(parsed)
+    try:
+        host, port = _host_port(parsed.hostname, parsed.port or 443)
+    except ValueError as exc:
+        raise XrayShareLinkError("Hysteria 2 server endpoint is invalid") from exc
     auth = unquote(parsed.username or "")
     if parsed.password is not None:
         auth += ":" + unquote(parsed.password)
