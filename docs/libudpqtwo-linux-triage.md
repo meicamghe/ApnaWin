@@ -245,3 +245,16 @@ The matching source uses \`github.com/lunixbochs/struc\`. Its documented default
 - \`udpMessage\`: 32-bit session ID, 16-bit host length, host bytes, 16-bit port, 16-bit message ID, one-byte fragment ID, one-byte fragment count, 16-bit data length, then payload bytes.
 
 This layout is derived from the matching public source and the embedded struct/type fingerprints. It is not yet confirmed by a packet capture from an APNA session. Implementations must enforce length limits and reject malformed/truncated frames before allocating buffers.
+
+
+## Reference sidecar validation
+
+The pinned StarUDP client/server was built in CI for Linux and Windows x64. A loopback-only integration test passed using a locally generated certificate trusted by the client (TLS verification remained enabled):
+
+- QUIC handshake over UDP succeeded.
+- SOCKS5 TCP CONNECT relayed an HTTP request to a local HTTP server.
+- SOCKS5 UDP ASSOCIATE relayed a UDP echo datagram through QUIC DATAGRAM and returned the expected payload.
+- The test used only loopback addresses; no external server was contacted.
+- The Windows x64 CLI build and `--help` smoke test also passed. No binary artifact was published.
+
+This validates the reference implementation and the proposed SOCKS5-to-Xray/Wintun integration shape. It does not validate APNA's exact ALPN/auth/config values or connectivity to an APNA provider endpoint.
