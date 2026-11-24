@@ -200,3 +200,31 @@ def test_udpq_supervisor_times_out_and_terminates_process(tmp_path):
     assert process.waited
     assert process.closed
     assert not list((tmp_path / "private").glob("udpq-*.json"))
+
+
+def test_udpq_config_normalizes_dns_and_ca_path(tmp_path):
+    config = _config(
+        tmp_path,
+        server_host="VPN.Example.Test",
+        server_name="VPN.Example.Test",
+        ca_file=str(tmp_path / "." / "ca.pem"),
+    )
+    payload = json.loads(config.to_json_bytes())
+
+    assert config.server_host == "vpn.example.test"
+    assert config.server_name == "vpn.example.test"
+    assert Path(payload["ca"]).is_absolute()
+
+
+def test_udpq_supervisor_rejects_non_pe_sidecar(tmp_path):
+    executable = tmp_path / "not-a-pe.exe"
+    executable.write_bytes(b"not-a-windows-executable")
+    supervisor = UdpqSidecarSupervisor(
+        executable,
+        private_dir=tmp_path / "private",
+        process_factory=lambda _path, _args: pytest.fail("must not launch"),
+        platform_name="nt",
+    )
+
+    with pytest.raises(ValueError, match="Windows PE"):
+        supervisor.start(_config(tmp_path))
