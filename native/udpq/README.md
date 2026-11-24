@@ -53,4 +53,4 @@ No installer or release artifact is produced.
 
 The experimental `UdpqTunnelEngine` composes this sidecar with the existing Xray/Wintun TUN engine. It starts the sidecar first, validates the loopback SOCKS5 listener, then starts Xray/Wintun; disconnect stops Xray/Wintun before the sidecar. Its synthetic Xray config key is isolated from the user's original profile name.
 
-The engine is **not yet registered in the desktop composition root**. APNA's protected runtime ALPN, authentication, rates, and packet transport selection still need to be mapped before exposing it as an APNA-compatible profile type.
+The desktop composition root now conditionally registers the engine when `Program Files/ApnaWin/engine/udpq-client.exe` exists. The Import menu exposes a manual StarUDP-compatible profile form, and credentials are stored in a separate current-user DPAPI store. This is a generic experimental profile path, **not an APNA-compatible profile mapping**. APNA's protected runtime ALPN, authentication, rates, transport mode, obfuscation and port-hopping settings still need to be mapped before APNA catalog categories can use it.
