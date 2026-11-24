@@ -88,7 +88,7 @@ def test_udpq_store_rejects_corrupt_base64_and_decrypted_schema(tmp_path):
         "format_version": 1,
         "configs": {"udpq-test": base64.b64encode(b"encrypted:{}").decode("ascii")},
     }), encoding="utf-8")
-    with pytest.raises(ValueError, match="invalid JSON"):
+    with pytest.raises(ValueError, match="schema has missing or unknown fields"):
         store.load("udpq-test")
 
 
