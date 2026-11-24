@@ -197,6 +197,11 @@ class UdpqImportDialog(QDialog):
         self.down_spin = QSpinBox()
         self.down_spin.setRange(1, 100000)
         self.down_spin.setValue(20)
+        self.hop_spin = QSpinBox()
+        self.hop_spin.setRange(0, 86400)
+        self.hop_spin.setValue(10)
+        self.fast_open_check = QCheckBox("Enable TCP fast-open mode")
+        self.lazy_start_check = QCheckBox("Delay QUIC connection until first traffic")
         self.ca_edit = QLineEdit()
         self.ca_edit.setReadOnly(True)
         self.ca_button = QPushButton("Choose trusted CA…")
@@ -213,6 +218,9 @@ class UdpqImportDialog(QDialog):
         form.addRow("Obfuscation password (optional)", self.obfs_edit)
         form.addRow("Upload limit (Mbps)", self.up_spin)
         form.addRow("Download limit (Mbps)", self.down_spin)
+        form.addRow("Port-hop interval (seconds)", self.hop_spin)
+        form.addRow("", self.fast_open_check)
+        form.addRow("", self.lazy_start_check)
         form.addRow("Custom CA certificate", self.ca_button)
         form.addRow("CA path", self.ca_edit)
 
@@ -268,6 +276,9 @@ class UdpqImportDialog(QDialog):
             ca_file=self.ca_edit.text().strip() or None,
             protocol=str(self.protocol_combo.currentData()),
             obfs=self.obfs_edit.text(),
+            hop_interval=self.hop_spin.value(),
+            fast_open=self.fast_open_check.isChecked(),
+            lazy_start=self.lazy_start_check.isChecked(),
         )
         profile = ConnectionProfile(
             name=name,
