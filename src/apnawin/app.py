@@ -217,7 +217,7 @@ class UdpqImportDialog(QDialog):
         form.addRow("Obfuscation password (optional)", self.obfs_edit)
         form.addRow("Upload limit (Mbps)", self.up_spin)
         form.addRow("Download limit (Mbps)", self.down_spin)
-        form.addRow("Port-hop interval (seconds)", self.hop_spin)
+        form.addRow("Port-hop interval (seconds; 0 = upstream default)", self.hop_spin)
         form.addRow("", self.fast_open_check)
         form.addRow("", self.lazy_start_check)
         form.addRow("Custom CA certificate", self.ca_button)
