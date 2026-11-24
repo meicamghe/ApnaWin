@@ -15,6 +15,7 @@ $XrayArchiveSha256 = "1262522266337b824f07beb8e1375786b437683b3890105469088f8e17
 $WintunVersion = "0.14.1"
 $WintunArchiveUrl = "https://www.wintun.net/builds/wintun-0.14.1.zip"
 $WintunArchiveSha256 = "07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51"
+$UdpqRedactionPatchSha256 = "82f7db651860fe94129a4cd2931459dc8f70973a261261af3943b9ac6a23ea52"
 
 function Assert-Sha256([string] $Path, [string] $Expected, [string] $Name) {
     $actual = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -128,6 +129,9 @@ try {
             throw "The UDPQ source patch file is required to record build provenance."
         }
         $patchHash = (Get-FileHash -LiteralPath $UdpqPatchPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($patchHash -ne $UdpqRedactionPatchSha256) {
+            throw "UDPQ client source patch SHA-256 does not match the reviewed credential-redaction patch."
+        }
         Assert-PeX64 $udpqSource "udpq-client.exe"
         $udpqTarget = Join-Path $engine "udpq-client.exe"
         Copy-Item -LiteralPath $udpqSource -Destination $udpqTarget -Force
