@@ -876,11 +876,16 @@ def import_wireguard_config(
         if not 576 <= mtu <= 9000:
             raise XrayShareLinkError("WireGuard MTU is outside the supported range")
     peer_records = []
+    peer_public_keys: set[str] = set()
+    peer_allowed_prefixes: set[str] = set()
     first_endpoint: tuple[str, int] | None = None
     for peer in peers:
         if set(peer) - {"publickey", "presharedkey", "endpoint", "allowedips", "persistentkeepalive"}:
             raise XrayShareLinkError("WireGuard Peer contains unsupported settings")
         public_key = _wireguard_key(peer.get("publickey", ""), "peer public key")
+        if public_key in peer_public_keys:
+            raise XrayShareLinkError("WireGuard Peer public keys must be unique")
+        peer_public_keys.add(public_key)
         endpoint_value = peer.get("endpoint", "")
         try:
             endpoint = urlsplit("//" + endpoint_value)
@@ -900,6 +905,9 @@ def import_wireguard_config(
             raise XrayShareLinkError("WireGuard AllowedIPs contains an invalid IP prefix") from exc
         if len(set(allowed_ips)) != len(allowed_ips):
             raise XrayShareLinkError("WireGuard AllowedIPs prefixes must be unique within each peer")
+        if peer_allowed_prefixes.intersection(allowed_ips):
+            raise XrayShareLinkError("WireGuard AllowedIPs prefixes must not be assigned to multiple peers")
+        peer_allowed_prefixes.update(allowed_ips)
         record = {
             "endpoint": f"[{endpoint_host}]:{endpoint_port}" if ":" in endpoint_host else f"{endpoint_host}:{endpoint_port}",
             "publicKey": public_key,
