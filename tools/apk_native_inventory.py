@@ -82,7 +82,7 @@ def inventory_zip(
 
             item["size"] = len(blob)
             item["sha256"] = sha256(blob)
-            item["elf_magic"] = blob.startswith(b"\\x7fELF")
+            item["elf_magic"] = blob.startswith(b"\x7fELF")
             item["status"] = "read"
             if library_name.lower() == TARGET_NAME:
                 item["target_match"] = True
