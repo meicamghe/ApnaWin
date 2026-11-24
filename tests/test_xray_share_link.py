@@ -10,6 +10,7 @@ from apnawin.engines.xray_process import inspect_tun_inbound
 from apnawin.engines.xray_share_link import (
     XrayShareLinkError,
     import_xray_share_link,
+    import_wireguard_config,
 )
 
 
@@ -492,5 +493,115 @@ def test_generated_config_is_accepted_by_pinned_xray_runtime(uri, tmp_path):
     )
     assert completed.returncode == 0, (
         f"Xray rejected {result.protocol} config: "
+        f"{completed.stdout[-2000:]} {completed.stderr[-2000:]}"
+    )
+
+
+def _wireguard_sample() -> str:
+    private_key = base64.b64encode(b"A" * 32).decode()
+    public_key = base64.b64encode(b"B" * 32).decode()
+    return (
+        "[Interface]\n"
+        f"PrivateKey = {private_key}\n"
+        "Address = 10.66.0.2/32, fd00::2/128\n"
+        "DNS = 1.1.1.1, 2606:4700:4700::1111\n"
+        "MTU = 1380\n\n"
+        "[Peer]\n"
+        f"PublicKey = {public_key}\n"
+        "Endpoint = wg.example.test:51820\n"
+        "AllowedIPs = 0.0.0.0/0, ::/0\n"
+        "PersistentKeepalive = 25\n"
+    )
+
+
+def test_import_hysteria2_uri_builds_tls_quic_outbound():
+    result = import_xray_share_link(
+        "hysteria2://my%3Asecret@hy.example.test:443"
+        "?sni=front.example.test#HY2%20Primary"
+    )
+    outbound = outbound_for(result)
+    assert result.profile.name == "HY2 Primary"
+    assert outbound["protocol"] == "hysteria"
+    assert outbound["settings"] == {
+        "version": 2, "address": "hy.example.test", "port": 443
+    }
+    assert outbound["streamSettings"]["method"] == "hysteria"
+    assert outbound["streamSettings"]["hysteriaSettings"] == {
+        "version": 2, "auth": "my:secret"
+    }
+    assert outbound["streamSettings"]["tlsSettings"] == {
+        "serverName": "front.example.test", "allowInsecure": False
+    }
+
+
+def test_hysteria2_defaults_port_and_rejects_insecure_or_unmapped_features():
+    result = import_xray_share_link("hy2://secret@hy.example.test#DefaultPort")
+    assert result.profile.endpoint_port == 443
+    for uri in (
+        "hy2://secret@hy.example.test?insecure=1",
+        "hy2://secret@hy.example.test?obfs=salamander&obfs-password=secret",
+        "hy2://secret@hy.example.test?pinSHA256=deadbeef",
+        "hy2://secret@hy.example.test?ech=YWJj",
+    ):
+        with pytest.raises(XrayShareLinkError):
+            import_xray_share_link(uri)
+
+
+def test_import_wireguard_ini_builds_xray_wireguard_outbound():
+    result = import_wireguard_config(_wireguard_sample(), profile_name="WG Branch")
+    outbound = outbound_for(result)
+    assert result.profile.name == "WG Branch"
+    assert result.profile.transport is Transport.XRAY
+    assert outbound["protocol"] == "wireguard"
+    settings = outbound["settings"]
+    assert settings["address"] == ["10.66.0.2/32", "fd00::2/128"]
+    assert settings["mtu"] == 1380
+    assert settings["remoteDNS"] == ["1.1.1.1", "2606:4700:4700::1111"]
+    assert settings["peers"][0]["endpoint"] == "wg.example.test:51820"
+    assert settings["peers"][0]["keepAlive"] == 25
+    assert settings["peers"][0]["allowedIPs"] == ["0.0.0.0/0", "::/0"]
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda text: text.replace("PrivateKey =", "PrivateKey = invalid #"),
+        lambda text: text.replace("Endpoint = wg.example.test:51820", "Endpoint = wg.example.test"),
+        lambda text: text.replace("AllowedIPs = 0.0.0.0/0, ::/0", "AllowedIPs = not-a-prefix"),
+        lambda text: text.replace("MTU = 1380", "MTU = 99999"),
+        lambda text: text.replace("PersistentKeepalive = 25", "PersistentKeepalive = -1"),
+    ],
+)
+def test_wireguard_import_rejects_invalid_settings(mutation):
+    with pytest.raises(XrayShareLinkError):
+        import_wireguard_config(mutation(_wireguard_sample()))
+
+
+@pytest.mark.skipif(
+    not os.environ.get("APNAWIN_XRAY_EXECUTABLE"),
+    reason="Pinned Xray runtime validation is enabled only in the dedicated CI job",
+)
+@pytest.mark.parametrize(
+    "protocol_input",
+    ["hysteria2", "wireguard"],
+)
+def test_new_protocol_configs_are_accepted_by_pinned_xray_runtime(protocol_input, tmp_path):
+    executable = os.environ["APNAWIN_XRAY_EXECUTABLE"]
+    if protocol_input == "hysteria2":
+        result = import_xray_share_link("hysteria2://runtime-password@hy.example.test:443?sni=hy.example.test")
+    else:
+        result = import_wireguard_config(_wireguard_sample(), profile_name="runtime-wireguard")
+    config_path = tmp_path / f"xray-{protocol_input}.json"
+    config_path.write_bytes(result.config_bytes)
+    completed = subprocess.run(
+        [executable, "run", "-test", "-c", str(config_path)],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert completed.returncode == 0, (
+        f"Xray rejected {protocol_input} config: "
         f"{completed.stdout[-2000:]} {completed.stderr[-2000:]}"
     )
