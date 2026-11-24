@@ -753,3 +753,72 @@ def test_remaining_xray_protocol_configs_are_accepted_by_pinned_runtime(kind, tm
     assert completed.returncode == 0, (
         f"Xray rejected {kind} config: {completed.stdout[-2000:]} {completed.stderr[-2000:]}"
     )
+
+
+@pytest.mark.parametrize(
+    "network,query",
+    [
+        ("kcp", "headerType=none"),
+        ("mkcp", "mtu=1300&tti=30&uplinkCapacity=10&downlinkCapacity=80"),
+        ("kcp", "headerType=dtls"),
+        ("kcp", "seed=shared-secret"),
+        ("kcp", "headerType=dns&seed=dns.example.test"),
+    ],
+)
+def test_import_mkcp_transport_and_legacy_masks(network, query):
+    uri = f"vless://{UUID}@kcp.example.test:443?type={network}&security=tls&{query}"
+    result = import_xray_share_link(uri)
+    outbound = outbound_for(result)
+    stream = outbound["streamSettings"]
+    assert stream["network"] == "mkcp"
+    assert "kcpSettings" in stream
+    if "headerType" in query or "seed=" in query:
+        assert stream["finalmask"]["udp"][0]["type"] == "mkcp-legacy"
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "mtu=575",
+        "mtu=1461",
+        "tti=9",
+        "tti=101",
+        "uplinkCapacity=-1",
+        "headerType=unknown",
+        "headerType=dtls&seed=not-used",
+    ],
+)
+def test_mkcp_rejects_invalid_legacy_or_numeric_options(query):
+    uri = f"vless://{UUID}@kcp.example.test:443?type=kcp&security=none&{query}"
+    with pytest.raises(XrayShareLinkError):
+        import_xray_share_link(uri)
+
+
+@pytest.mark.skipif(
+    not os.environ.get("APNAWIN_XRAY_EXECUTABLE"),
+    reason="Pinned Xray runtime validation is enabled only in the dedicated CI job",
+)
+@pytest.mark.parametrize(
+    "uri",
+    [
+        f"vless://{UUID}@kcp.example.test:443?type=mkcp",
+        f"vless://{UUID}@kcp.example.test:443?type=kcp&headerType=dtls",
+        f"vless://{UUID}@kcp.example.test:443?type=kcp&seed=legacy-seed",
+    ],
+)
+def test_mkcp_configs_are_accepted_by_pinned_xray_runtime(uri, tmp_path):
+    executable = os.environ["APNAWIN_XRAY_EXECUTABLE"]
+    result = import_xray_share_link(uri)
+    config_path = tmp_path / "xray-mkcp.json"
+    config_path.write_bytes(result.config_bytes)
+    completed = subprocess.run(
+        [executable, "run", "-test", "-c", str(config_path)],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert completed.returncode == 0, (
+        f"Xray rejected mKCP config: {completed.stdout[-2000:]} {completed.stderr[-2000:]}"
+    )
