@@ -11,6 +11,7 @@ from apnawin.engines.xray_share_link import (
     XrayShareLinkError,
     import_xray_share_link,
     import_wireguard_config,
+    import_masque_config,
 )
 
 
@@ -634,3 +635,121 @@ def test_wireguard_rejects_non_endpoint_uri_components(endpoint):
     )
     with pytest.raises(XrayShareLinkError, match="Endpoint"):
         import_wireguard_config(config)
+
+
+def _masque_sample() -> str:
+    return json.dumps({
+        "protocol": "masque",
+        "settings": {
+            "address": "masque.example.test",
+            "port": 443,
+            "remoteDNS": ["1.1.1.1", "2606:4700:4700::1111"],
+        },
+        "streamSettings": {
+            "network": "masque",
+            "security": "tls",
+            "tlsSettings": {"serverName": "masque.example.test", "alpn": ["h3"]},
+            "masqueSettings": {
+                "host": "masque.example.test",
+                "path": "/.well-known/masque/ip/{target}/{ipproto}/",
+                "user": "client@example.test",
+                "pass": "runtime-secret",
+                "headers": {"X-Client": "apnawin-test"},
+            },
+        },
+    })
+
+
+def test_import_masque_json_outbound_builds_tls_connect_ip_tun():
+    result = import_masque_config(_masque_sample(), profile_name="MASQUE Branch")
+    outbound = outbound_for(result)
+    assert result.profile.name == "MASQUE Branch"
+    assert result.protocol == "masque"
+    assert outbound["protocol"] == "masque"
+    assert outbound["settings"]["remoteDNS"] == ["1.1.1.1", "2606:4700:4700::1111"]
+    assert outbound["streamSettings"]["network"] == "masque"
+    assert outbound["streamSettings"]["security"] == "tls"
+    assert outbound["streamSettings"]["masqueSettings"]["user"] == "client@example.test"
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda d: d["streamSettings"].update(security="reality"),
+        lambda d: d["streamSettings"].update(network="tcp"),
+        lambda d: d["streamSettings"].update(masqueSettings={"path": "/bad/{unknown}/"}),
+        lambda d: d["streamSettings"].update(tlsSettings={"allowInsecure": True}),
+        lambda d: d.update(mux={"enabled": True}),
+        lambda d: d["settings"].update(remoteDNS=["not-an-ip"]),
+        lambda d: d["streamSettings"]["masqueSettings"].update(user="bad:user"),
+    ],
+)
+def test_masque_import_rejects_unsupported_or_unsafe_options(mutate):
+    document = json.loads(_masque_sample())
+    mutate(document)
+    with pytest.raises(XrayShareLinkError):
+        import_masque_config(json.dumps(document))
+
+
+@pytest.mark.parametrize(
+    "uri,protocol",
+    [
+        ("socks5://user:pass@socks.example.test:1080#SOCKS", "socks"),
+        ("socks://socks.example.test:1080#SOCKS-NoAuth", "socks"),
+        ("http://user:pass@proxy.example.test:8080#HTTP", "http"),
+        ("https://user:pass@proxy.example.test:443?sni=front.example.test#HTTPS", "http"),
+    ],
+)
+def test_import_tcp_proxy_share_links(uri, protocol):
+    result = import_xray_share_link(uri)
+    outbound = outbound_for(result)
+    assert result.protocol == protocol
+    assert outbound["protocol"] == protocol
+    assert outbound["settings"]["servers"][0]["address"] in {
+        "socks.example.test", "proxy.example.test"
+    }
+
+
+@pytest.mark.parametrize(
+    "uri",
+    [
+        "socks5://user@socks.example.test:1080",
+        "socks5://socks.example.test:1080/path",
+        "http://proxy.example.test:8080?unknown=1",
+        "https://proxy.example.test:443?sni=%0Ainvalid",
+    ],
+)
+def test_proxy_share_links_reject_ambiguous_or_unsupported_fields(uri):
+    with pytest.raises(XrayShareLinkError):
+        import_xray_share_link(uri)
+
+
+@pytest.mark.skipif(
+    not os.environ.get("APNAWIN_XRAY_EXECUTABLE"),
+    reason="Pinned Xray runtime validation is enabled only in the dedicated CI job",
+)
+@pytest.mark.parametrize("kind", ["masque", "socks", "http"])
+def test_remaining_xray_protocol_configs_are_accepted_by_pinned_runtime(kind, tmp_path):
+    executable = os.environ["APNAWIN_XRAY_EXECUTABLE"]
+    if kind == "masque":
+        result = import_masque_config(_masque_sample())
+    else:
+        uri = (
+            "socks5://user:pass@socks.example.test:1080"
+            if kind == "socks"
+            else "https://user:pass@proxy.example.test:443?sni=proxy.example.test"
+        )
+        result = import_xray_share_link(uri)
+    config_path = tmp_path / f"xray-{kind}.json"
+    config_path.write_bytes(result.config_bytes)
+    completed = subprocess.run(
+        [executable, "run", "-test", "-c", str(config_path)],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert completed.returncode == 0, (
+        f"Xray rejected {kind} config: {completed.stdout[-2000:]} {completed.stderr[-2000:]}"
+    )
