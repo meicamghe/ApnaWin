@@ -46,6 +46,7 @@ class Transport(str, Enum):
     OPENVPN = "openvpn"
     SOCKS = "socks"
     APNA_SSH = "apna_ssh"
+    UDPQ = "udpq"
 
 
 @dataclass(frozen=True, slots=True)
