@@ -1,0 +1,60 @@
+name: UDPQ Sidecar Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tools/build_udpq_sidecar.sh"
+      - "native/udpq/**"
+      - ".github/workflows/udpq-sidecar-build.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64:
+    name: Build pinned UDPQ client for Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.20.14"
+          cache: false
+
+      - name: Fetch pinned MIT source
+        shell: pwsh
+        run: |
+          $repo = Join-Path $env:RUNNER_TEMP "starudp"
+          git clone --no-checkout https://github.com/starrising321/starudp.git $repo
+          git -C $repo checkout --detach 23fa29bb4fad600330b30e2b703b8029ef091446
+          $actual = (git -C $repo rev-parse HEAD).Trim()
+          if ($actual -ne "23fa29bb4fad600330b30e2b703b8029ef091446") {
+            throw "Pinned StarUDP source commit mismatch: $actual"
+          }
+          "STARUDP_SOURCE=$repo" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build client sidecar
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP "apnawin-udpq"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Push-Location (Join-Path $env:STARUDP_SOURCE "app")
+          try {
+            $env:GOTOOLCHAIN = "local"
+            $env:GOOS = "windows"
+            $env:GOARCH = "amd64"
+            $env:CGO_ENABLED = "0"
+            go build -trimpath -ldflags "-s -w" -o (Join-Path $out "udpq-client.exe") ./cmd
+            if ($LASTEXITCODE -ne 0) { throw "Go build failed: $LASTEXITCODE" }
+          }
+          finally {
+            Pop-Location
+          }
+          go version -m (Join-Path $out "udpq-client.exe")
+          if ($LASTEXITCODE -ne 0) { throw "Go binary metadata inspection failed" }
+          Get-FileHash (Join-Path $out "udpq-client.exe") -Algorithm SHA256
+          & (Join-Path $out "udpq-client.exe") --help
+          if ($LASTEXITCODE -ne 0) { throw "Sidecar help smoke test failed: $LASTEXITCODE" }
+          "Built and smoke-tested the Windows x64 client. No server was contacted."
