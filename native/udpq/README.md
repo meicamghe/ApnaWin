@@ -38,3 +38,17 @@ APNAWIN_UDPQ_OUTPUT_DIR="$HOME/apnawin-build/udpq" ./tools/build_udpq_sidecar.sh
 \`\`\`
 
 No installer or release artifact is produced.
+
+
+## Python sidecar lifecycle primitive
+
+\`apnawin.services.udpq_sidecar\` now provides:
+
+- strict JSON config generation with explicit ALPN/SNI/auth/rate settings;
+- TLS verification forced on (\`insecure: false\`);
+- UDP transport only until the other packet modes are verified;
+- loopback-only SOCKS5 binding with UDP enabled;
+- Windows Job Object process ownership;
+- short-lived per-user config file, deleted after the SOCKS5 listener passes a protocol-level readiness probe.
+
+This primitive is **not yet registered as a full VPN transport**. It does not start Wintun/Xray itself. The next integration layer will compose it with the existing Xray/Wintun TUN engine, after the APNA runtime ALPN and configuration mapping are known.
