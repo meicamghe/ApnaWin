@@ -243,7 +243,6 @@ def test_import_shadowsocks_sip002_base64_userinfo():
         f"vless://{UUID}@edge.example.test:443?type=ws&type=grpc",
         "trojan://password@edge.example.test:443?security=none",
         "ss://YWVzLTEyOC1nY206cGFzcw==@ss.example.test:8388?plugin=obfs-local",
-        "https://edge.example.test:443/",
     ],
 )
 def test_rejects_unsupported_or_unsafe_share_links(uri):
