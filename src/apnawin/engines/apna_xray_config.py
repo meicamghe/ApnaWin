@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import re
 from typing import Iterable
 
 from apnawin.engines.xray_process import inspect_tun_inbound
@@ -17,6 +18,8 @@ def build_apna_xray_tun_config(
     dns_servers: Iterable[str] = _DEFAULT_DNS,
     adapter_name: str = "ApnaWin",
     mtu: int = 1500,
+    description: str = "ApnaWin APNA SSH tunnel",
+    outbound_tag: str = "apna-ssh-socks",
 ) -> bytes:
     """Build an Xray TUN config whose only outbound is the local APNA SOCKS bridge.
 
@@ -47,6 +50,15 @@ def build_apna_xray_tun_config(
         raise ValueError("adapter_name contains unsupported Windows alias characters")
     if isinstance(mtu, bool) or not isinstance(mtu, int) or not 576 <= mtu <= 9000:
         raise ValueError("mtu must be between 576 and 9000")
+    if (
+        not isinstance(description, str)
+        or not description
+        or len(description) > 128
+        or any(ord(char) < 32 or ord(char) == 127 for char in description)
+    ):
+        raise ValueError("description must be 1 to 128 printable characters")
+    if not isinstance(outbound_tag, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", outbound_tag):
+        raise ValueError("outbound_tag must contain 1 to 64 safe tag characters")
 
     dns = []
     for item in dns_servers:
@@ -70,7 +82,7 @@ def build_apna_xray_tun_config(
             "port": 0,
             "settings": {
                 "name": adapter_name,
-                "desc": "ApnaWin APNA SSH tunnel",
+                "desc": description,
                 "mtu": mtu,
                 "gateway": [
                     "10.255.0.1/30",
@@ -83,7 +95,7 @@ def build_apna_xray_tun_config(
             },
         }],
         "outbounds": [{
-            "tag": "apna-ssh-socks",
+            "tag": outbound_tag,
             "protocol": "socks",
             "settings": {
                 "servers": [{
