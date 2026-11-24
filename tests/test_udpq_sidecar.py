@@ -5,7 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from apnawin.services.udpq_sidecar import UdpqClientConfig, UdpqSidecarSupervisor
+from apnawin.services.udpq_sidecar import (
+    UdpqClientConfig,
+    UdpqSidecarSupervisor,
+    load_udpq_runtime_sha256,
+)
 
 
 def _config(tmp_path: Path, **overrides) -> UdpqClientConfig:
@@ -249,3 +253,29 @@ def test_udpq_supervisor_checks_manifest_sha256_before_launch(tmp_path):
 
     with pytest.raises(ValueError, match="SHA-256"):
         supervisor.start(_config(tmp_path))
+
+
+def test_runtime_manifest_loads_udpq_hash_strictly(tmp_path):
+    manifest = tmp_path / "runtime-manifest.json"
+    manifest.write_text(json.dumps({
+        "schema_version": 1,
+        "xray": {},
+        "wintun": {},
+        "udpq": {"executable_sha256": "A" * 64},
+    }), encoding="utf-8")
+    assert load_udpq_runtime_sha256(manifest) == "a" * 64
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        '{"schema_version":1,"udpq":{"executable_sha256":"bad"}}',
+        '{"schema_version":1,"udpq":{"executable_sha256":"' + "0" * 64 + '"},"schema_version":1}',
+        '{"schema_version":NaN,"udpq":{"executable_sha256":"' + "0" * 64 + '"}}',
+    ],
+)
+def test_runtime_manifest_rejects_invalid_or_ambiguous_udpq_hash(tmp_path, document):
+    manifest = tmp_path / "runtime-manifest.json"
+    manifest.write_text(document, encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_udpq_runtime_sha256(manifest)
