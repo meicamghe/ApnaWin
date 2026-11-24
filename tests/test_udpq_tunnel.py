@@ -11,18 +11,19 @@ from apnawin.services.udpq_sidecar import UdpqClientConfig
 
 
 def _config(**overrides) -> UdpqClientConfig:
-    return UdpqClientConfig(
-        server_host="vpn.example.test",
-        server_port=443,
-        auth_str="secret",
-        alpn="hysteria",
-        server_name="vpn.example.test",
-        up_mbps=10,
-        down_mbps=20,
-        socks_host="127.0.0.1",
-        socks_port=10808,
-        **overrides,
-    )
+    values = {
+        "server_host": "vpn.example.test",
+        "server_port": 443,
+        "auth_str": "secret",
+        "alpn": "hysteria",
+        "server_name": "vpn.example.test",
+        "up_mbps": 10,
+        "down_mbps": 20,
+        "socks_host": "127.0.0.1",
+        "socks_port": 10808,
+    }
+    values.update(overrides)
+    return UdpqClientConfig(**values)
 
 
 def _profile(transport: Transport = Transport.UDPQ) -> ConnectionProfile:
