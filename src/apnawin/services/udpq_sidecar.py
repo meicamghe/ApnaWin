@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import math
 import os
 import socket
 import subprocess
@@ -205,6 +206,7 @@ class UdpqSidecarSupervisor:
         if (
             not isinstance(value, (int, float))
             or isinstance(value, bool)
+            or not math.isfinite(value)
             or value <= 0
         ):
             raise ValueError(f"{field} must be a positive number")
