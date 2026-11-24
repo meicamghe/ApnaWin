@@ -98,8 +98,9 @@ jobs:
           & ".\scripts\Install-VpnRuntime.ps1" -Destination $engine -UdpqClientPath (Join-Path $env:RUNNER_TEMP "udpq-client.exe") -UdpqPatchPath "native/udpq/patches/redact-client-config-logs.patch"
           if ($LASTEXITCODE -ne 0) { throw "Pinned Xray/Wintun/UDPQ runtime staging failed" }
           $manifest = Get-Content -LiteralPath (Join-Path $engine "runtime-manifest.json") -Raw | ConvertFrom-Json
-          if ($manifest.udpq.source_commit -ne "23fa29bb4fad600330b30e2b703b8029ef091446") {
-            throw "UDPQ source commit is not recorded correctly in runtime manifest"
+          if ($manifest.udpq.source_commit -ne "23fa29bb4fad600330b30e2b703b8029ef091446" -or
+              $manifest.udpq.patch_sha256 -ne "82f7db651860fe94129a4cd2931459dc8f70973a261261af3943b9ac6a23ea52") {
+            throw "UDPQ source or credential-redaction patch provenance is invalid in runtime manifest"
           }
           $expected = [string]$manifest.udpq.executable_sha256
           $actual = (Get-FileHash -LiteralPath (Join-Path $engine "udpq-client.exe") -Algorithm SHA256).Hash.ToLowerInvariant()
