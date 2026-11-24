@@ -188,20 +188,20 @@ class UdpqTunnelEngine:
         except Exception as exc:
             self._state = ConnectionState.ERROR
             self.last_error = f"Xray/Wintun cleanup failed; UDPQ sidecar retained: {exc}"
-            raise
+            raise RuntimeError(self.last_error) from exc
         try:
             self.sidecar.stop()
         except Exception as exc:
             self._state = ConnectionState.ERROR
             self.last_error = f"UDPQ sidecar cleanup failed: {exc}"
-            raise
+            raise RuntimeError(self.last_error) from exc
         if profile is not None:
             try:
                 self.xray_config_store.remove(profile.name)
             except Exception as exc:
                 self._state = ConnectionState.ERROR
                 self.last_error = f"UDPQ Xray config cleanup failed: {exc}"
-                raise
+                raise RuntimeError(self.last_error) from exc
         self._profile = None
         self._xray_profile = None
         self._candidate_profile = None
