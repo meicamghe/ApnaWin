@@ -30,7 +30,9 @@ Import is deliberately strict:
 - VMess non-zero `alterId`, unsupported cipher methods, unsupported transports and SIP003 Shadowsocks plugins are rejected.
 - REALITY public keys and short IDs are structurally validated. A structurally valid link is not proof that the remote endpoint is reachable or that its credentials are correct.
 
-WireGuard `.conf` import additionally enforces one Interface, bounded peer count, unique peer public keys, unique AllowedIPs within and across peers, usable unique DNS addresses, and both IPv4 and IPv6 default routes. This matches the product's full-tunnel dual-stack policy; ambiguous multi-peer routing and split-tunnel-only profiles are rejected rather than silently producing partial connectivity.\n\nThe importer does not enable legacy SSH/Xray cryptography, infer APNA catalog category mappings, or claim a connection based on successful parsing. The pinned Xray executable's `run -test` is the configuration compatibility gate; a real tunnel still requires endpoint reachability and routed-traffic acceptance.
+WireGuard `.conf` import additionally enforces one Interface, bounded peer count, unique peer public keys, unique AllowedIPs within and across peers, usable unique DNS addresses, and both IPv4 and IPv6 default routes. This matches the product's full-tunnel dual-stack policy; ambiguous multi-peer routing and split-tunnel-only profiles are rejected rather than silently producing partial connectivity.
+
+The importer does not enable legacy SSH/Xray cryptography, infer APNA catalog category mappings, or claim a connection based on successful parsing. The pinned Xray executable's `run -test` is the configuration compatibility gate; a real tunnel still requires endpoint reachability and routed-traffic acceptance.
 
 ## User workflow
 
