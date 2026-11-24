@@ -272,3 +272,22 @@ The pinned source's client and server packet-connection factory maps expose four
 | faketcp | Linux-specific raw packet implementation; non-Linux build selects tcp_stub.go, which returns "faketcp is not supported on this platform" | Not supported |
 
 The Windows profile importer therefore exposes only UDP, WeChat and WeChat-video. FakeTCP is rejected by validation instead of silently falling back to UDP. The optional obfs field is passed through as the XPlus obfuscation password. The current UI accepts a single server port; multi-port/range hopping remains a later configuration enhancement and is not implied by the current hop_interval field.
+
+
+## Reproducible Go symbol comparison on Ubuntu
+
+The repository now includes a bounded comparison tool. It checks ELF headers, interpreter, Build ID, dynamic dependencies, Go build metadata, Go symbol names, package import paths, wire-structure names and JSON tags. It invokes metadata tools only; it never launches the Android binary.
+
+After extracting APNA's ARM64 split and the UDP Thunder 1.5 ARM32 split:
+
+    sudo apt install binutils golang-go
+    python3 tools/apk_native_inventory.py \
+      /path/to/apna-split_config.arm64_v8a.apk \
+      /path/to/udp-thunder-v1.5.xapk \
+      --target-only --extract /tmp/apnawin-udpqtwo
+
+    python3 tools/compare_go_elf.py \
+      /tmp/apnawin-udpqtwo/apna__arm64-v8a__libudpqtwo.so__HASH.so \
+      /tmp/apnawin-udpqtwo/udp-thunder__armeabi-v7a__libudpqtwo.so__HASH.so
+
+Replace the final two paths with the exact filenames printed by the inventory command. The JSON output includes a Go-symbol Jaccard score and common wire/config fingerprints. It explicitly labels these as heuristic fingerprints, not proof of exact source revision, runtime ownership, authentication values or server compatibility.
