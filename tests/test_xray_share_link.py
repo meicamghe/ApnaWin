@@ -592,6 +592,26 @@ def test_wireguard_import_rejects_duplicate_or_unusable_network_fields(mutation)
         import_wireguard_config(mutation(_wireguard_sample()))
 
 
+@pytest.mark.parametrize(
+    "second_public_key,second_allowed_ips,error",
+    [
+        (base64.b64encode(b"B" * 32).decode(), "192.0.2.0/24", "public keys must be unique"),
+        (base64.b64encode(b"C" * 32).decode(), "0.0.0.0/0", "assigned to multiple peers"),
+    ],
+)
+def test_wireguard_rejects_ambiguous_multi_peer_routing(
+    second_public_key, second_allowed_ips, error
+):
+    config = _wireguard_sample() + (
+        "\\n[Peer]\\n"
+        f"PublicKey = {second_public_key}\\n"
+        "Endpoint = wg-backup.example.test:51820\\n"
+        f"AllowedIPs = {second_allowed_ips}\\n"
+    )
+    with pytest.raises(XrayShareLinkError, match=error):
+        import_wireguard_config(config)
+
+
 @pytest.mark.skipif(
     not os.environ.get("APNAWIN_XRAY_EXECUTABLE"),
     reason="Pinned Xray runtime validation is enabled only in the dedicated CI job",
