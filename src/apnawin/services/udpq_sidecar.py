@@ -27,8 +27,7 @@ def _validate_host(host: str, field: str) -> str:
     if any(ord(char) < 33 or ord(char) == 127 for char in host):
         raise ValueError(f"{field} cannot contain whitespace or control characters")
     try:
-        ipaddress.ip_address(host)
-        return host
+        return str(ipaddress.ip_address(host))
     except ValueError:
         pass
     if any(char in host for char in ":/\\@?#[]"):
@@ -49,7 +48,7 @@ def _validate_host(host: str, field: str) -> str:
             or any(not (char.isalnum() or char == "-") for char in label)
         ):
             raise ValueError(f"{field} must be a valid DNS hostname")
-    return ascii_host
+    return ascii_host.lower()
 
 
 def _validate_port(port: int, field: str) -> None:
@@ -86,9 +85,9 @@ class UdpqClientConfig:
     lazy_start: bool = False
 
     def __post_init__(self) -> None:
-        _validate_host(self.server_host, "server_host")
+        object.__setattr__(self, "server_host", _validate_host(self.server_host, "server_host"))
         _validate_port(self.server_port, "server_port")
-        _validate_host(self.server_name, "server_name")
+        object.__setattr__(self, "server_name", _validate_host(self.server_name, "server_name"))
         if self.socks_host not in {"127.0.0.1", "::1"}:
             raise ValueError("SOCKS5 listener must bind to an IP loopback address")
         _validate_port(self.socks_port, "socks_port")
@@ -122,9 +121,12 @@ class UdpqClientConfig:
         if not isinstance(self.fast_open, bool) or not isinstance(self.lazy_start, bool):
             raise TypeError("fast_open and lazy_start must be booleans")
         if self.ca_file is not None:
-            ca_path = Path(self.ca_file)
+            if not isinstance(self.ca_file, str) or not self.ca_file:
+                raise ValueError("ca_file must be a non-empty path string")
+            ca_path = Path(self.ca_file).expanduser()
             if ca_path.is_symlink() or not ca_path.is_file():
                 raise ValueError("ca_file must refer to a regular, non-symlink CA file")
+            object.__setattr__(self, "ca_file", str(ca_path.resolve()))
 
     def to_json_bytes(self) -> bytes:
         """Return upstream-compatible JSON with certificate verification enabled."""
@@ -186,8 +188,12 @@ class UdpqSidecarSupervisor:
         monotonic: Callable[[], float] = time.monotonic,
         platform_name: str | None = None,
     ) -> None:
-        self.executable = Path(executable)
-        self.private_dir = Path(private_dir) if private_dir else self._default_private_dir()
+        self.executable = Path(executable).expanduser().absolute()
+        self.private_dir = (
+            Path(private_dir).expanduser().absolute()
+            if private_dir
+            else self._default_private_dir()
+        )
         self._validate_timeout(startup_timeout, "startup_timeout")
         self._validate_timeout(stop_timeout, "stop_timeout")
         self.startup_timeout = float(startup_timeout)
@@ -259,6 +265,9 @@ class UdpqSidecarSupervisor:
             raise RuntimeError("A UDPQ sidecar process is already owned")
         if self.executable.is_symlink() or not self.executable.is_file():
             raise FileNotFoundError("The installed UDPQ sidecar is missing or unsafe")
+        with self.executable.open("rb") as executable_stream:
+            if executable_stream.read(2) != b"MZ":
+                raise ValueError("The UDPQ sidecar must be a Windows PE executable")
 
         config_path = self._write_private_config(config.to_json_bytes())
         self._config_path = config_path
