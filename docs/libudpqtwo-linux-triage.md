@@ -141,3 +141,40 @@ It does **not** yet establish:
 - which APNA protected service invokes the library or which configuration object it receives.
 
 The most valuable next step is now a controlled comparison of Go function/type symbol fingerprints and the APNA DEX-to-JNI/service ownership path. Preserve \`libudpq.so\` separately: its \`/root/udpq/...\` source paths belong to that other library, not automatically to \`libudpqtwo.so\`.
+
+
+## Next Linux pass: Go function names and APNA service ownership
+
+After extracting both target libraries, run:
+
+\`\`\`bash
+for f in /path/to/apna/libudpqtwo.so /path/to/thunder/libudpqtwo.so; do
+  echo "===== $f ====="
+  sha256sum "$f"
+  readelf -h -n -d "$f"
+  go version -m "$f" 2>&1 || true
+  go tool nm "$f" 2>&1 |
+    grep -Ei 'pion|dtls|quic|socks5|goproxy|routedns|tproxy|udpq|jni|main\\.' |
+    head -400
+done
+\`\`\`
+
+The `go tool nm` output can expose Go function/type names even when the build-info version and module-info strings have been cleared. Compare the function-name sets after removing architecture-specific runtime helpers.
+
+For the Java/Kotlin side, use JADX only on readable APK DEX content:
+
+\`\`\`bash
+jadx -d /tmp/apna-jadx APNA-APKs/base.apk
+grep -RInE 'udpqtwo|loadLibrary|System\\.load|native ' /tmp/apna-jadx
+\`\`\`
+
+If the protected LIAPP secondary DEX prevents the loader/service mapping from appearing, stop at that boundary. Do not attempt to defeat LIAPP. Ordinary Android diagnostics may still show library-load events:
+
+\`\`\`bash
+adb logcat -c
+# Launch APNA normally on the test device, then:
+adb logcat -v threadtime |
+  grep -iE 'udpqtwo|LIAPP|apnatunnel|VpnService|AndroidRuntime'
+\`\`\`
+
+The target of this pass is to identify the exported Go entrypoints and determine whether APNA's protected service passes the same config shape as UDP Thunder. A shared dependency fingerprint alone is not enough to wire the engine into ApnaWin.
