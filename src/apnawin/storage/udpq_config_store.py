@@ -96,6 +96,7 @@ def _deserialize_config(raw: bytes) -> UdpqClientConfig:
         not isinstance(document, dict)
         or set(document) != expected
         or isinstance(document.get("schema_version"), bool)
+        or not isinstance(document.get("schema_version"), int)
         or document.get("schema_version") != 1
     ):
         raise ValueError("UDPQ profile schema has missing or unknown fields")
@@ -139,6 +140,7 @@ class UdpqConfigStore:
             not isinstance(document, dict)
             or set(document) != {"format_version", "configs"}
             or isinstance(document.get("format_version"), bool)
+            or not isinstance(document.get("format_version"), int)
             or document.get("format_version") != _FORMAT_VERSION
             or not isinstance(document.get("configs"), dict)
         ):
