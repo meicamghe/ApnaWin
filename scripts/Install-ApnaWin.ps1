@@ -75,6 +75,10 @@ try {
 
     $manifestPath = Join-Path $staging "engine/runtime-manifest.json"
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    if ($manifest.udpq.source_commit -ne "23fa29bb4fad600330b30e2b703b8029ef091446" -or
+        $manifest.udpq.patch_sha256 -ne "82f7db651860fe94129a4cd2931459dc8f70973a261261af3943b9ac6a23ea52") {
+        throw "Runtime manifest UDPQ source or credential-redaction patch provenance is invalid."
+    }
     $expectedUdpqHash = [string]$manifest.udpq.executable_sha256
     if ($expectedUdpqHash -notmatch "^[0-9a-fA-F]{64}$") {
         throw "Runtime manifest has no valid UDPQ executable SHA-256."
