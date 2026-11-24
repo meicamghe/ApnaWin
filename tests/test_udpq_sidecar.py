@@ -370,3 +370,36 @@ def test_udpq_supervisor_cleans_orphaned_plaintext_configs(tmp_path):
     assert fresh.exists()
     assert new_path.exists()
     new_path.unlink()
+
+
+def test_udpq_auto_allocates_loopback_socks_port_before_serializing(tmp_path):
+    executable = tmp_path / "udpq-client.exe"
+    executable.write_bytes(b"MZtest-executable")
+    process = _FakeProcess()
+    captured = {}
+
+    def factory(_path, args):
+        config_path = Path(args[-1])
+        payload = json.loads(config_path.read_text(encoding="utf-8"))
+        captured["listen"] = payload["socks5"]["listen"]
+        return process
+
+    supervisor = UdpqSidecarSupervisor(
+        executable,
+        private_dir=tmp_path / "private",
+        process_factory=factory,
+        socks_probe=lambda host, port, _timeout: host == "127.0.0.1" and port > 0,
+        platform_name="nt",
+    )
+    address = supervisor.start(_config(tmp_path, socks_port=0))
+
+    assert address[0] == "127.0.0.1"
+    assert 1 <= address[1] <= 65535
+    assert captured["listen"] == f"127.0.0.1:{address[1]}"
+    supervisor.stop()
+
+
+def test_udpq_auto_port_cannot_be_serialized_before_supervisor_allocation(tmp_path):
+    config = _config(tmp_path, socks_port=0)
+    with pytest.raises(ValueError, match="allocated by UdpqSidecarSupervisor"):
+        config.to_json_bytes()
