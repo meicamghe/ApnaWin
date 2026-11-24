@@ -258,3 +258,17 @@ The pinned StarUDP client/server was built in CI for Linux and Windows x64. A lo
 - The Windows x64 CLI build and `--help` smoke test also passed. No binary artifact was published.
 
 This validates the reference implementation and the proposed SOCKS5-to-Xray/Wintun integration shape. It does not validate APNA's exact ALPN/auth/config values or connectivity to an APNA provider endpoint.
+
+
+## Windows packet-mode compatibility from the pinned StarUDP source
+
+The pinned source's client and server packet-connection factory maps expose four names: udp, wechat, wechat-video, and faketcp (empty means udp). The Windows build cannot use all four:
+
+| Mode | Pinned source implementation | Windows x64 |
+|---|---|---|
+| udp | Native UDP packet connection; optional XPlus obfuscation and UDP port hopping | Supported |
+| wechat | UDP packets with a 13-byte WeChat video-call header; optional XPlus obfuscation | Supported |
+| wechat-video | Alias of the same WeChat packet connection factory | Supported |
+| faketcp | Linux-specific raw packet implementation; non-Linux build selects tcp_stub.go, which returns "faketcp is not supported on this platform" | Not supported |
+
+The Windows profile importer therefore exposes only UDP, WeChat and WeChat-video. FakeTCP is rejected by validation instead of silently falling back to UDP. The optional obfs field is passed through as the XPlus obfuscation password. The current UI accepts a single server port; multi-port/range hopping remains a later configuration enhancement and is not implied by the current hop_interval field.
