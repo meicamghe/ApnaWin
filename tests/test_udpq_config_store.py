@@ -98,3 +98,10 @@ def test_udpq_store_rejects_non_standard_constants(tmp_path):
     store = _store(path)
     with pytest.raises(ValueError, match="invalid JSON"):
         store.has_config("udpq-test")
+
+
+def test_udpq_store_roundtrips_multi_port_hopping_config(tmp_path):
+    store = _store(tmp_path / "udpq.json")
+    config = _config(server_port_spec="443,8443-8445")
+    store.save(_profile(), config)
+    assert store.load("udpq-test") == config
