@@ -261,7 +261,11 @@ def test_runtime_manifest_loads_udpq_hash_strictly(tmp_path):
         "schema_version": 1,
         "xray": {},
         "wintun": {},
-        "udpq": {"executable_sha256": "A" * 64},
+        "udpq": {
+            "source_commit": "23fa29bb4fad600330b30e2b703b8029ef091446",
+            "patch_sha256": "82f7db651860fe94129a4cd2931459dc8f70973a261261af3943b9ac6a23ea52",
+            "executable_sha256": "A" * 64,
+        },
     }), encoding="utf-8")
     assert load_udpq_runtime_sha256(manifest) == "a" * 64
 
@@ -269,9 +273,9 @@ def test_runtime_manifest_loads_udpq_hash_strictly(tmp_path):
 @pytest.mark.parametrize(
     "document",
     [
-        '{"schema_version":1,"udpq":{"executable_sha256":"bad"}}',
-        '{"schema_version":1,"udpq":{"executable_sha256":"' + "0" * 64 + '"},"schema_version":1}',
-        '{"schema_version":NaN,"udpq":{"executable_sha256":"' + "0" * 64 + '"}}',
+        '{"schema_version":1,"udpq":{"source_commit":"23fa29bb4fad600330b30e2b703b8029ef091446","patch_sha256":"82f7db651860fe94129a4cd2931459dc8f70973a261261af3943b9ac6a23ea52","executable_sha256":"bad"}}',
+        '{"schema_version":1,"udpq":{"source_commit":"23fa29bb4fad600330b30e2b703b8029ef091446","patch_sha256":"82f7db651860fe94129a4cd2931459dc8f70973a261261af3943b9ac6a23ea52","executable_sha256":"' + "0" * 64 + '"},"schema_version":1}',
+        '{"schema_version":NaN,"udpq":{"source_commit":"23fa29bb4fad600330b30e2b703b8029ef091446","patch_sha256":"82f7db651860fe94129a4cd2931459dc8f70973a261261af3943b9ac6a23ea52","executable_sha256":"' + "0" * 64 + '"}}',
     ],
 )
 def test_runtime_manifest_rejects_invalid_or_ambiguous_udpq_hash(tmp_path, document):
@@ -284,10 +288,24 @@ def test_runtime_manifest_rejects_invalid_or_ambiguous_udpq_hash(tmp_path, docum
 def test_runtime_manifest_rejects_float_schema_version(tmp_path):
     manifest = tmp_path / "runtime-manifest.json"
     manifest.write_text(
-        '{"schema_version":1.0,"udpq":{"executable_sha256":"' + "0" * 64 + '"}}',
+        '{"schema_version":1.0,"udpq":{"source_commit":"23fa29bb4fad600330b30e2b703b8029ef091446","patch_sha256":"82f7db651860fe94129a4cd2931459dc8f70973a261261af3943b9ac6a23ea52","executable_sha256":"' + "0" * 64 + '"}}',
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="no UDPQ entry"):
+        load_udpq_runtime_sha256(manifest)
+
+
+def test_runtime_manifest_rejects_unreviewed_udpq_source_patch(tmp_path):
+    manifest = tmp_path / "runtime-manifest.json"
+    manifest.write_text(json.dumps({
+        "schema_version": 1,
+        "udpq": {
+            "source_commit": "23fa29bb4fad600330b30e2b703b8029ef091446",
+            "patch_sha256": "0" * 64,
+            "executable_sha256": "a" * 64,
+        },
+    }), encoding="utf-8")
+    with pytest.raises(ValueError, match="provenance"):
         load_udpq_runtime_sha256(manifest)
 
 
