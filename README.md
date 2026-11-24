@@ -2,7 +2,7 @@
 
 A native Windows 10/11 desktop VPN client. The project is building independently implemented, security-conscious tunnel transports; it is not an Android emulator or an Android APK wrapper.
 
-## Current status — 2026-11-18
+## Current status — 2026-11-24
 
 **Active development:** [PR #6](https://github.com/meicamghe/ApnaWin/pull/6), branch `vpn/dual-stack-egress-readiness`. The PR remains Draft and unmerged pending real-provider acceptance.
 
@@ -11,13 +11,15 @@ Implemented in the active branch:
 - Native PySide6 desktop UI, profile lifecycle, diagnostics, and fixed-path elevated helper for Windows TUN operation.
 - **APNA SSH/Payload:** bounded APNA Lite APK catalog decoder/import, supported SSH-family profile mapping, payload expansion and split behavior, direct/TLS/HTTP payload socket setup, strict SSH host-key verification, Paramiko authentication, loopback SOCKS5 TCP forwarding, and SSH-carried BadVPN-compatible UDPGW framing.
 - **APNA full tunnel:** local SOCKS5/UDPGW path connected to Xray-core + Wintun dual-stack TUN. Startup fails closed unless UDP DNS and certificate-validated IPv4 and IPv6 TLS egress checks succeed. Cleanup retains ownership when a resource cannot be confirmed stopped.
-- **Xray share-link import:** VLESS, VMess, Trojan and Shadowsocks profiles using supported TCP, WebSocket, gRPC and HTTPUpgrade transports, with TLS/Reality validation where applicable. Credentials are stored in the current-user Windows DPAPI-protected config store.
+- **Xray outbound profiles:** VLESS, VMess, Trojan, Shadowsocks, Hysteria 2, WireGuard, MASQUE, plus HTTP and SOCKS5 proxy outbounds. WireGuard imports standard `.conf`; MASQUE imports a single strict Xray JSON outbound; share links support the URI schemes implemented by the importer. Credentials, private keys and proxy headers are stored only in the current-user Windows DPAPI-protected config store.
+- **Xray transports:** TCP, WebSocket, gRPC, HTTPUpgrade, XHTTP (including bounded `extra`/XMUX and verified-TLS `downloadSettings`) and mKCP. Legacy mKCP header/seed options are translated to Xray FinalMask `mkcp-legacy`.
+- HTTP/SOCKS outbounds are TCP proxy modes, not encrypted VPN protocols; HTTP is plaintext unless imported as HTTPS. MASQUE, Hysteria 2 and WireGuard use the Xray full-tunnel path.
 - Windows x64 packaging, runtime hash/architecture checks, helper security checks, Ruff, unit/integration tests and VPN readiness/egress tests in GitHub Actions.
 - A pinned BadVPN Windows x64 native build workflow. Its artifact is research-only and is **not integrated** into the product because its upstream Windows TUN backend targets TAP-Windows while ApnaWin currently uses Wintun.
 
 ## Actual support boundary
 
-- The desktop engine registry currently activates **APNA SSH** and **Xray**. VLESS, VMess, Trojan and Shadowsocks are Xray outbound protocols, not four separate Windows engine processes.
+- The desktop engine registry currently activates **APNA SSH** and **Xray**. VLESS, VMess, Trojan, Shadowsocks, Hysteria 2, WireGuard, MASQUE, HTTP and SOCKS are Xray outbound protocols, not separate Windows engine processes.
 - OpenVPN and standalone SOCKS profile enum values do not yet have a registered production engine in the desktop application. They must not be presented as working connections.
 - APNA catalog categories outside the verified SSH-family mapper (including Xray/Trojan/Shadowsocks/UDP-labelled categories) remain unsupported until their protected Android runtime field mapping is verified. Category names alone are not sufficient evidence to map them to a protocol.
 - CI and successful packaging do not prove that an APNA provider accepted SSH authentication or carried real traffic.
