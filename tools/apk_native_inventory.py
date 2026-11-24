@@ -22,7 +22,7 @@ MAX_NESTED_APKS = 256
 MAX_LIBRARY_BYTES = 64 * 1024 * 1024
 MAX_LIBRARIES = 4096
 TARGET_NAME = "libudpqtwo.so"
-ABI_RE = re.compile(r"^lib/([^/]+)/([^/]+\\.so)$", re.IGNORECASE)
+ABI_RE = re.compile(r"^lib/([^/]+)/([^/]+\.so)$", re.IGNORECASE)
 
 
 def sha256(data: bytes) -> str:
