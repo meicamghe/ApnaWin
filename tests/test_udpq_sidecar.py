@@ -279,3 +279,13 @@ def test_runtime_manifest_rejects_invalid_or_ambiguous_udpq_hash(tmp_path, docum
     manifest.write_text(document, encoding="utf-8")
     with pytest.raises(ValueError):
         load_udpq_runtime_sha256(manifest)
+
+
+def test_runtime_manifest_rejects_float_schema_version(tmp_path):
+    manifest = tmp_path / "runtime-manifest.json"
+    manifest.write_text(
+        '{"schema_version":1.0,"udpq":{"executable_sha256":"' + "0" * 64 + '"}}',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="no UDPQ entry"):
+        load_udpq_runtime_sha256(manifest)
