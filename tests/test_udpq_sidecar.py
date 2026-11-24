@@ -289,3 +289,9 @@ def test_runtime_manifest_rejects_float_schema_version(tmp_path):
     )
     with pytest.raises(ValueError, match="no UDPQ entry"):
         load_udpq_runtime_sha256(manifest)
+
+
+@pytest.mark.parametrize("interval", [1, 2, 7, 86401])
+def test_udpq_rejects_upstream_invalid_port_hop_intervals(tmp_path, interval):
+    with pytest.raises(ValueError, match="hop_interval"):
+        _config(tmp_path, hop_interval=interval)
