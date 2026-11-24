@@ -98,3 +98,46 @@ In the same UDP Thunder 1.5 ARM32 split, \`libudpq.so\` is 18,396,884 bytes. Its
 ### What this changes
 
 We now have a real ARM32 \`libudpqtwo.so\` sample with QUIC/HTTP3 evidence, plus a separate \`libudpq.so\` binary that exposes Go source paths for a project rooted at \`/root/udpq\`. The next decisive comparison still requires APNA's ARM64 split containing its own \`libudpqtwo.so\`. Because the architectures differ, compare source/module fingerprints and normalized symbol/string evidence rather than expecting equal hashes.
+
+
+## Direct APNA vs UDP Thunder \`libudpqtwo.so\` comparison
+
+The exact APNA ARM64 split was fetched from this repository's \`APNA-APKs/split_config.arm64_v8a.apk\` path and compared in memory with the verified UDP Thunder 1.5 ARM32 split.
+
+| Property | APNA v51 | UDP Thunder 1.5 |
+|---|---:|---:|
+| ABI | ARM64 / AArch64 | ARM32 / ARM |
+| \`libudpqtwo.so\` size | 17,924,504 bytes | 17,206,308 bytes |
+| \`libudpqtwo.so\` SHA-256 | \`a3dea2c032fe01cf335246a53e0b5d0035acc64cca3e66c67ba64fd46baa47b3\` | \`650a3b96995e3b4576157915e66e1ef50725090c0043a9c543b8c89de229d660\` |
+| Go build-info version | \`unknown\` | \`unknown\` |
+| Go module-info string | empty | empty |
+
+Both binaries contain the same distinctive dependency/source fingerprints:
+
+- \`github.com/pion/dtls/v2\`
+- \`github.com/quic-go/quic-go\` and \`github.com/quic-go/quic-go/http3\`
+- \`github.com/txthinking/socks5\`
+- \`github.com/elazarl/goproxy\`
+- \`github.com/folbricht/routedns\`
+- \`github.com/LiamHaworth/go-tproxy\`
+- \`github.com/caddyserver/certmagic\`
+- \`github.com/spf13/viper\`
+- \`github.com/mholt/acmez\`
+- \`github.com/txthinking/x\`
+- \`github.com/oschwald/maxminddb-golang\`
+
+Both also contain the same \`quic-go HTTP/3\` marker, QUIC version-negotiation strings, QUIC v2 key/header-protection strings, SOCKS5 type/method strings, and \`json:"socks5"\` configuration tag.
+
+A broad Go package/function-string fingerprint pass found 5,175 common tokens out of 5,203 APNA tokens and 5,225 UDP Thunder tokens. This is a heuristic string/symbol fingerprint, not a cryptographic or semantic proof of identical source.
+
+### Assessment
+
+This is strong evidence that the two \`libudpqtwo.so\` files belong to the same or a very closely related Go networking-engine code family, built for different Android ABIs and with different binary sizes. It is much stronger than matching a filename alone.
+
+It does **not** yet establish:
+- that the two binaries are byte-identical or from the same exact source revision;
+- the actual wire-protocol name used by APNA;
+- the exact handshake, authentication fields, server-side compatibility or encryption settings;
+- which APNA protected service invokes the library or which configuration object it receives.
+
+The most valuable next step is now a controlled comparison of Go function/type symbol fingerprints and the APNA DEX-to-JNI/service ownership path. Preserve \`libudpq.so\` separately: its \`/root/udpq/...\` source paths belong to that other library, not automatically to \`libudpqtwo.so\`.
