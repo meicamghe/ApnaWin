@@ -273,7 +273,7 @@ class UdpqImportDialog(QDialog):
             up_mbps=self.up_spin.value(),
             down_mbps=self.down_spin.value(),
             socks_host="127.0.0.1",
-            socks_port=10808,
+            socks_port=0,
             ca_file=self.ca_edit.text().strip() or None,
             protocol=str(self.protocol_combo.currentData()),
             obfs=self.obfs_edit.text(),
