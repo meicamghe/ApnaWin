@@ -838,6 +838,8 @@ def import_wireguard_config(
     peers = [item for name, item in sections if name == "peer"]
     if len(interfaces) != 1 or not peers:
         raise XrayShareLinkError("WireGuard config requires one Interface and at least one Peer")
+    if len(peers) > 64:
+        raise XrayShareLinkError("WireGuard config exceeds the 64-peer limit")
     interface = interfaces[0]
     allowed_interface = {"privatekey", "address", "dns", "mtu"}
     if set(interface) - allowed_interface:
@@ -851,14 +853,21 @@ def import_wireguard_config(
         normalized_addresses = [str(ipaddress.ip_interface(item).ip) for item in addresses]
     except ValueError as exc:
         raise XrayShareLinkError("WireGuard Interface Address contains an invalid IP prefix") from exc
+    if len(set(normalized_addresses)) != len(normalized_addresses):
+        raise XrayShareLinkError("WireGuard Interface Address entries must be unique")
     dns_raw = interface.get("dns", "")
     dns_servers = [item.strip() for item in dns_raw.split(",") if item.strip()]
+    if len(dns_servers) > 16:
+        raise XrayShareLinkError("WireGuard DNS list exceeds the size limit")
     try:
-        normalized_dns = [str(ipaddress.ip_address(item)) for item in dns_servers]
+        dns_addresses = [ipaddress.ip_address(item) for item in dns_servers]
     except ValueError as exc:
         raise XrayShareLinkError("WireGuard DNS entries must be IP addresses") from exc
-    if len(normalized_dns) > 16:
-        raise XrayShareLinkError("WireGuard DNS list exceeds the size limit")
+    if any(address.is_unspecified or address.is_multicast or address.is_link_local for address in dns_addresses):
+        raise XrayShareLinkError("WireGuard DNS servers must be usable unicast addresses")
+    normalized_dns = [str(address) for address in dns_addresses]
+    if len(set(normalized_dns)) != len(normalized_dns):
+        raise XrayShareLinkError("WireGuard DNS server addresses must be unique")
     mtu = 1420
     if "mtu" in interface:
         if not re.fullmatch(r"[0-9]{3,4}", interface["mtu"]):
@@ -889,6 +898,8 @@ def import_wireguard_config(
             allowed_ips = [str(ipaddress.ip_network(item, strict=False)) for item in allowed_raw]
         except ValueError as exc:
             raise XrayShareLinkError("WireGuard AllowedIPs contains an invalid IP prefix") from exc
+        if len(set(allowed_ips)) != len(allowed_ips):
+            raise XrayShareLinkError("WireGuard AllowedIPs prefixes must be unique within each peer")
         record = {
             "endpoint": f"[{endpoint_host}]:{endpoint_port}" if ":" in endpoint_host else f"{endpoint_host}:{endpoint_port}",
             "publicKey": public_key,
