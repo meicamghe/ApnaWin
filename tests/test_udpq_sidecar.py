@@ -99,7 +99,7 @@ def test_udpq_socks_listener_must_be_loopback(tmp_path, host):
 
 @pytest.mark.parametrize("protocol", ["faketcp", "unknown", ""])
 def test_windows_unsupported_packet_transports_are_rejected(tmp_path, protocol):
-    with pytest.raises(ValueError, match="Only the verified UDP"):
+    with pytest.raises(ValueError, match="Windows supports only the upstream UDP"):
         _config(tmp_path, protocol=protocol)
 
 
@@ -266,7 +266,7 @@ def test_runtime_manifest_loads_udpq_hash_strictly(tmp_path):
         "wintun": {},
         "udpq": {
             "source_commit": "23fa29bb4fad600330b30e2b703b8029ef091446",
-            "patch_sha256": "82f7db651860fe94129a4cd2931459dc8f70973a261261af3943b9ac6a23ea52",
+            "patch_sha256": "6f18ca9871e62ad91db033411d0aaa801bde3b17533d4ce71e20ed33fe01bbe2",
             "executable_sha256": "A" * 64,
         },
     }), encoding="utf-8")
@@ -276,9 +276,9 @@ def test_runtime_manifest_loads_udpq_hash_strictly(tmp_path):
 @pytest.mark.parametrize(
     "document",
     [
-        '{"schema_version":1,"udpq":{"source_commit":"23fa29bb4fad600330b30e2b703b8029ef091446","patch_sha256":"82f7db651860fe94129a4cd2931459dc8f70973a261261af3943b9ac6a23ea52","executable_sha256":"bad"}}',
-        '{"schema_version":1,"udpq":{"source_commit":"23fa29bb4fad600330b30e2b703b8029ef091446","patch_sha256":"82f7db651860fe94129a4cd2931459dc8f70973a261261af3943b9ac6a23ea52","executable_sha256":"' + "0" * 64 + '"},"schema_version":1}',
-        '{"schema_version":NaN,"udpq":{"source_commit":"23fa29bb4fad600330b30e2b703b8029ef091446","patch_sha256":"82f7db651860fe94129a4cd2931459dc8f70973a261261af3943b9ac6a23ea52","executable_sha256":"' + "0" * 64 + '"}}',
+        '{"schema_version":1,"udpq":{"source_commit":"23fa29bb4fad600330b30e2b703b8029ef091446","patch_sha256":"6f18ca9871e62ad91db033411d0aaa801bde3b17533d4ce71e20ed33fe01bbe2","executable_sha256":"bad"}}',
+        '{"schema_version":1,"udpq":{"source_commit":"23fa29bb4fad600330b30e2b703b8029ef091446","patch_sha256":"6f18ca9871e62ad91db033411d0aaa801bde3b17533d4ce71e20ed33fe01bbe2","executable_sha256":"' + "0" * 64 + '"},"schema_version":1}',
+        '{"schema_version":NaN,"udpq":{"source_commit":"23fa29bb4fad600330b30e2b703b8029ef091446","patch_sha256":"6f18ca9871e62ad91db033411d0aaa801bde3b17533d4ce71e20ed33fe01bbe2","executable_sha256":"' + "0" * 64 + '"}}',
     ],
 )
 def test_runtime_manifest_rejects_invalid_or_ambiguous_udpq_hash(tmp_path, document):
@@ -291,7 +291,7 @@ def test_runtime_manifest_rejects_invalid_or_ambiguous_udpq_hash(tmp_path, docum
 def test_runtime_manifest_rejects_float_schema_version(tmp_path):
     manifest = tmp_path / "runtime-manifest.json"
     manifest.write_text(
-        '{"schema_version":1.0,"udpq":{"source_commit":"23fa29bb4fad600330b30e2b703b8029ef091446","patch_sha256":"82f7db651860fe94129a4cd2931459dc8f70973a261261af3943b9ac6a23ea52","executable_sha256":"' + "0" * 64 + '"}}',
+        '{"schema_version":1.0,"udpq":{"source_commit":"23fa29bb4fad600330b30e2b703b8029ef091446","patch_sha256":"6f18ca9871e62ad91db033411d0aaa801bde3b17533d4ce71e20ed33fe01bbe2","executable_sha256":"' + "0" * 64 + '"}}',
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="no UDPQ entry"):
