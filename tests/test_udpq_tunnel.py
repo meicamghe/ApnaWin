@@ -10,7 +10,7 @@ from apnawin.engines.udpq_tunnel import UdpqTunnelEngine
 from apnawin.services.udpq_sidecar import UdpqClientConfig
 
 
-def _config() -> UdpqClientConfig:
+def _config(**overrides) -> UdpqClientConfig:
     return UdpqClientConfig(
         server_host="vpn.example.test",
         server_port=443,
@@ -21,6 +21,7 @@ def _config() -> UdpqClientConfig:
         down_mbps=20,
         socks_host="127.0.0.1",
         socks_port=10808,
+        **overrides,
     )
 
 
