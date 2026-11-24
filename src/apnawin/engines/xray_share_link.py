@@ -196,6 +196,37 @@ def _stream_settings(
             xhttp["host"] = xhttp_host
         settings["xhttpSettings"] = xhttp
 
+
+    elif network == "mkcp":
+        kcp = {"mtu": 1350, "tti": 50, "uplinkCapacity": 5, "downlinkCapacity": 20}
+        numeric = {
+            "mtu": (576, 1460),
+            "tti": (10, 100),
+            "uplinkCapacity": (0, 10000),
+            "downlinkCapacity": (0, 10000),
+        }
+        for key, bounds in numeric.items():
+            if key in query:
+                value = query[key]
+                if not re.fullmatch(r"[0-9]{1,5}", value) or not bounds[0] <= int(value) <= bounds[1]:
+                    raise XrayShareLinkError("mKCP numeric setting is outside the supported range")
+                kcp[key] = int(value)
+        settings["kcpSettings"] = kcp
+        header = query.get("headerType", "").lower()
+        if header == "none":
+            header = ""
+        if header not in {"", "dns", "dtls", "srtp", "utp", "wechat", "wireguard"}:
+            raise XrayShareLinkError("mKCP headerType is unsupported")
+        seed = _safe_option_text(query.get("seed", ""), "mKCP seed", max_length=1024)
+        if header and seed and header != "dns":
+            raise XrayShareLinkError("mKCP seed is only meaningful for the DNS header")
+        if header or seed or "headerType" in query:
+            if header == "dns" and seed:
+                _host_port(seed, 443)
+            settings["finalmask"] = {
+                "udp": [{"type": "mkcp-legacy", "settings": {"header": header, "value": seed}}]
+            }
+
     if security == "tls":
         if query.get("allowInsecure", "").lower() in {"1", "true", "yes"}:
             raise XrayShareLinkError("Insecure TLS certificate verification is not supported")
