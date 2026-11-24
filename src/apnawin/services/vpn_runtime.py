@@ -15,6 +15,21 @@ class VpnRuntimeIntegrityError(RuntimeError):
     """Raised when the installed Xray/Wintun runtime is incomplete or modified."""
 
 
+def _unique_json_object(pairs: list[tuple[str, object]]) -> dict:
+    """Reject duplicate manifest keys at every nesting level."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Runtime manifest contains duplicate JSON keys")
+        result[key] = value
+    return result
+
+
+def _reject_json_constant(value: str) -> None:
+    """Reject non-standard NaN and Infinity values in the runtime manifest."""
+    raise ValueError(f"Runtime manifest contains non-finite value: {value}")
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     try:
@@ -39,7 +54,11 @@ def verify_vpn_runtime(engine_dir: str | Path) -> dict:
             raw = stream.read(_MAX_MANIFEST_BYTES + 1)
         if len(raw) > _MAX_MANIFEST_BYTES:
             raise ValueError("manifest too large")
-        manifest = json.loads(raw.decode("utf-8-sig"))
+        manifest = json.loads(
+            raw.decode("utf-8-sig"),
+            object_pairs_hook=_unique_json_object,
+            parse_constant=_reject_json_constant,
+        )
     except (OSError, UnicodeError, ValueError) as exc:
         raise VpnRuntimeIntegrityError("VPN runtime manifest is invalid") from exc
 
