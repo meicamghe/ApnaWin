@@ -234,3 +234,18 @@ def test_udpq_supervisor_rejects_non_pe_sidecar(tmp_path):
 def test_windows_supported_packet_transports_are_serialized(tmp_path, protocol):
     payload = json.loads(_config(tmp_path, protocol=protocol).to_json_bytes())
     assert payload["protocol"] == protocol
+
+
+def test_udpq_supervisor_checks_manifest_sha256_before_launch(tmp_path):
+    executable = tmp_path / "udpq-client.exe"
+    executable.write_bytes(b"MZtest-executable")
+    supervisor = UdpqSidecarSupervisor(
+        executable,
+        private_dir=tmp_path / "private",
+        expected_sha256="0" * 64,
+        process_factory=lambda _path, _args: pytest.fail("must not launch"),
+        platform_name="nt",
+    )
+
+    with pytest.raises(ValueError, match="SHA-256"):
+        supervisor.start(_config(tmp_path))
