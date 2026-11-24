@@ -54,6 +54,8 @@ jobs:
           if ($actual -ne "23fa29bb4fad600330b30e2b703b8029ef091446") {
             throw "Pinned StarUDP source commit mismatch: $actual"
           }
+          git -C $repo apply "$env:GITHUB_WORKSPACE/native/udpq/patches/redact-client-config-logs.patch"
+          if ($LASTEXITCODE -ne 0) { throw "Could not apply UDPQ credential-redaction patch" }
           $udpq = Join-Path $env:RUNNER_TEMP "udpq-client.exe"
           Push-Location (Join-Path $repo "app")
           try {
@@ -90,6 +92,8 @@ jobs:
           Copy-Item -LiteralPath "scripts/Install-ApnaWin.ps1" -Destination $stage
           Copy-Item -LiteralPath "native/udpq/LICENSE-MIT.txt" -Destination (Join-Path $stage "LICENSE-UDPQ-MIT.txt")
           Copy-Item -LiteralPath "native/udpq/THIRD_PARTY_NOTICES.md" -Destination $stage
+          New-Item -ItemType Directory -Force -Path (Join-Path $stage "native/udpq/patches") | Out-Null
+          Copy-Item -LiteralPath "native/udpq/patches/redact-client-config-logs.patch" -Destination (Join-Path $stage "native/udpq/patches")
           Copy-Item -LiteralPath "docs/udpq-windows-test-build.md" -Destination (Join-Path $stage "TEST-UDPQ.md")
           & ".\scripts\Install-VpnRuntime.ps1" -Destination $engine -UdpqClientPath (Join-Path $env:RUNNER_TEMP "udpq-client.exe")
           if ($LASTEXITCODE -ne 0) { throw "Pinned Xray/Wintun/UDPQ runtime staging failed" }
