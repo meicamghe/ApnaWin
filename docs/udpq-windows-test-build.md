@@ -36,7 +36,7 @@ Use Import… → UDPQ / StarUDP profile (experimental)…. Enter values supplie
 - optional XPlus obfuscation password;
 - optional trusted CA file if the server uses a private CA.
 
-TLS certificate verification is always enabled. Do not use a random server, guessed password, or a third-party endpoint without authorization. faketcp is intentionally unavailable in this Windows build because the pinned upstream source compiles a non-Linux stub for that mode. Multi-port/range hopping is not exposed yet.
+TLS certificate verification is always enabled. Do not use a random server, guessed password, or a third-party endpoint without authorization. faketcp is intentionally unavailable in this Windows build because the pinned upstream source compiles a non-Linux stub for that mode. UDP mode accepts bounded comma-separated ports and ascending port ranges (maximum 32 expanded ports); WeChat modes do not support this upstream hopping format.
 
 After importing, select the profile and press Connect. The app starts the UDPQ sidecar, verifies its loopback SOCKS5 listener, then starts the existing Xray/Wintun full-tunnel path. Disconnect stops Xray/Wintun before the sidecar. If the sidecar exits, the profile enters ERROR and must be disconnected/recovered; it must not be reported as connected.
 
