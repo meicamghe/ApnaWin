@@ -21,7 +21,7 @@ from apnawin.engines.xray_process import inspect_tun_inbound
 
 _DEFAULT_DNS = ("1.1.1.1", "2606:4700:4700::1111")
 _SUPPORTED_SCHEMES = frozenset({"vless", "vmess", "trojan", "ss", "hysteria2", "hy2", "socks", "socks5", "http", "https"})
-_SUPPORTED_NETWORKS = frozenset({"tcp", "ws", "grpc", "httpupgrade", "xhttp"})
+_SUPPORTED_NETWORKS = frozenset({"tcp", "ws", "grpc", "httpupgrade", "xhttp", "mkcp"})
 _SUPPORTED_SECURITY = frozenset({"none", "tls", "reality"})
 _NAME_RE = re.compile(r"[^\w .()\[\]-]+", re.UNICODE)
 
@@ -142,6 +142,8 @@ def _stream_settings(
     allow_reality: bool = True,
 ) -> dict:
     network = (network or "tcp").lower()
+    if network == "kcp":
+        network = "mkcp"
     security = (security or "none").lower()
     if network not in _SUPPORTED_NETWORKS:
         raise XrayShareLinkError(f"Unsupported Xray network transport: {network}")
