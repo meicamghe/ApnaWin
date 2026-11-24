@@ -657,7 +657,7 @@ class MainWindow(QMainWindow):
         self.import_xray_action = self.import_menu.addAction("Xray JSON (VLESS / VMess / Trojan / UDP-capable)…")
         self.import_xray_action.triggered.connect(self._import_xray_config)
         self.import_xray_share_action = self.import_menu.addAction(
-            "Xray share link (VLESS / VMess / Trojan / Shadowsocks)…"
+            "Xray share link (VLESS / VMess / Trojan / Shadowsocks / Hysteria 2)…"
         )
         self.import_xray_share_action.triggered.connect(self._import_xray_share_link)
         self.import_wireguard_action = self.import_menu.addAction(
@@ -1571,7 +1571,7 @@ class MainWindow(QMainWindow):
         share_link, accepted = QInputDialog.getMultiLineText(
             self,
             "Import Xray share link",
-            "Paste one VLESS, VMess, Trojan or Shadowsocks share link:",
+            "Paste one VLESS, VMess, Trojan, Shadowsocks or Hysteria 2 share link:",
         )
         if not accepted or not share_link.strip():
             return
