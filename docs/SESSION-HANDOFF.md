@@ -28,6 +28,18 @@ Commit `28d831cd3c0e15b1a5716480c814bdfd2e2c2201` (2026-11-25):
 The full test and sidecar workflows validate automated code paths and loopback behavior only. They do **not** prove live APNA authentication, APNA UDPGW/UDPQ interoperability, or real provider-routed traffic. The earlier checkpoint `12c93ac15e55aaa7fc48136a4495d22fb29e123e` and its results are historical; the earlier package artifact is not evidence that the current package run completed.
 
 
+## Latest CI and protocol-hardening update — 2026-11-25
+
+The documentation-head rerun on commit `e60550f7dc8c3a97f94dbd38228a2f68df3745d2` is fully green:
+- [Windows tests and runtime checks](https://github.com/meicamghe/ApnaWin/actions/runs/45589238424): passed; **1,563 passed, 31 skipped**.
+- [UDPQ Sidecar Build](https://github.com/meicamghe/ApnaWin/actions/runs/45589238225): passed.
+- [Windows x64 UDPQ test package](https://github.com/meicamghe/ApnaWin/actions/runs/45589238432): completed successfully; all build, portable-folder assembly and upload steps passed.
+- New temporary artifact: [ApnaWin-Windows-x64-UDPQ-Test](https://github.com/meicamghe/ApnaWin/actions/runs/45589238432/artifacts/15009349155), ID `15009349155`, **298,490,545 bytes**, SHA-256 `55a2f1e0ddc67f0c0146e5ccdfd7ac525085f275b5c55701fc834618f2595755`, expires 2026-12-02. This is a test artifact, not a provider-accepted release.
+
+After that green checkpoint, WebSocket close-frame validation was tightened in `src/apnawin/engines/websocket_stream.py`: reject reserved/invalid close status codes and strictly decode the optional UTF-8 reason before echoing the close frame. Regression tests cover reserved/out-of-range codes, malformed UTF-8, valid application code/reason, and an empty close payload. Commits: `aaed246244e5b6f5e278fbd5609bbb1abcf0635f` (implementation), `3dfe88d2e29eea512149b0c6a5d3f2e8bf66bd19` (tests). **These two commits are awaiting their own CI run; do not treat the earlier green runs as validation of this change.**
+
+The new artifact is for Windows x64 test execution. It does not establish APNA SSH authentication, APNA UDPGW/UDPQ interoperability, or real provider-routed traffic.
+
 ## Next engineering gates
 
 1. Establish which ordinary Android service/process loads `libudpqtwo.so`, without bypassing LIAPP.
