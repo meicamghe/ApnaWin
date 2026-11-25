@@ -57,9 +57,11 @@ python -m pytest
 
 Profiles are saved under the current user's application-data directory in `profiles.json`. Writes use a unique temporary file in the same directory and atomic replacement; malformed JSON, duplicate keys, unsupported schema versions, unexpected fields and duplicate profile names are rejected. The current schema stores only:
 - Profile name
-- Transport selection (Xray, APNA SSH, OpenVPN or SOCKS; only Xray and APNA SSH currently have production engine registrations)
+- Transport selection (`XRAY`, `APNA_SSH`, `UDPQ`, `OPENVPN` or `SOCKS`). `XRAY` and `APNA_SSH` have production registrations when the protected Windows helper is valid; `UDPQ` is conditionally registered only when its separately installed sidecar and runtime-manifest hashes validate. `OPENVPN` and standalone `SOCKS` currently have no production engine registration.
 - Server host
 - Server port
+
+UDPQ's protocol credentials and transport settings are stored separately in the encrypted, current-user UDPQ config store; they are not part of the plaintext profile metadata.
 
 It does not store passwords, access tokens, private keys or other credentials. Do not place secrets in profile names or endpoint fields.
 
@@ -67,7 +69,7 @@ It does not store passwords, access tokens, private keys or other credentials. D
 
 - `src/apnawin/` — application package and desktop entry point
 - `src/apnawin/domain/` — transport-neutral domain models
-- `src/apnawin/engines/` — tunnel-engine contract, test-only mock and Xray process runner
+- `src/apnawin/engines/` — APNA SSH/payload/UDPGW adapters, Xray runtime and tunnel engine, experimental UDPQ sidecar composition, transport dispatcher and shared engine contracts
 - `src/apnawin/storage/` — profile and encrypted Xray-config persistence
 - `src/apnawin/services/` — UAC helper lifecycle and read-only Windows tunnel diagnostics
 - `tests/` — automated tests, including desktop profile workflow checks
