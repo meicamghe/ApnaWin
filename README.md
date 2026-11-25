@@ -2,7 +2,7 @@
 
 A native Windows 10/11 desktop VPN client. The project is building independently implemented, security-conscious tunnel transports; it is not an Android emulator or an Android APK wrapper.
 
-## Current status — 2026-11-24
+## Current status — 2026-11-25
 
 **Active development:** [PR #6](https://github.com/meicamghe/ApnaWin/pull/6), branch `vpn/dual-stack-egress-readiness`. The PR remains Draft and unmerged pending real-provider acceptance.
 
@@ -15,12 +15,13 @@ Implemented in the active branch:
 - **Xray transports:** TCP, WebSocket, gRPC, HTTPUpgrade, XHTTP (including bounded `extra`/XMUX and verified-TLS `downloadSettings`) and mKCP. Legacy mKCP header/seed options are translated to Xray FinalMask `mkcp-legacy`.
 - HTTP/SOCKS outbounds are TCP proxy modes, not encrypted VPN protocols; HTTP is plaintext unless imported as HTTPS. MASQUE, Hysteria 2 and WireGuard use the Xray full-tunnel path.
 - Windows x64 packaging, runtime hash/architecture checks, helper security checks, Ruff, unit/integration tests and VPN readiness/egress tests in GitHub Actions.
+- **Experimental UDPQ/StarUDP path:** generic manual-profile importer and conditional Windows engine registration when the pinned sidecar, source/patch provenance and executable hash validate. It composes the sidecar SOCKS5 endpoint with the existing Xray/Wintun full-tunnel path. It is not an APNA catalog mapping and has no proven APNA-server interoperability.
 - A pinned BadVPN Windows x64 native build workflow. Its artifact is research-only and is **not integrated** into the product because its upstream Windows TUN backend targets TAP-Windows while ApnaWin currently uses Wintun.
 
 ## Actual support boundary
 
-- The desktop engine registry currently activates **APNA SSH** and **Xray**. VLESS, VMess, Trojan, Shadowsocks, Hysteria 2, WireGuard, MASQUE, HTTP and SOCKS are Xray outbound protocols, not separate Windows engine processes.
-- OpenVPN and standalone SOCKS profile enum values do not yet have a registered production engine in the desktop application. They must not be presented as working connections.
+- The desktop engine registry always activates **APNA SSH** and **Xray** when the protected Windows installation helper is present. It conditionally activates **UDPQ** only when the separately installed Windows sidecar and its runtime-manifest provenance/hash validate. UDPQ is experimental and accepts generic StarUDP-compatible manual profiles only. VLESS, VMess, Trojan, Shadowsocks, Hysteria 2, WireGuard, MASQUE, HTTP and SOCKS are Xray outbound protocols, not separate Windows engine processes.
+- OpenVPN and standalone SOCKS profile enum values do not have a registered production engine in the desktop application. They must not be presented as working connections.
 - APNA catalog categories outside the verified SSH-family mapper (including Xray/Trojan/Shadowsocks/UDP-labelled categories) remain unsupported until their protected Android runtime field mapping is verified. Category names alone are not sufficient evidence to map them to a protocol.
 - CI and successful packaging do not prove that an APNA provider accepted SSH authentication or carried real traffic.
 
@@ -84,7 +85,7 @@ It does not store passwords, access tokens, private keys or other credentials. D
 
 ## Important compatibility note
 
-Android ARM64 native libraries are not Windows binaries. The current Windows path is an imported Xray TUN configuration plus a Windows Xray/Wintun runtime. The APNA-specific catalog decoder now works against the supplied embedded APK sample; live refresh, profile generation and end-to-end APNA connection are not yet verified. APK class and library names are clues, not proof of compatibility. See the upstream evidence document before making implementation assumptions.
+Android ARM64 native libraries are not Windows binaries. The current Windows path uses Windows-native Xray/Wintun plus the APNA SSH engine; UDPQ is a separate experimental Windows sidecar path. Static fingerprints strongly associate APNA's libudpqtwo.so with the StarUDP/Hysteria-v1 source family, but its protected launch/configuration contract and APNA-server interoperability remain unverified. The APNA-specific catalog decoder works against the supplied embedded APK sample; live refresh and end-to-end APNA connection are not yet verified. APK class and library names are clues, not proof of compatibility. See the upstream evidence document before making implementation assumptions.
 
 ## Development direction
 
