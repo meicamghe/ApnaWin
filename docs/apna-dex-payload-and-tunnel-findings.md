@@ -39,7 +39,7 @@ The primary DEX identifies these components and fields:
 6. The `Tun2Socks` class contains `mSocksServerAddress`, `mUdpgwServerAddress`, `mDnsResolverAddress`, and `mUdpgwTransparentDNS`. Its process command construction contains the literal `--udpgw-transparent-dns`.
 7. A separate `Tunnel$2` path calls `org.uproxy.tun2socks.Tun2SocksJni.runTun2Socks` with TUN fd, MTU, VPN address/netmask, SOCKS endpoint, UDP relay endpoint, DNS resolver and transparent-DNS options. This JNI entry point is present even though the normal `startTunneling -> routeThroughTunnel` path creates the process-based `Tun2Socks` runner.
 
-**Implication for ApnaWin:** a TCP-only SSH dynamic forwarder is not sufficient for full APNA compatibility. The Windows runtime needs the local SOCKS TCP endpoint, the separate UDPGW stream when `mUdpResolver` is configured, and the DNS resolver/transparent-DNS behavior. The current Paramiko adapter supplies only authenticated SSH TCP forwarding; the UDPGW codec/flow manager are separate building blocks and are not yet connected to a live TUN path.
+**Implication for ApnaWin:** a TCP-only SSH dynamic forwarder is not sufficient for full APNA compatibility. The Windows implementation now includes a local SOCKS TCP endpoint, a separate SSH-carried UDPGW stream/flow manager, a SOCKS5 UDP ASSOCIATE gateway, and an Xray/Wintun TUN composition with DNS and dual-stack egress readiness checks. These are component-level implementations with automated tests; they have not yet completed a real APNA UDPGW datagram round-trip or live provider traffic acceptance.
 
 ## Remaining unknowns
 
