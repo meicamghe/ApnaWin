@@ -412,7 +412,7 @@ def test_udpq_preserves_explicit_alpn_without_upstream_defaulting(tmp_path, alpn
     assert payload["alpn"] == alpn
 
 
-@pytest.mark.parametrize("alpn", ["", " ", "\\n", "bad\\x7fvalue"])
+@pytest.mark.parametrize("alpn", ["", " ", "\n", "bad\x7fvalue"])
 def test_udpq_rejects_missing_or_invalid_alpn_instead_of_using_upstream_default(tmp_path, alpn):
     with pytest.raises(ValueError, match="alpn"):
         _config(tmp_path, alpn=alpn)
