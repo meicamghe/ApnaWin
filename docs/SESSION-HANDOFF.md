@@ -271,3 +271,17 @@ This remains automated protocol validation, not a substitute for provider-side W
 - UDPGW wire encoding now rejects scoped IPv6 literals (for example, `fe80::1%eth0`) because the BadVPN frame carries only the 16-byte IPv6 address and cannot preserve a local interface scope. Added a regression test; ordinary IPv6 literals remain supported.
 - BadVPN native Windows x64 workflow succeeded on commit d03d0e85dfd6b077ceaced797dabc2332f99e4f6. The Windows tests/build workflow for that commit was still queued at last check. Commits after d03d0e8 require their own CI result; do not treat earlier green runs as validation of newer changes.
 - Current work remains in PR #6, Draft. No live authorized APNA Windows endpoint acceptance has been performed; real SSH authentication, UDPGW datagram round-trip, routed IPv4/IPv6/DNS traffic and crash/disconnect restoration remain release gates.
+
+## Latest verified checkpoint — 2026-11-25 14:10 +03:30
+
+The branch head `b5182385255c8008de36e1d0ab257ca139a5d254` has now completed a fresh validation cycle. Unlike the earlier parent-only checkpoint, these runs target the exact current branch head:
+
+- [Windows tests and runtime checks](https://github.com/meicamghe/ApnaWin/actions/runs/45595722797): all six jobs passed. The unit/integration job reports **1,576 passed, 31 skipped, 2 warnings**. Ruff, installer/runtime security, VPN readiness/egress and pinned Xray share-link compatibility also passed.
+- [UDPQ Sidecar Build](https://github.com/meicamghe/ApnaWin/actions/runs/45595721017): passed. The Windows x64 sidecar build and Linux reference QUIC loopback test with SOCKS5 TCP CONNECT and UDP ASSOCIATE relay both passed.
+- [Windows x64 UDPQ test package](https://github.com/meicamghe/ApnaWin/actions/runs/45595720692): all jobs passed, including sidecar build, desktop/elevated-helper build, portable-folder assembly and artifact upload.
+
+Latest test artifact: [ApnaWin-Windows-x64-UDPQ-Test](https://github.com/meicamghe/ApnaWin/actions/runs/45595720692/artifacts/15012953411), artifact ID `15012953411`, size 298,489,227 bytes, SHA-256 `7dc07702a44fd71faf4e896c07e1f7655661e28db6b58a08b82a76be5f957afe`, expires 2026-12-02. This is a temporary test package, not a release.
+
+The static evidence boundary is unchanged: APNA/UDP Thunder `libudpqtwo.so` fingerprints support a related StarUDP-family implementation lineage, but do not disclose APNA's effective ALPN, SNI, auth bytes, rate limits, packet mode, obfuscation, port hopping or protected launch/config handoff. The pinned StarUDP Windows sidecar remains generic/manual-profile only. No live APNA SSH authentication, APNA UDPGW datagram round-trip, APNA UDPQ handshake or real APNA-routed TCP/UDP/DNS traffic has been demonstrated.
+
+PR #6 remains open, Draft and unmerged. Do not promote the PR or label the package APNA-compatible until the provider acceptance gates above pass.
