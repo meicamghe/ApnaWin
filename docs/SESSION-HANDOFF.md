@@ -23,7 +23,7 @@
 Commit `28d831cd3c0e15b1a5716480c814bdfd2e2c2201` (2026-11-25):
 - [Windows tests and runtime checks](https://github.com/meicamghe/ApnaWin/actions/runs/45587012242): **1,563 passed, 31 skipped**, including **179 VPN runtime readiness/egress tests**; Ruff, installer/runtime security and pinned Xray compatibility checks passed.
 - [UDPQ Sidecar Build](https://github.com/meicamghe/ApnaWin/actions/runs/45587011906): Windows x64 sidecar build and TLS 1.3/QUIC loopback SOCKS5 TCP + UDP relay test passed.
-- [Windows x64 UDPQ test package](https://github.com/meicamghe/ApnaWin/actions/runs/45587011844): still in progress at the latest poll. The pinned StarUDP sidecar build passed; desktop/elevated-helper executable build was still running, and package assembly/upload had not started. No artifact is currently reported for this run.
+- [Windows x64 UDPQ test package](https://github.com/meicamghe/ApnaWin/actions/runs/45587011844): **completed successfully** after a rerun. Desktop and elevated-helper executables built, the portable test folder was assembled, and upload passed. Artifact: `ApnaWin-Windows-x64-UDPQ-Test` (ID `15009972594`, 298,490,768 bytes; SHA-256 `2ecceebe786d5cd8f93bd89e73c3dad143355b2a3e7579875d6bcc8908ff2872`; expires 2026-12-02). This is a temporary test package, not a provider-accepted release.
 
 The full test and sidecar workflows validate automated code paths and loopback behavior only. They do **not** prove live APNA authentication, APNA UDPGW/UDPQ interoperability, or real provider-routed traffic. The earlier checkpoint `12c93ac15e55aaa7fc48136a4495d22fb29e123e` and its results are historical; the earlier package artifact is not evidence that the current package run completed.
 
