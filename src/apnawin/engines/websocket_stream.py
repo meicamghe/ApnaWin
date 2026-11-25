@@ -110,6 +110,19 @@ class WebSocketStreamSocket:
         if opcode == 0x8:
             if len(payload) == 1:
                 raise WebSocketStreamError("WebSocket close frame cannot contain a one-byte status payload")
+            if len(payload) >= 2:
+                close_code = struct.unpack("!H", payload[:2])[0]
+                if (
+                    close_code < 1000
+                    or close_code in {1004, 1005, 1006, 1015}
+                    or 1016 <= close_code <= 2999
+                    or close_code >= 5000
+                ):
+                    raise WebSocketStreamError("WebSocket close frame contains a reserved or invalid status code")
+                try:
+                    payload[2:].decode("utf-8", errors="strict")
+                except UnicodeDecodeError as exc:
+                    raise WebSocketStreamError("WebSocket close reason is not valid UTF-8") from exc
             if not self._close_sent:
                 try:
                     self._send_frame(0x8, payload)
