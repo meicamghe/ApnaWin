@@ -25,11 +25,12 @@ Build a native Windows 10/11 client that offers a clear desktop workflow for tun
 ## Current implementation
 
 - Native PySide6 desktop UI, profile lifecycle, diagnostics, and a fixed-path elevated Windows helper.
-- Current production engine registry: `Transport.XRAY` and `Transport.APNA_SSH`. `OPENVPN` and `SOCKS` enum values are not yet backed by production engine adapters.
+- Engine registry: `Transport.XRAY` and `Transport.APNA_SSH` are always registered when the protected Windows installation helper is available. `Transport.UDPQ` is conditionally registered only when the separately installed Windows x64 sidecar and its pinned source/patch/binary runtime manifest validate. UDPQ is experimental and accepts generic manual StarUDP-compatible profiles; it is not an APNA catalog mapping. `OPENVPN` and `SOCKS` enum values are not backed by production engine adapters.
 - Xray share-link importer supports VLESS, VMess, Trojan and Shadowsocks outbounds with validated supported stream transports. These protocol implementations are supplied by the pinned Xray-core runtime through one Xray/Wintun engine.
 - APNA Lite catalog decoding/import and bounded live catalog retrieval; only four observed SSH-compatible catalog categories are mapped. Other catalog categories remain unsupported until the protected Android runtime's exact configuration mapping is verified.
 - APNA SSH/Payload connector with direct, TLS-direct, HTTP-proxy and TLS-HTTP-proxy modes; payload expansion/split behavior; Paramiko authentication; known-hosts or explicit SHA-256 host-key verification; loopback-only SOCKS5 TCP forwarding.
 - APNA UDPGW framing/flow tracking over an SSH direct-tcpip stream and a local SOCKS5 UDP ASSOCIATE gateway.
+- Experimental UDPQ engine: pinned StarUDP-derived Windows x64 sidecar, protocol-probed loopback SOCKS5 listener, and Xray/Wintun full-tunnel composition. Sidecar registration is manifest/hash-gated; generic manual profile settings are protected with current-user DPAPI. APNA-specific launch values and provider interoperability are not verified.
 - APNA full-tunnel adapter routes the local SOCKS5 gateway through a strict dual-stack Xray TUN/Wintun configuration. UDP DNS and certificate-validated IPv4/IPv6 TLS egress checks are required before CONNECTED.
 - SSH relay supports TCP half-close semantics: a client FIN does not discard a pending remote response.
 - Credentials and Xray configurations are protected with current-user Windows DPAPI; profile metadata exports exclude secrets.
@@ -44,6 +45,7 @@ Build a native Windows 10/11 client that offers a clear desktop workflow for tun
 - M2c–M2e: remote catalog evidence, strict catalog model/cache and bounded HTTPS transport — implemented; live catalog fetch is available but remains lower priority than tunnel reliability.
 - M3a: Xray/Wintun engine and VLESS/VMess/Trojan/Shadowsocks share-link import — implemented; clean-host live provider acceptance remains.
 - M3b: APNA SSH/Payload/UDPGW session and APNA Wintun full-tunnel adapter — implemented with mocked/unit-level coverage; real APNA provider authentication and traffic acceptance remain open.
+- M3c: generic StarUDP-derived UDPQ sidecar, manual profile import and conditional Xray/Wintun integration — experimental implementation and loopback-tested; APNA configuration mapping and live provider acceptance remain open.
 - M4: Windows helper, TUN lifecycle, rollback and cleanup — implemented at component level; clean Windows 10/11 crash/reboot acceptance remains.
 - M5: portable x64 packaging and CI artifact publication — implemented; code signing and final release acceptance remain.
 
@@ -57,7 +59,7 @@ GitHub Actions runs Ruff, the full Windows test suite, installer/runtime securit
 
 A Windows test run on commit `64a41d7` reported 1226 passed, 1 skipped and one failure caused by a test asserting that the peer end of a socketpair should be closed by the SSH session. The assertion was corrected. The SSH TCP relay was also changed to preserve remote responses after a client-side half-close, with a dedicated regression test. Check the latest PR workflow run before treating these changes as CI-verified.
 
-A successful CI suite, live catalog fetch, or packaged-app smoke test does **not** establish an authenticated APNA connection or real provider traffic. Real host-key verification, SSH authentication, UDPGW datagram round-trip, routed TCP/UDP/DNS, IPv4/IPv6 leak checks and clean-host cleanup remain release gates. See [the APNA live Windows acceptance runbook](apna-live-windows-acceptance.md).
+A successful CI suite, UDPQ loopback relay, live catalog fetch, or packaged-app smoke test does **not** establish an authenticated APNA connection or real provider traffic. Real host-key verification, SSH authentication, UDPGW datagram round-trip, routed TCP/UDP/DNS, IPv4/IPv6 leak checks and clean-host cleanup remain release gates. See [the APNA live Windows acceptance runbook](apna-live-windows-acceptance.md).
 
 ## Profile text rendering
 
