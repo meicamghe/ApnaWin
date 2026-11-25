@@ -1,85 +1,50 @@
-# Current active state — 2026-11-23
+# Current active state — 2026-11-25
 
 **Repository:** `meicamghe/ApnaWin`  
 **Branch:** `vpn/dual-stack-egress-readiness`  
 **PR:** [#6](https://github.com/meicamghe/ApnaWin/pull/6), open Draft, not merged.  
-**Latest verified HEAD at handoff:** `c261e9c6c7a52138d6c1794976900ca2c474fb70`.
+**Documentation reconciliation commits:** `a5096583c38768dcba913ecc8da089461c1b4535` and the subsequent README/architecture/triage updates (see branch history).
 
-## Latest verified checkpoint — 2026-11-23
+## Current implementation truth
 
-- Cipher diagnostics checkpoint `149b037`: peer SSH KEXINIT cipher lists are reported on no-mutual-cipher failures without changing Paramiko's policy. CI passed all seven jobs on this checkpoint, including the full unit/integration suite and Windows portable packaging.
-- WebSocket transport checkpoint `8d8b23f` + close-lifecycle fix `50089cd`: explicit HTTP 101 responses now require a valid RFC 6455 handshake (GET/Upgrade/Connection/version 13/16-byte key/Accept match), then use a binary-frame stream adapter that masks client frames, unwraps server frames, handles fragmentation and ping/pong, and rejects malformed/text/masked-server frames. Peer close is echoed and the underlying socket is always released. CI validation is pending.
+- The Windows composition root always registers **APNA SSH** and **Xray** when the protected Program Files installation helper is valid.
+- **UDPQ is conditionally registered** only when `Program Files/ApnaWin/engine/udpq-client.exe` and `runtime-manifest.json` validate against the pinned StarUDP source commit, reviewed redaction-patch hash and executable SHA-256. It is an experimental generic manual-profile path, not an APNA catalog mapping.
+- UDPQ starts the pinned Windows x64 sidecar, verifies its loopback SOCKS5 listener, then composes it with the existing Xray/Wintun dual-stack tunnel. Disconnect shuts down Xray/Wintun before the sidecar.
+- OpenVPN and standalone SOCKS enum values have no production engine registration.
+- Xray protocol outbounds include VLESS, VMess, Trojan, Shadowsocks, Hysteria 2, WireGuard and MASQUE; these are not separate engine processes. HTTP/SOCKS outbounds are proxy modes, not encrypted VPN protocols.
+- APNA Lite catalog mapping remains limited to the verified SSH-family categories `ocsws`, `ocscf`, `ocsnormal` and `ocshttp`. Other categories must not be mapped by name alone.
+- APNA ARM64 and UDP Thunder 1.5 ARM32 `libudpqtwo.so` samples have matching StarUDP-family Go package/type/config fingerprints. This is strong static lineage evidence, not proof of exact source revision, APNA service ownership, runtime configuration, ALPN/auth/SNI values, or live-server compatibility.
+- The protected LIAPP DEX has not been bypassed. Ordinary service/process diagnostics remain the acceptable route to establish native ownership and launch parameters.
+- No live APNA SSH authentication, APNA UDPGW round-trip, APNA UDPQ handshake, or Windows routed APNA traffic has been established. Green CI and loopback tests do not change that.
+- The pinned BadVPN Windows artifact remains research-only: its upstream Windows TUN backend targets TAP-Windows, not ApnaWin's Wintun path.
 
-- Implementation checkpoint `b351ef9`: added `ApnaDiagnosticTransport` to the unauthenticated host-key probe and authenticated SSH session; the KEXINIT peer cipher offers are reported in cipher-mismatch errors without changing enabled algorithms. Unit coverage and CI are being validated.
-- Current user-test follow-up: a diagnostic Paramiko transport is being added to report both directional cipher lists from the peer SSH KEXINIT and the client-enabled cipher list when negotiation fails. This is diagnostic only; it does not enable CBC/3DES or alter the algorithm policy. CI validation is pending.
+## Latest verified functional checkpoint
 
-- PR #6 remains open and Draft. Do not merge or convert it from Draft without explicit user approval.
-- Both current-head workflows for `c261e9c` completed successfully: Windows tests/build (including Ruff, runtime security, VPN readiness/egress, unit/integration tests, packaging and portable artifact publication) and the APNA BadVPN Windows x64 native build.
-- The latest commit fixes a test-only TLS compatibility-context injection issue; production TLS behavior was not changed by that commit.
-- The TLS self-signed compatibility option is already wired end-to-end for imported APNA profiles: the APK import dialog exposes the opt-in checkbox, the mapper passes it to `PayloadSocketConfig`, the encrypted profile store persists it, and the selected-profile UI exposes a persisted toggle. The toggle changes only TLS certificate verification; it does not change SNI or SSH authentication.
-- Import counts are counts of server/payload combinations, not server records or hostnames. The import worker iterates each server record and every SSH-compatible payload in that server's category, creates one candidate per valid pair, and deduplicates by generated profile name. Thus 3,028 imported profiles from 50 server records / 16 SSH-compatible records is not, by itself, evidence of hostname expansion or a counting bug. The report explicitly distinguishes pair attempts, valid combinations, and imported profiles.
-- No live SSH authentication, UDPGW datagram round-trip, or Windows routed traffic has been proven by green CI. Those remain external acceptance gates and require the user's authorized APNA endpoint/network and a Windows 10/11 test host.
+For functional commit `4a378595f810327423ea81cbfe074e6fd1e4341a`: 
+- Full suite: 1,563 passed, 31 skipped.
+- UDPQ loopback: TLS 1.3 + QUIC, SOCKS5 TCP and UDP datagram relay passed.
+- Windows x64 UDPQ sidecar build passed.
+- Windows x64 test package build and upload passed.
+- Workflow runs: [45579596374](https://github.com/meicamghe/ApnaWin/actions/runs/45579596374), [45579596464](https://github.com/meicamghe/ApnaWin/actions/runs/45579596464), [45579596339](https://github.com/meicamghe/ApnaWin/actions/runs/45579596339).
+- Test artifact: [ApnaWin-Windows-x64-UDPQ-Test](https://github.com/meicamghe/ApnaWin/actions/runs/45579596339/artifacts/15005094373), SHA-256 `4c9e62df0cd9b59236d7a8a70d733a2675363cb1b13d1aac57aba57d0ee75a11`. It is test-only and is not an APNA-compatible release.
+- Documentation-only changes after this checkpoint must not be described as functionally CI-verified until a workflow for the new HEAD completes.
 
-## Acceptance target
+## Next engineering gates
 
-A real Windows 10/11 connection to APNA TUNNEL LITE (`com.apnatunnel.lite`): independently verified SSH host key, successful authentication, SSH-carried UDPGW, and routed TCP/UDP/DNS traffic through Xray/Wintun. Unit tests, mocked sockets, package builds and catalog decoding do not prove provider connectivity.
+1. Establish which ordinary Android service/process loads `libudpqtwo.so`, without bypassing LIAPP.
+2. Recover APNA-provided runtime configuration through an authorized diagnostic trace: ALPN, SNI, auth representation, rates, packet mode, obfuscation and hopping semantics.
+3. Compare remaining Go function/type fingerprints against pinned StarUDP source and document exact match confidence.
+4. Test generic UDPQ against an authorized StarUDP-compatible server; separately test APNA only when an authorized APNA endpoint/config is available.
+5. Complete Windows 10/11 acceptance for SSH host-key verification, authentication, UDPGW, routed TCP/UDP/DNS, dual-stack egress/leak checks and disconnect/crash cleanup.
+6. Keep PR #6 Draft and unmerged until provider acceptance gates pass.
 
-## Current implementation
+## Documentation maintenance rule
 
-- **APNA catalog:** bounded Base64/modified-XXTEA decoder, APK asset import, live HTTPS catalog fetch with observed Android request headers, bounded retries and range-resume handling. Catalog fetching is lower priority than transport reliability; manual APK import remains available.
-- **APNA profile mapping:** only the verified SSH-family categories `ocsws`, `ocscf`, `ocsnormal`, and `ocshttp` are mapped. Unsupported category names are not guessed into Xray, Trojan, Shadowsocks or UDP protocols.
-- **Payload:** ordered placeholder substitution, ISO-8859-1 encoding, Java split semantics, instant/delayed split handling, and HTTP 200/101 handling for Upgrade payloads.
-- **SSH:** direct/TLS/HTTP payload socket connector, Paramiko authentication, strict known-hosts rejection or explicit SHA-256 host-key pinning, loopback-only SOCKS5 TCP forwarding, and stage-specific diagnostics.
-- **SSH relay lifecycle:** reconnect-after-close is supported. A TCP half-close now propagates FIN to the remote SSH channel while continuing to drain the remote response; a regression test covers this behavior.
-- **UDP:** BadVPN-compatible PacketProto/UDPGW framing and flow tracking, carried over SSH `direct-tcpip`, exposed through local SOCKS5 UDP ASSOCIATE. UDPGW preflight is performed through the authenticated SSH SOCKS endpoint.
-- **APNA TUN:** `ApnaTunnelEngine` routes the local SOCKS5/UDPGW gateway through a strict dual-stack Xray TUN on Wintun. Startup requires UDP DNS plus certificate-validated IPv4 and IPv6 TLS egress checks; failed startup rolls back resources and preserves ownership if cleanup cannot be confirmed.
-- **Other protocols:** the desktop engine registry currently registers APNA SSH and Xray. The Xray importer supports VLESS, VMess, Trojan and Shadowsocks share links using Xray-core. These are protocol outbounds inside the Xray engine, not independent engine executables. OpenVPN and standalone SOCKS enum values do not yet have production engine registrations.
-- **Windows packaging:** x64 portable app build, helper/runtime security checks, smoke test and BadVPN native build are automated. The BadVPN artifact is research-only and not integrated because its upstream Windows TUN backend targets TAP-Windows, not the product's Wintun path.
-
-## Latest CI findings and work
-
-- Windows run [44275436929](https://github.com/meicamghe/ApnaWin/actions/runs/44275436929) on `64a41d7`: Ruff, packaging, installer/runtime security and VPN readiness/egress jobs passed; unit/integration had **1 test failure, 1226 passed, 1 skipped**. The sole failure was an incorrect test assertion that expected the peer end of a socketpair to be closed by the SSH session. The test now checks the owned endpoint.
-- BadVPN build [44275436880](https://github.com/meicamghe/ApnaWin/actions/runs/44275436880) on `64a41d7` succeeded.
-- Added a regression test and implementation fix for SSH TCP half-close response handling.
-- Latest full Windows test/build and BadVPN workflows for `851e6ca` were in progress at the time of this handoff; check their current status before claiming success.
-- The README and this handoff are being synchronized with the current implementation and its support boundary.
-
-## Release gates still open
-
-1. Verify a live APNA SSH host key against an independent provider-controlled source.
-2. Authenticate to an authorized APNA server.
-3. Verify a real UDPGW datagram round-trip and routed TCP, UDP and DNS traffic over that server on Windows 10/11.
-4. Verify IPv4/IPv6 egress, DNS leak behavior, disconnect and crash cleanup on clean Windows hosts.
-5. Confirm final Windows x64 package integrity from a successful current-head CI run.
-
-Keep PR #6 Draft and unmerged. Never claim APNA connectivity from mocked tests, a green CI suite, a live catalog fetch, or a successful package build.
-
-
-## User live-test reports — 2026-11-23 (after the c261e9c checkpoint)
-
-The user supplied eight additional endpoint test results after the prior 37-report batch. None established an SSH session:
-
-| Endpoint/profile group | Observed result | Interpretation |
-|---|---|---|
-| `d2vkityu2663xy.cloudfront.net:1194` — three CloudFront profile names | HTTP 403 on all three | CloudFront edge denial before SSH; profile-specific payload method/path, HTTP Host, viewer port, SNI and provider behavior/origin policy remain unverified. |
-| `d3v7vv3wqyy9ly.cloudfront.net:1194` — IRAN Filter Breaker | HTTP 301 to `https://[proxy]:443/` | Redirect is intentionally not followed; provider-approved request target and redirect semantics are unknown. |
-| Same `d3v7vv3wqyy9ly.cloudfront.net:1194` — IRAN #5 | HTTP 403 | Edge denial; not an SSH negotiation result. |
-| Same `d3v7vv3wqyy9ly.cloudfront.net:1194` — IRAN #9 | HTTP 400 with Cloudflare Ray ID | HTTP request rejected as malformed; exact payload bytes/headers are needed. |
-| `xm63.tumsongcloud.xyz:1194` and `xm49.tumsongcloud.xyz:1194` — MASTER SERVER 6 | SSH peer advertises only `strawberry` in both cipher directions | Paramiko has no matching recognized cipher. This is not safely fixable by guessing an alias or enabling legacy ciphers. |
-
-These eight reports bring the user's cumulative reported test count to 45, with zero confirmed successful VPN connections (the previous 37 plus these eight). Treat this as the user's reported sample, not a complete catalog-wide test.
-
-### Engineering decision
-
-- The current transport correctly fails closed on these observed stages. HTTP 301/400/403 occurs before SSH; the two `strawberry` reports reach SSH KEXINIT but fail cipher negotiation.
-- Do not rewrite CloudFront payloads, Host/SNI, path, or port by inference. Request the exact redacted catalog fields for each tested profile (method, payload template, payload host/port, `sslws`, `sausage`, `dothost`, and the associated server record's host/ports) and preserve the exact profile-to-record association.
-- Do not add `strawberry` to Paramiko's cipher allowlist or map it to AES/another standard cipher. It is not a recognized Paramiko cipher name; identifying it requires provider documentation or a verifiable protocol implementation/trace.
-- Next valid acceptance step is to obtain provider-authorized profile details and, for the SSH endpoints, an independently published host-key fingerprint and supported cipher specification. Retest one representative profile per distinct transport/payload behavior before making code changes.
-- The latest verified CI checkpoint remains structural only: Windows tests/build and the research-only BadVPN Windows x64 build passed. These checks do not prove APNA provider authentication or routed traffic.
+This section is the single current handoff. The material below is a historical archive; its dated HEADs, CI statuses and implementation inventories are not current facts unless re-verified.
 
 ---
 
-## Historical handoff archive (older snapshots; superseded by the current state above)
+## Historical handoff archive (snapshots from 2026-11-23 and earlier)
 
 ## User acceptance target
 
