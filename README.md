@@ -45,7 +45,13 @@ python -m apnawin
 
 ## Build artifact
 
-On pushes to `main` and pull requests, the Windows workflow runs tests first, then builds the native desktop app with PyInstaller. On a successful run, download the `ApnaWin-Windows-x64` artifact from the workflow run's **Artifacts** section. Extract the ZIP and launch `ApnaWin.exe` from the extracted `ApnaWin` folder. The artifact is temporary CI output (14-day retention), not a signed installer. For the elevated TUN helper, extract the folder and run Install-ApnaWin.ps1 as Administrator; it installs under Program Files with standard-user read/execute ACLs. The helper is not Authenticode-signed.
+GitHub Actions uses separate validation and packaging workflows:
+
+- `.github/workflows/tests.yml` runs on pull requests targeting `main` and pushes to `main`. It runs Ruff, the full Windows test suite, installer/runtime security checks, VPN readiness/egress tests, pinned-Xray share-link compatibility, and a pinned UDPQ sidecar build. This workflow does not publish the desktop package.
+- `.github/workflows/udpq-windows-test-build.yml` runs for pull-request changes under its configured source/build paths (or by manual dispatch). It builds and smoke-tests the Windows x64 desktop/helper executables, stages pinned Xray/Wintun and the experimental UDPQ sidecar, and uploads the temporary `ApnaWin-Windows-x64-UDPQ-Test` artifact (7-day retention). This is a test package, not a signed installer or APNA-compatible release.
+- `.github/workflows/udpq-sidecar-build.yml` independently builds the pinned Windows x64 UDPQ sidecar and runs a local TLS/QUIC SOCKS5 TCP/UDP loopback test when its configured paths change (or by manual dispatch).
+
+For the test package, download `ApnaWin-Windows-x64-UDPQ-Test` from the relevant workflow run's **Artifacts** section, extract it, and launch `ApnaWin.exe`. For the elevated TUN helper, run `Install-ApnaWin.ps1` as Administrator; it installs under Program Files with standard-user read/execute ACLs. The helper is not Authenticode-signed.
 
 Run tests:
 
