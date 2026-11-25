@@ -122,7 +122,7 @@ def test_close_frame_is_echoed_and_underlying_socket_is_released():
 def test_reserved_or_invalid_close_status_is_rejected(status):
     client, server = socket.socketpair()
     stream = WebSocketStreamSocket(client)
-    server.sendall(b"\\x88\\x02" + status.to_bytes(2, "big"))
+    server.sendall(bytes.fromhex("8802") + status.to_bytes(2, "big"))
     try:
         with pytest.raises(WebSocketStreamError, match="reserved or invalid status code"):
             stream.recv(1)
@@ -134,7 +134,7 @@ def test_reserved_or_invalid_close_status_is_rejected(status):
 def test_invalid_utf8_close_reason_is_rejected():
     client, server = socket.socketpair()
     stream = WebSocketStreamSocket(client)
-    server.sendall(b"\\x88\\x03\\x03\\xe8\\xff")
+    server.sendall(bytes.fromhex("880303e8ff"))
     try:
         with pytest.raises(WebSocketStreamError, match="not valid UTF-8"):
             stream.recv(1)
@@ -161,7 +161,7 @@ def test_private_use_close_status_and_utf8_reason_are_echoed():
 def test_empty_close_payload_is_echoed():
     client, server = socket.socketpair()
     stream = WebSocketStreamSocket(client)
-    server.sendall(b"\\x88\\x00")
+    server.sendall(bytes.fromhex("8800"))
     try:
         assert stream.recv(1) == b""
         opcode, payload = _read_client_frame(server)
