@@ -111,7 +111,7 @@ The SecondVPN implementation confirms the following behavior in that codebase:
 
 This is substantially stronger corroboration for APNA's observed `[instant_split]` token than the earlier source that only implemented `[split]`. However, it remains sibling-source evidence: the APNA protected bytecode has not yet been fully reconstructed, so the exact default protocol, delay duration, rotation state scope, and replacement order are still verification items.
 
-ApnaWin now contains an isolated, tested payload compiler at `src/apnawin/engines/apna_payload.py`. It implements the DEX-observed placeholders, ISO-8859-1 encoding, instant/delayed segment boundaries and per-profile round-robin rotation. The one-second delay is configurable and explicitly documented as a sibling-derived default. Unknown tokens are preserved rather than guessed. This compiler is not yet wired into an SSH connection engine; it is a tested building block, not a claim of APNA connectivity.
+ApnaWin contains a tested payload compiler at `src/apnawin/engines/apna_payload.py` for DEX-observed placeholders, ISO-8859-1 encoding, instant/delayed segment boundaries and per-profile round-robin rotation. The one-second delay is configurable and explicitly documented as a sibling-derived default; unknown tokens are preserved rather than guessed. The compiler is now consumed by `ApnaPayloadSocketConnector`, which is used by `ApnaSSHSession` to establish the payload stream before SSH authentication. This confirms local integration of the payload layer, not APNA provider authentication or live connectivity.
 
 ## 2A. SSH connection and proxy-handshake branches in the related source
 
