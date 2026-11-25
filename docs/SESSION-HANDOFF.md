@@ -18,16 +18,14 @@
 - No live APNA SSH authentication, APNA UDPGW round-trip, APNA UDPQ handshake, or Windows routed APNA traffic has been established. Green CI and loopback tests do not change that.
 - The pinned BadVPN Windows artifact remains research-only: its upstream Windows TUN backend targets TAP-Windows, not ApnaWin's Wintun path.
 
-## Latest verified functional checkpoint
+## Latest CI-verified branch head
 
-For functional commit `4a378595f810327423ea81cbfe074e6fd1e4341a`: 
-- Full suite: 1,563 passed, 31 skipped.
-- UDPQ loopback: TLS 1.3 + QUIC, SOCKS5 TCP and UDP datagram relay passed.
-- Windows x64 UDPQ sidecar build passed.
-- Windows x64 test package build and upload passed.
-- Workflow runs: [45579596374](https://github.com/meicamghe/ApnaWin/actions/runs/45579596374), [45579596464](https://github.com/meicamghe/ApnaWin/actions/runs/45579596464), [45579596339](https://github.com/meicamghe/ApnaWin/actions/runs/45579596339).
-- Test artifact: [ApnaWin-Windows-x64-UDPQ-Test](https://github.com/meicamghe/ApnaWin/actions/runs/45579596339/artifacts/15005094373), SHA-256 `4c9e62df0cd9b59236d7a8a70d733a2675363cb1b13d1aac57aba57d0ee75a11`. It is test-only and is not an APNA-compatible release.
-- Documentation-only changes after this checkpoint must not be described as functionally CI-verified until a workflow for the new HEAD completes.
+Commit `12c93ac15e55aaa7fc48136a4495d22fb29e123e` (the branch HEAD checked on 2026-11-25) has completed all three PR workflows successfully:
+- [Windows tests and runtime checks](https://github.com/meicamghe/ApnaWin/actions/runs/45583327171): full suite **1,563 passed, 31 skipped**; Ruff, installer/runtime security, Python compilation, and VPN runtime readiness/egress jobs all passed. The dedicated VPN readiness/egress job reports **179 passed**.
+- [UDPQ Sidecar Build](https://github.com/meicamghe/ApnaWin/actions/runs/45583327109): Windows x64 sidecar build and TLS 1.3/QUIC loopback SOCKS5 TCP + UDP relay test both passed.
+- [Windows x64 UDPQ test package](https://github.com/meicamghe/ApnaWin/actions/runs/45583327146): sidecar, desktop/helper executables, portable test folder assembly, smoke/build and artifact upload passed.
+
+The earlier functional checkpoint `4a378595f810327423ea81cbfe074e6fd1e4341a` and its test artifact remain documented below as historical evidence. The new runs validate the branch HEAD's CI/test/build paths; they do **not** prove live APNA authentication, APNA UDPGW/UDPQ interoperability, or real provider-routed traffic. The test artifact remains test-only, not an APNA-compatible release.
 
 ## Next engineering gates
 
