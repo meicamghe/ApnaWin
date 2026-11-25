@@ -1,5 +1,7 @@
 # APNA TUNNEL LITE Android runtime static analysis
 
+> Static-analysis snapshot from 2026-11-16. Findings about DEX-visible service ownership and the protected LIAPP boundary remain evidence-limited; consult `docs/libudpqtwo-linux-triage.md` for the later cross-binary StarUDP fingerprint and `docs/SESSION-HANDOFF.md` for current project status.
+
 **Target:** APNA TUNNEL LITE, package `com.apnatunnel.lite`  
 **APK inspected:** user-provided Library APK, SHA-256 `b1f650b168665b0728b1be0e25a0c722cd77ec873e1a1c7e2711a78aa1012a6d`  
 **Date:** 2026-11-16  
