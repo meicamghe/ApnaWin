@@ -143,10 +143,10 @@ def test_invalid_utf8_close_reason_is_rejected():
         server.close()
 
 
-def test_registered_application_close_status_and_utf8_reason_are_echoed():
+def test_private_use_close_status_and_utf8_reason_are_echoed():
     client, server = socket.socketpair()
     stream = WebSocketStreamSocket(client)
-    close_payload = (3001).to_bytes(2, "big") + "normal پایان".encode("utf-8")
+    close_payload = (4001).to_bytes(2, "big") + "normal پایان".encode("utf-8")
     server.sendall(bytes((0x88, len(close_payload))) + close_payload)
     try:
         assert stream.recv(1) == b""
