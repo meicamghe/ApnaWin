@@ -1,5 +1,7 @@
 # APNA TUNNEL LITE v51 split APK and native-library analysis
 
+> Binary inventory snapshot. The later cross-sample protocol-family comparison is recorded in section 7 below and `docs/libudpqtwo-linux-triage.md`; it supports StarUDP-family lineage but does not establish APNA service ownership or live compatibility.
+
 **Input archive:** user-provided `APNA-APKs.zip`  
 **Archive SHA-256:** `693749cf63c3363d21fe78cd52eb970bd0e45a67d1493e99958781c706107130`  
 **Inspection:** offline ZIP integrity, binary AndroidManifest.xml parsing, ELF headers/dependencies/exports, Go build metadata and static strings. No APK or native library was executed.
