@@ -1,5 +1,7 @@
 # APNA Tunnel Lite primary-DEX connection and payload findings
 
+> DEX evidence snapshot (2026-11-16). The implementation-status statements in this document are historical where they describe unfinished ApnaWin components; use `docs/SESSION-HANDOFF.md` and `docs/architecture.md` for current implementation status. Real APNA provider acceptance remains unverified.
+
 Date: 2026-11-16  
 APK: `com.apnatunnel.lite`, supplied `base.apk`, SHA-256 `b1f650b168665b0728b1be0e25a0c722cd77ec873e1a1c7e2711a78aa1012a6d`
 
