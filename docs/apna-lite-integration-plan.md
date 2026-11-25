@@ -1,5 +1,7 @@
 # APNA TUNNEL LITE integration plan
 
+> Historical implementation snapshot (2026-11-16 onward). Use `docs/SESSION-HANDOFF.md`, `README.md` and `docs/architecture.md` for the current engine inventory and release gates. This plan's APNA category-mapping restrictions remain current; generic UDPQ support does not authorize APNA catalog conversion.
+
 **Status (2026-11-16):** APNA profile import, live catalog retrieval, SSH/UDPGW session and Xray/Wintun TUN integration are implemented in code. No real APNA authentication or routed provider traffic has been verified; this is not release-ready.
 
 **Target application:** APNA TUNNEL LITE, Android package `com.apnatunnel.lite`.
