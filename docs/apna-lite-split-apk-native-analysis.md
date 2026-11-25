@@ -142,3 +142,15 @@ Xray's local-only outbounds such as `freedom`, `blackhole`, DNS and `loopback` a
 The Android ABI split supplies ARM64 libraries only; those binaries cannot be reused in the Windows x64 application. The implemented Hysteria 2 and MASQUE paths cover documented Xray QUIC-based tunnel protocols, but they are not asserted to be the private `libudpqtwo.so` protocol.
 
 To close this last reverse-engineering item, collect a fresh authorized trace of the Android service that loads/starts `libudpqtwo.so` (method arguments, service ownership, socket setup and handshake metadata) or provide the exact ARM64 split archive in an accessible project source. No LIAPP bypass or automatic APNA category mapping is authorized by this evidence.
+
+## 7. Reconciliation of the UDPQ source-lineage evidence
+
+The separate `docs/libudpqtwo-linux-triage.md` records a stronger cross-sample comparison: APNA's ARM64 `libudpqtwo.so` and UDP Thunder 1.5's ARM32 binary contain matching StarUDP-style Go wire-structure names, serialization tags and client-config JSON tags. This supports a **StarUDP/Hysteria-v1-derived implementation lineage** as the leading static hypothesis for the binary's networking code.
+
+That finding does not conflict with the product-level boundary in section 6.1:
+
+- **Supported by static evidence:** the binary embeds a distinctive protocol/config structure fingerprint matching the pinned public StarUDP source family.
+- **Not established:** whether APNA invokes this binary for a user-selectable VPN mode, which Android service owns it, whether the binary was modified beyond the matching structures, or which ALPN, SNI, credentials, rates, packet mode, obfuscation and port-hopping values APNA supplies.
+- **Not demonstrated:** a successful handshake with an authorized APNA server or real routed TCP/UDP/DNS traffic using this binary's settings.
+
+Accordingly, ApnaWin's StarUDP-derived Windows sidecar remains an experimental reference implementation. Do not map APNA catalog categories to it or label it as APNA-compatible until the protected launch/configuration contract and an authorized live-server handshake are independently verified. The LIAPP-protected DEX remains out of scope for bypass; ordinary service/process diagnostics are the next acceptable evidence source.
