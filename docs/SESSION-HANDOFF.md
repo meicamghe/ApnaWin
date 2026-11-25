@@ -18,6 +18,21 @@
 - No live APNA SSH authentication, APNA UDPGW round-trip, APNA UDPQ handshake, or Windows routed APNA traffic has been established. Green CI and loopback tests do not change that.
 - The pinned BadVPN Windows artifact remains research-only: its upstream Windows TUN backend targets TAP-Windows, not ApnaWin's Wintun path.
 
+## Latest verified checkpoint — 2026-11-25 14:00 +03:30
+
+Current branch HEAD: `a8825acfef763a2b169c6a27b9f8dd0d9828d81a`.
+
+All three workflows on this exact HEAD completed successfully:
+- [Windows tests and runtime checks](https://github.com/meicamghe/ApnaWin/actions/runs/45591387626): **1,576 passed, 31 skipped**, 2 warnings. Ruff, installer/runtime security, VPN readiness/egress and Xray compatibility checks passed.
+- [UDPQ Sidecar Build](https://github.com/meicamghe/ApnaWin/actions/runs/45591387651): passed, including Windows x64 sidecar build and QUIC TCP+UDP loopback relay verification.
+- [Windows x64 UDPQ test package](https://github.com/meicamghe/ApnaWin/actions/runs/45591387733): completed successfully; pinned StarUDP sidecar, desktop/elevated helper executables, portable-folder assembly and upload all passed.
+
+Latest temporary artifact: [ApnaWin-Windows-x64-UDPQ-Test](https://github.com/meicamghe/ApnaWin/actions/runs/45591387733/artifacts/15010399805), ID `15010399805`, **298,488,930 bytes**, SHA-256 `fd12bb558f28c2f27748ba0420dfe7cd6575ffb8f3eddc2fb91fcd499692fb2a`, expires 2026-12-02. It is a test package, not a provider-accepted release.
+
+The non-blocking live APNA catalog probe also succeeded and returned version `863`, 50 free servers, 646 payloads and zero premium/VIP/private servers. This establishes catalog reachability only; it does not establish APNA SSH authentication, UDPGW/UDPQ handshake, or provider-routed traffic.
+
+The WebSocket close-frame validation and regression tests, including the corrected binary fixtures, are included in this tested HEAD. The CI queue-cleanup fix is also included. PR #6 remains open, Draft, unmerged and mergeable. Keep it Draft until real provider acceptance gates pass.
+
 ## Latest full CI-verified checkpoint
 
 Commit `28d831cd3c0e15b1a5716480c814bdfd2e2c2201` (2026-11-25):
