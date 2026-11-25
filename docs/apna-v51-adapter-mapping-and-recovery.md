@@ -1,8 +1,19 @@
 # APNA v51 service-to-Windows adapter evidence matrix
 
-**Updated:** 2026-11-18  
+**Original evidence snapshot:** 2026-11-18  
 **Scope:** `com.apnatunnel.lite` v51, supplied six-APK split set, and the ApnaWin Windows implementation.  
 **Rule:** a native-library string, catalog category name, or Android service descriptor is not sufficient evidence to assign a protocol adapter.
+
+## Current correction — 2026-11-25
+
+This document began as an evidence-gated adapter plan. Its historical statements that no UDPQ engine exists and that `Transport` lacks UDPQ have been superseded by the current implementation:
+
+- `Transport.UDPQ` and `UdpqTunnelEngine` now exist. The Windows composition root conditionally registers UDPQ only when the pinned sidecar and runtime-manifest source/patch/binary hashes validate.
+- The manual UDPQ profile dialog and DPAPI-backed config store support a generic StarUDP-compatible profile. The engine composes the sidecar's probed loopback SOCKS5 endpoint with Xray/Wintun.
+- This does **not** assign `libudpqtwo.so` to an APNA service, recover APNA's protected launch values, map any APNA catalog category to UDPQ, or prove an APNA server handshake. The APNA native binary has a strong static StarUDP-family fingerprint, but its product-level role remains unconfirmed.
+- APNA SSH and Xray remain the separately implemented paths; OpenVPN and standalone SOCKS remain unregistered.
+
+The sections below are retained as historical evidence and planning context. Any statement about current source registration or implementation status must defer to this correction and the current source tree.
 
 ## 1. Evidence summary
 
@@ -151,9 +162,9 @@ The v51 primary DEX references `prince.open.vpn.activities.OpenVPNClient`, but t
 - Recover the v51 split/protected implementation or a redacted runtime trace before defining the exact APNA OpenVPN adapter contract.
 - A generic OpenVPN engine may be developed as an independent importable transport, but it must not be presented as a verified v51 catalog mapping.
 
-### 7.3 QUIC/DTLS and `libudpqtwo.so`
+### 7.3 QUIC/DTLS and `libudpqtwo.so` — historical assessment, superseded
 
-The current source has no dedicated QUIC or DTLS transport engine registered in `Transport`. The Android native inventory establishes that the ARM64 Go binary contains QUIC, Pion DTLS, SOCKS5, HTTP proxy and DNS-related code signatures. It does not reveal a stable configuration schema or which service owns the binary.
+The current source now has a generic experimental `Transport.UDPQ` adapter backed by the pinned StarUDP-derived Windows sidecar. It is conditionally registered after runtime-manifest validation and accepts manually supplied generic StarUDP settings. This is not an APNA-specific adapter. The Android native inventory and cross-sample comparison support StarUDP-family code lineage, but still do not reveal which APNA service owns the binary or the protected runtime values.
 
 The next implementation gate is not to guess a protocol from the filename. Recover and document:
 
@@ -168,7 +179,7 @@ After the contract is known, implement QUIC and DTLS as separate transport adapt
 
 1. Keep the SSH + payload + SOCKS + UDPGW path isolated and add provider-independent protocol conformance tests; never weaken SSH algorithms merely to make an endpoint appear compatible.
 2. Separate the Xray TUN frontend from remote Xray outbound profiles. Add a typed remote-outbound model and per-protocol config builders only with required credential/security fields and validation.
-3. Add independent engine contracts for QUIC and DTLS after recovering `libudpqtwo.so` ownership and wire/config behavior.
+3. Keep the generic UDPQ implementation separate from APNA-specific mapping. Do not add APNA category conversion until service ownership, configuration values and an authorized handshake are established.
 4. Add OpenVPN as an independently testable engine; mark APNA v51 catalog selection as unresolved until v51 evidence exists.
 5. Register each engine explicitly in the multi-transport router, then test lifecycle, cancellation, resource ownership, IPv4/IPv6, TCP/UDP, DNS and leak protection.
 6. Keep all statuses evidence-based: process started, handshake complete, authenticated, proxy reachable, routed egress verified and disconnected must remain distinct states.
@@ -182,7 +193,7 @@ This audit changes the engineering plan and does not claim a successful live con
 
 A source-level audit of the current branch confirms the following implementation boundaries:
 
-- `Transport` currently exposes only `XRAY`, `OPENVPN`, `SOCKS`, and `APNA_SSH`. It does not yet model the Xray wire protocols as separate transports. This is appropriate only if Xray is treated as one engine with a typed outbound profile; it is not a protocol registry for all Android-native engines.
+- Historical snapshot: `Transport` exposed `XRAY`, `OPENVPN`, `SOCKS`, and `APNA_SSH`. The current enum additionally exposes `UDPQ`; see the correction at the top of this document.
 - `XrayProcessRunner` is a process supervisor, not a config generator. Its validator accepts a bounded set of remote outbound protocol names (VLESS, VMess, Trojan, Shadowsocks, SOCKS, HTTP, WireGuard, Hysteria, MASQUE) and rejects direct/unsupported outbound protocols in the strict TUN path. It does not validate the complete protocol-specific settings schema or create credentials/security/transport objects.
 - `build_apna_xray_tun_config()` is specifically the APNA SSH bridge frontend: one Xray TUN inbound and one SOCKS outbound to the loopback gateway. It must remain separate from a future remote-Xray outbound builder; replacing its SOCKS outbound with a guessed remote protocol would break the existing SSH/UDPGW data path.
 - `ApnaTunnelEngine` owns the SSH session, loopback SOCKS/UDPGW, Xray TUN process, DNS probe, TCP egress probe and rollback. Its readiness checks are intentionally stronger than process-started state. It is Windows-only and requires UDPGW configuration for full-tunnel mode.
@@ -193,7 +204,7 @@ A source-level audit of the current branch confirms the following implementation
 
 The next safe implementation unit is a separate, typed Xray remote-outbound configuration layer plus its schema-focused tests. It must not alter `build_apna_xray_tun_config()` or claim that an APNA catalog category maps to VLESS/VMess/etc. The builder should accept explicit protocol-specific settings, reject missing/contradictory security and transport fields, serialize deterministic JSON, and pass the existing strict TUN policy only when used as a TUN outbound. Protocol schemas must be checked against the exact Xray-core version selected for the Windows runtime before implementation; the APK's embedded Xray module version is evidence about the Android binary, not automatically the Windows runtime version.
 
-OpenVPN, QUIC and DTLS remain separate engine work items. The current source does not yet provide their complete lifecycle adapters. No Windows build, installer, release, PR merge, or connectivity claim was made as part of this audit.
+OpenVPN and a dedicated DTLS adapter remain separate work items. The current UDPQ lifecycle adapter is experimental and generic; it does not establish APNA compatibility. No Windows build, installer, release, PR merge, or connectivity claim was made as part of this audit.
 
 ## 2026-11-23 correction: Xray share-link engine already exists
 
@@ -219,11 +230,8 @@ No Windows product build, installer, release, PR merge, or live-provider connect
 
 ## 2026-11-23 UI-to-engine registration audit
 
-The current desktop source registers exactly two live engine keys in `_create_live_connection_controller()`:
+At the time of this 2026-11-23 snapshot, the desktop source registered two live engine keys. This historical inventory is superseded: the current source also conditionally registers `Transport.UDPQ` when its sidecar runtime manifest validates.
 
-- `Transport.XRAY` → `XrayTunnelEngine`
-- `Transport.APNA_SSH` → `ApnaTunnelEngine`
-
-Although the generic `Transport` enum and profile editor also expose `OPENVPN` and `SOCKS`, neither has a registered engine. The Connect control explicitly enables only XRAY and APNA_SSH profiles. Therefore an OPENVPN or SOCKS profile can exist as metadata but cannot currently establish a connection; the UI is fail-closed rather than silently routing it through another engine.
+Although the generic `Transport` enum and profile editor also expose `OPENVPN` and `SOCKS`, neither has a registered engine. The Connect control explicitly enables only XRAY and APNA_SSH profiles. Therefore an OPENVPN or standalone SOCKS profile can exist as metadata but cannot establish a connection; the UI is fail-closed rather than silently routing it through another engine.
 
 There is no `openvpn.py` or `openvpn_process.py` adapter in the current engine source. The historical v27 OpenVPN runtime is not sufficient evidence to claim v51 APNA OpenVPN selection. The next OpenVPN task is to recover a v51 runtime/config contract or implement a separately labeled, user-imported generic OpenVPN profile without assigning APNA catalog categories to it. SOCKS is a proxy interface, not a standalone encrypted VPN protocol, and should be modeled as an upstream/local proxy adapter only when its role and lifecycle are explicit.
