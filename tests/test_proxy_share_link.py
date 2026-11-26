@@ -268,8 +268,8 @@ def test_proxy_links_reject_unicode_control_characters_in_credentials(link):
 
 
 @pytest.mark.parametrize("link", [
-    "vless://user@vpn.example:443#office\\u0085vpn",
-    "trojan://secret@vpn.example:443?security=tls\\u0085",
+    "vless://user@vpn.example:443#office\u0085vpn",
+    "trojan://secret@vpn.example:443?security=tls\u0085",
 ])
 def test_proxy_links_reject_raw_unicode_control_characters(link):
     with pytest.raises(ValueError, match="control characters"):
