@@ -331,3 +331,8 @@ def test_vless_accepts_vision_flow_with_reality_tcp():
         "&sni=cover.example&fp=chrome&pbk=public-key&flow=xtls-rprx-vision"
     )
     assert parsed.to_outbound()["settings"]["flow"] == "xtls-rprx-vision"
+
+
+def test_vless_rejects_custom_ids_at_30_utf8_bytes():
+    with pytest.raises(ValueError, match="fewer than 30 UTF-8 bytes"):
+        parse_proxy_link(f"vless://{'u' * 30}@vpn.example:443?security=tls")
