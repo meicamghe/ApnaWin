@@ -87,12 +87,12 @@ def _bounded(value: str, field_name: str, limit: int = MAX_CREDENTIAL_BYTES) -> 
 
 
 def _vless_user_id(value: str) -> str:
-    """Accept Xray's UUID form or a custom VLESS ID of at most 30 UTF-8 bytes."""
+    """Accept Xray's UUID form or a custom VLESS ID of fewer than 30 UTF-8 bytes."""
     value = _bounded(value, "VLESS user ID", 128)
     try:
         parsed = uuid.UUID(value)
     except (ValueError, AttributeError):
-        if len(value.encode("utf-8")) > 30:
+        if len(value.encode("utf-8")) >= 30:
             raise ValueError("VLESS user ID must be a UUID or at most 30 UTF-8 bytes")
     else:
         if str(parsed) != value.lower():
