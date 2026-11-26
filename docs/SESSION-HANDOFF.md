@@ -212,3 +212,12 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - Added regression coverage for absent, valid-default and unsupported VMess versions.
 - Implementation, tests and protocol documentation are committed on PR #8. Fresh CI validation is pending; no Windows package was built or requested.
 - The latest completed pre-change PR validation is [run 45799895731](https://github.com/meicamghe/ApnaWin/actions/runs/45799895731): **912 passed, 1 skipped, 1 warning** on head `c3c012e481a9c9231509f134ab316274350622bd`. Windows packaging was skipped by the reverse-engineering gate.
+
+
+### Hysteria2 share-link support — 2026-11-26
+
+- Added `hysteria2://` and `hy2://` import into Xray's Hysteria v2 outbound schema.
+- Supports optional auth, default port 443, IPv4/IPv6, SNI, TLS ALPN h3 and Salamander UDP obfuscation.
+- TLS verification remains enabled; insecure mode and unsupported options fail closed. Realm URIs, port hopping, ECH and certificate pinning remain unsupported.
+- Added tests for the protocol mapping, alias, IPv6, defaults, Salamander, hidden credentials and rejected options.
+- See `docs/xray-share-link-import.md` for exact mapping and upstream references. Fresh CI validation is pending.
