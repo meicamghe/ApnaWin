@@ -179,3 +179,12 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - Full Windows-hosted pytest suite: **907 passed, 1 skipped, 1 warning**. The `build-windows` job was skipped by the reverse-engineering gate.
 - This run validates the VLESS custom-ID bounds and Vision-flow compatibility changes. It does not validate live proxy connectivity or UI integration.
 - APK extraction remains manual-only with no fresh artifact; GoReSym symbol recovery remains unverified.
+
+
+### VLESS identifier boundary CI correction — 2026-11-26
+
+- The first run on the strict 30-byte boundary commit exposed only an assertion-message mismatch: implementation correctly rejected a 30-byte custom ID, while the test expected the newer wording. No parser behavior failure was reported.
+- Corrected the validation message in commit `6a0300311be1cefda7c11f2ff13ef9c052e1d8e3`.
+- GitHub Actions run [45799031394](https://github.com/meicamghe/ApnaWin/actions/runs/45799031394) passed **908 tests, 1 skipped, 1 warning** on that commit. The `build-windows` job remained skipped by design.
+- Added follow-up coverage for 29-byte ASCII and 28-byte multibyte identifiers, rejection at 30 UTF-8 bytes, and uppercase canonical UUID acceptance. These tests are pending a fresh CI run.
+- Clarification: non-UUID custom VLESS IDs must be **fewer than 30 UTF-8 bytes**; canonical UUIDs are accepted independently of that custom-ID bound.
