@@ -166,7 +166,7 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 ### VLESS parser compatibility hardening — 2026-11-26
 
 - Checked the current Project X VLESS outbound and transport compatibility references.
-- Custom VLESS identifiers are now limited to 30 UTF-8 bytes unless they are a canonical UUID.
+- Custom VLESS identifiers must be fewer than 30 UTF-8 bytes unless they are a canonical UUID.
 - VLESS Vision flow accepts only `xtls-rprx-vision` and `xtls-rprx-vision-udp443`, and only with TCP/RAW plus TLS or REALITY in the parser's supported subset. Unsupported flow names, security-less Vision and Vision over WebSocket/gRPC are rejected.
 - Added regression coverage for custom ID bounds, both Vision flow variants, TLS and REALITY combinations, and invalid flow/transport combinations.
 - Commits: `d46948de0beac1e24cb4d27dc80feba3cd919273`, `d1efb084820bc8adfbb46504dab67d5dbd2baec3`, `6408a07b838f0d4bd1d378bd1adbcccd0db433ec`.
@@ -188,3 +188,11 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - GitHub Actions run [45799031394](https://github.com/meicamghe/ApnaWin/actions/runs/45799031394) passed **908 tests, 1 skipped, 1 warning** on that commit. The `build-windows` job remained skipped by design.
 - Added follow-up coverage for 29-byte ASCII and 28-byte multibyte identifiers, rejection at 30 UTF-8 bytes, and uppercase canonical UUID acceptance. These tests are pending a fresh CI run.
 - Clarification: non-UUID custom VLESS IDs must be **fewer than 30 UTF-8 bytes**; canonical UUIDs are accepted independently of that custom-ID bound.
+
+
+### VLESS byte-boundary regression suite — 2026-11-26
+
+- The corrected strict-limit implementation passed GitHub Actions run [45799031394](https://github.com/meicamghe/ApnaWin/actions/runs/45799031394): **908 passed, 1 skipped, 1 warning**.
+- Added exact UTF-8 boundary cases: 29 ASCII bytes and 28 multibyte bytes are accepted; 30 ASCII bytes and 30 multibyte bytes are rejected. Uppercase canonical UUID acceptance is also covered.
+- GitHub Actions run [45799245783](https://github.com/meicamghe/ApnaWin/actions/runs/45799245783) passed **912 tests, 1 skipped, 1 warning** on PR merge ref containing head `9d412d2e5438cb948c83301fe0dc4f3e86d65bfb`. Windows packaging remained skipped by the reverse-engineering gate.
+- The APK extraction workflow now inventories SHA-256 hashes for each APK split and every embedded ABI `.so` entry in `apk-native-inventory.txt`, without executing native code. This workflow/documentation update is pending its own CI validation and a manual extraction run.
