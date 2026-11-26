@@ -120,6 +120,30 @@ def test_inspect_elf_rejects_nonzero_null_symbol_entry(
         inspect_elf_bytes(bytes(data))
 
 
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_rejects_section_count_without_section_table(payload, elf_class):
+    data = bytearray(payload)
+    struct.pack_into("<Q" if elf_class == 64 else "<I", data, 40 if elf_class == 64 else 32, 0)
+    struct.pack_into("<H", data, 60 if elf_class == 64 else 48, 1)
+    with pytest.raises(ValueError, match="references a missing section-header table"):
+        inspect_elf_bytes(bytes(data))
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_rejects_section_name_index_without_section_table(payload, elf_class):
+    data = bytearray(payload)
+    struct.pack_into("<Q" if elf_class == 64 else "<I", data, 40 if elf_class == 64 else 32, 0)
+    struct.pack_into("<H", data, 62 if elf_class == 64 else 50, 1)
+    with pytest.raises(ValueError, match="references a missing section-header table"):
+        inspect_elf_bytes(bytes(data))
+
+
 def _elf_with_symtab_shndx(
     payload, elf_class, *, link=2, info=0, entry_size=4,
     table_size=None, word_values=None, xindex_symbol=False,
