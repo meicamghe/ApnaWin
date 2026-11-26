@@ -11,6 +11,7 @@ import binascii
 import json
 import re
 from dataclasses import dataclass, field
+from unicodedata import category
 from urllib.parse import parse_qsl, unquote, urlsplit
 
 from apnawin.domain.profile import _validate_endpoint_host
@@ -63,7 +64,7 @@ class ParsedProxyLink:
 def _bounded(value: str, field_name: str, limit: int = MAX_CREDENTIAL_BYTES) -> str:
     if not value or len(value.encode("utf-8")) > limit:
         raise ValueError(f"{field_name} must contain 1 to {limit} UTF-8 bytes")
-    if any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+    if any(category(ch) == "Cc" for ch in value):
         raise ValueError(f"{field_name} contains control characters")
     return value
 
