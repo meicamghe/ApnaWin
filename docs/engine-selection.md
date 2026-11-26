@@ -1,45 +1,40 @@
-# Windows engine candidate assessment
+# Windows transport engine assessment
 
-## Decision status
+## Current implementation — 2026-11-25
 
-Xray-core is the first candidate to prototype as an optional transport engine. This is a candidate selection for a controlled prototype, not a claim that APNA TUNNEL server configurations are compatible and not approval to ship a bundled binary yet.
+The Windows desktop composition root creates the live connection controller only when the protected Program Files installation helper is present and safe.
 
-## Verified upstream facts
+- **APNA SSH** → `ApnaTunnelEngine`.
+- **Xray** → `XrayTunnelEngine`; this engine runs Xray-core with Wintun for the full-tunnel path and supports explicit imported Xray outbound configurations.
+- **UDPQ** → `UdpqTunnelEngine`, conditionally registered only when the Windows x64 sidecar, runtime manifest, pinned StarUDP source commit, reviewed redaction-patch hash and executable SHA-256 all validate. This is an experimental generic manual-profile path, not an APNA catalog mapping.
+- **OpenVPN** and standalone **SOCKS** enum values remain metadata only; no production engine is registered for them.
 
-- Project X publishes a Windows executable named `xray.exe`.
-- Its installation documentation lists Windows x86, amd64, arm32 and arm64 support.
-- The upstream project repository identifies its license as Mozilla Public License 2.0 (MPL-2.0).
-- The documented client example starts a local SOCKS inbound listener and forwards traffic through a configured outbound.
-- The Windows usage guide documents running Xray with a configuration file; the documented CLI form is `xray run -c <config>`.
+### Xray runtime
 
-Official references:
-- https://xtls.github.io/en/document/install
-- https://xtls.github.io/en/document/config
-- https://github.com/XTLS/Xray-core
+`scripts/Install-VpnRuntime.ps1` pins Xray-core v26.11.9 and Wintun 0.14.1. The importer supports VLESS, VMess, Trojan and Shadowsocks share links; the Xray runtime also has explicitly modeled WireGuard, Hysteria 2 and MASQUE outbound paths. HTTP/SOCKS outbounds are proxy modes, not encrypted VPN protocols.
 
-## Why it is a candidate
+### UDPQ / libudpqtwo evidence boundary
 
-- A native Windows executable exists, so Android `.so` binaries are not needed.
-- It has a documented command-line/configuration interface that can be wrapped by a Python adapter.
-- Its upstream license is published and can be reviewed for compliant redistribution.
+Static comparison of APNA v51 ARM64 and UDP Thunder 1.5 ARM32 `libudpqtwo.so` samples found matching StarUDP-family Go wire-structure and JSON-config fingerprints. This strongly supports a StarUDP/Hysteria-v1-derived code lineage.
 
-## Important limits
+It does **not** establish APNA's service ownership, exact source revision, effective ALPN/SNI/auth/rate/packet-mode/obfuscation/hopping settings, or a successful APNA handshake. The Windows sidecar is therefore deliberately labeled generic and experimental. Do not automatically map APNA catalog categories to UDPQ.
 
-- Xray-core alone is not yet a complete ApnaWin system-wide VPN implementation.
-- A local SOCKS inbound only proxies applications configured to use it. System-wide traffic requires a separately designed and tested Windows TUN, routing, DNS and cleanup layer, or another explicitly verified supported mode.
-- The APK's reported `libxray.so` name is only a clue. It does not prove the Android app uses the same Xray version, protocols, config schema, plugins, or server-side behavior as the current upstream project.
-- No private APNA TUNNEL profile, protocol format, credentials or authorized test server has been verified in this repository.
+### APNA category mapping
 
-## Prototype acceptance plan
+Only the four SSH-family categories `ocsws`, `ocscf`, `ocsnormal` and `ocshttp` are mapped by the APNA SSH importer. Categories such as `ocsv2ray`, `ocsxray`, `ocstrojan`, `ocsshadow` and UDP-labelled categories remain unmapped until the protected v51 selection/configuration contract is independently verified.
 
-1. Obtain an authorized, non-production test configuration and document its exact protocol and transport fields without committing secrets.
-2. Pin an upstream Xray release and record the Windows binary SHA-256 and source tag/commit.
-3. Review MPL-2.0 obligations and notices before any binary redistribution.
-4. Build a Python adapter that writes a temporary, validated config with restrictive file permissions where supported, starts Xray without shell interpolation, captures redacted diagnostics, and terminates the process reliably.
-5. First verify a localhost SOCKS connection to a controlled test endpoint.
-6. Separately evaluate a Windows TUN backend, DNS/routing behavior, elevation, rollback and disconnect cleanup before enabling system-wide Connect.
-7. Enable the UI transport only after automated tests and manual Windows 10/11 tests pass.
+### Other engine families
 
-## Current implementation status
+- **BadVPN:** separate pinned Windows native research build; not integrated because its upstream TUN backend targets TAP-Windows rather than ApnaWin's Wintun interface.
+- **Android native libraries:** ARM64 ELF files cannot be reused as Windows x64 runtimes.
 
-No Xray binary is downloaded, bundled, launched or integrated. The Connect button remains disabled. The next implementation milestone is a localhost-only Xray process adapter and test harness; it must not alter system routes or DNS.
+## Acceptance gates
+
+1. Independently verify an authorized APNA provider's SSH host key and complete authentication.
+2. Verify an actual APNA UDPGW datagram round-trip.
+3. Verify routed TCP, UDP and DNS traffic through Wintun, including IPv4 and IPv6.
+4. Verify DNS leak protection, startup rollback, disconnect and abnormal-process cleanup.
+5. Test generic UDPQ separately against an authorized StarUDP-compatible server; do not treat that as APNA acceptance.
+6. Repeat relevant acceptance on clean Windows 10/11 hosts with redacted diagnostics and recorded runtime hashes.
+
+CI success, config validation, process startup and local UDPQ loopback tests are not substitutes for live provider authentication and routed traffic. Keep PR #6 Draft and unmerged until APNA acceptance gates pass.

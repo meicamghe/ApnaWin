@@ -1,0 +1,168 @@
+name: ApnaWin Windows x64 UDPQ test build
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "src/**"
+      - "scripts/Install-ApnaWin.ps1"
+      - "scripts/Install-VpnRuntime.ps1"
+      - "native/udpq/**"
+      - "tools/build_udpq_sidecar.sh"
+      - "pyproject.toml"
+      - ".gitattributes"
+      - ".github/workflows/udpq-windows-test-build.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup-superseded-runs:
+    name: Clear superseded queued runs for this feature branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Cancel stale queued runs without touching active jobs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = "vpn/dual-stack-egress-readiness";
+            const currentRunId = Number(context.runId);
+            const currentHeadSha = context.payload.pull_request?.head?.sha || context.sha;
+            const response = await github.rest.actions.listWorkflowRunsForRepo({
+              owner, repo, per_page: 100
+            });
+            // Preserve queued checks for the current PR head across all workflows.
+            // Only older commits on this branch are superseded and safe to cancel.
+            const queued = response.data.workflow_runs.filter(
+              run => run.status === "queued" && run.head_branch === branch && run.head_sha !== currentHeadSha
+            );
+            const sidecarRuns = queued.filter(run => run.name === "UDPQ Sidecar Build");
+            const keepSidecarId = sidecarRuns.reduce(
+              (latest, run) => Math.max(latest, run.id), 0
+            );
+            for (const run of queued) {
+              if (run.id === currentRunId || run.id === keepSidecarId) continue;
+              try {
+                await github.rest.actions.cancelWorkflowRun({
+                  owner, repo, run_id: run.id
+                });
+                core.info("Canceled superseded queued run " + run.id + " (" + run.name + ")");
+              } catch (error) {
+                core.warning("Could not cancel queued run " + run.id + ": " + error.message);
+              }
+            }
+
+  build-test-package:
+    needs: cleanup-superseded-runs
+    name: Build and smoke-test Windows x64 portable test package
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.20.14"
+          cache: false
+
+      - name: Install Python application and build dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          python -m ruff check --select E9,F821,F823 src tests
+          python -m pytest -q
+
+      - name: Build pinned StarUDP Windows x64 sidecar
+        shell: pwsh
+        run: |
+          $repo = Join-Path $env:RUNNER_TEMP "starudp"
+          git clone --no-checkout https://github.com/starrising321/starudp.git $repo
+          git -C $repo checkout --detach 23fa29bb4fad600330b30e2b703b8029ef091446
+          $actual = (git -C $repo rev-parse HEAD).Trim()
+          if ($actual -ne "23fa29bb4fad600330b30e2b703b8029ef091446") {
+            throw "Pinned StarUDP source commit mismatch: $actual"
+          }
+          git -C $repo apply "$env:GITHUB_WORKSPACE/native/udpq/patches/redact-client-config-logs.patch"
+          if ($LASTEXITCODE -ne 0) { throw "Could not apply UDPQ credential-redaction patch" }
+          $udpq = Join-Path $env:RUNNER_TEMP "udpq-client.exe"
+          Push-Location (Join-Path $repo "app")
+          try {
+            $env:GOTOOLCHAIN = "local"
+            $env:GOOS = "windows"
+            $env:GOARCH = "amd64"
+            $env:CGO_ENABLED = "0"
+            go build -trimpath -ldflags "-s -w" -o $udpq ./cmd
+            if ($LASTEXITCODE -ne 0) { throw "UDPQ sidecar build failed: $LASTEXITCODE" }
+          }
+          finally {
+            Pop-Location
+          }
+          & $udpq --help
+          if ($LASTEXITCODE -ne 0) { throw "UDPQ sidecar CLI smoke test failed" }
+          Get-FileHash -LiteralPath $udpq -Algorithm SHA256
+
+      - name: Build desktop and elevated helper executables
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name ApnaWin --collect-all PySide6 --distpath dist/app --workpath build/app --specpath build/app src/apnawin/__main__.py
+          if ($LASTEXITCODE -ne 0) { throw "ApnaWin desktop build failed" }
+          python -m PyInstaller --noconfirm --clean --onefile --uac-admin --name ApnaWinElevator --distpath dist/helper --workpath build/helper --specpath build/helper src/apnawin/elevated_helper.py
+          if ($LASTEXITCODE -ne 0) { throw "ApnaWin elevated helper build failed" }
+
+      - name: Assemble verified portable test folder
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP "ApnaWin-Windows-x64"
+          $engine = Join-Path $stage "engine"
+          New-Item -ItemType Directory -Force -Path $engine | Out-Null
+          Copy-Item -LiteralPath "dist/app/ApnaWin.exe" -Destination $stage
+          Copy-Item -LiteralPath "dist/helper/ApnaWinElevator.exe" -Destination $stage
+          Copy-Item -LiteralPath "scripts/Install-ApnaWin.ps1" -Destination $stage
+          Copy-Item -LiteralPath "native/udpq/LICENSE-MIT.txt" -Destination (Join-Path $stage "LICENSE-UDPQ-MIT.txt")
+          Copy-Item -LiteralPath "native/udpq/THIRD_PARTY_NOTICES.md" -Destination $stage
+          New-Item -ItemType Directory -Force -Path (Join-Path $stage "native/udpq/patches") | Out-Null
+          Copy-Item -LiteralPath "native/udpq/patches/redact-client-config-logs.patch" -Destination (Join-Path $stage "native/udpq/patches")
+          Copy-Item -LiteralPath "docs/udpq-windows-test-build.md" -Destination (Join-Path $stage "TEST-UDPQ.md")
+          & ".\scripts\Install-VpnRuntime.ps1" -Destination $engine -UdpqClientPath (Join-Path $env:RUNNER_TEMP "udpq-client.exe") -UdpqPatchPath "native/udpq/patches/redact-client-config-logs.patch"
+          if ($LASTEXITCODE -ne 0) { throw "Pinned Xray/Wintun/UDPQ runtime staging failed" }
+          $manifest = Get-Content -LiteralPath (Join-Path $engine "runtime-manifest.json") -Raw | ConvertFrom-Json
+          if ($manifest.udpq.source_commit -ne "23fa29bb4fad600330b30e2b703b8029ef091446" -or
+              $manifest.udpq.patch_sha256 -ne "6f18ca9871e62ad91db033411d0aaa801bde3b17533d4ce71e20ed33fe01bbe2") {
+            throw "UDPQ source or credential-redaction patch provenance is invalid in runtime manifest"
+          }
+          $expected = [string]$manifest.udpq.executable_sha256
+          $actual = (Get-FileHash -LiteralPath (Join-Path $engine "udpq-client.exe") -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected.ToLowerInvariant()) { throw "UDPQ runtime hash mismatch" }
+          & (Join-Path $stage "ApnaWin.exe") --smoke-test
+          if ($LASTEXITCODE -ne 0) { throw "Packaged desktop smoke test failed" }
+          $archive = Join-Path $env:RUNNER_TEMP "ApnaWin-Windows-x64-UDPQ-Test.zip"
+          Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $archive -CompressionLevel Optimal
+          Get-FileHash -LiteralPath $archive -Algorithm SHA256
+          "APNAWIN_TEST_PACKAGE=$archive" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Upload Windows x64 test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ApnaWin-Windows-x64-UDPQ-Test
+          path: ${{ env.APNAWIN_TEST_PACKAGE }}
+          if-no-files-found: error
+          retention-days: 7

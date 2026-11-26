@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [string] $Destination
+    [string] $Destination,
+    [string] $UdpqClientPath,
+    [string] $UdpqPatchPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,6 +15,7 @@ $XrayArchiveSha256 = "1262522266337b824f07beb8e1375786b437683b3890105469088f8e17
 $WintunVersion = "0.14.1"
 $WintunArchiveUrl = "https://www.wintun.net/builds/wintun-0.14.1.zip"
 $WintunArchiveSha256 = "07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51"
+$UdpqRedactionPatchSha256 = "6f18ca9871e62ad91db033411d0aaa801bde3b17533d4ce71e20ed33fe01bbe2"
 
 function Assert-Sha256([string] $Path, [string] $Expected, [string] $Name) {
     $actual = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -117,7 +120,36 @@ try {
             signer = $signature.SignerCertificate.Subject
         }
     }
-    $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $engine "runtime-manifest.json") -Encoding utf8
+    if ($UdpqClientPath) {
+        $udpqSource = [System.IO.Path]::GetFullPath($UdpqClientPath)
+        if (-not (Test-Path -LiteralPath $udpqSource -PathType Leaf)) {
+            throw "UDPQ client binary does not exist: $udpqSource"
+        }
+        if (-not $UdpqPatchPath -or -not (Test-Path -LiteralPath $UdpqPatchPath -PathType Leaf)) {
+            throw "The UDPQ source patch file is required to record build provenance."
+        }
+        $patchHash = (Get-FileHash -LiteralPath $UdpqPatchPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($patchHash -ne $UdpqRedactionPatchSha256) {
+            throw "UDPQ client source patch SHA-256 does not match the reviewed credential-redaction patch."
+        }
+        Assert-PeX64 $udpqSource "udpq-client.exe"
+        $udpqTarget = Join-Path $engine "udpq-client.exe"
+        Copy-Item -LiteralPath $udpqSource -Destination $udpqTarget -Force
+        $manifest["udpq"] = [ordered]@{
+            source = "starrising321/starudp"
+            source_commit = "23fa29bb4fad600330b30e2b703b8029ef091446"
+            license = "MIT"
+            patch_sha256 = $patchHash
+            executable_sha256 = (Get-FileHash -LiteralPath $udpqTarget -Algorithm SHA256).Hash.ToLowerInvariant()
+        }
+    }
+    $manifestJson = $manifest | ConvertTo-Json -Depth 5
+    $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+    [System.IO.File]::WriteAllText(
+        (Join-Path $engine "runtime-manifest.json"),
+        $manifestJson,
+        $utf8NoBom
+    )
     Write-Output "Verified Xray $XrayVersion and Wintun $WintunVersion in $engine"
 }
 finally {

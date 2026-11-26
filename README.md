@@ -1,25 +1,35 @@
 # ApnaWin
 
-A native Windows 10/11 desktop client project inspired by the workflow of APNA TUNNEL LITE. The goal is to build a Windows application, not to run the Android APK in an emulator.
+A native Windows 10/11 desktop VPN client. The project is building independently implemented, security-conscious tunnel transports; it is not an Android emulator or an Android APK wrapper.
 
-## Current status
+## Current status — 2026-11-25
 
-**M2 profile workflow and M2a/M2b engine-process foundations are implemented; M2c remote-configuration discovery is documented but awaits APK/runtime evidence.** The repository includes:
-- A native PySide6 desktop application.
-- Add, edit, select and remove connection profiles.
-- Strict local JSON persistence for non-secret profile metadata, with unique same-directory atomic temp files, flush/fsync, duplicate-key/schema validation and duplicate-name rejection.
-- Import of complete Xray TUN JSON configs for XRAY profiles, encrypted at rest with current-user Windows DPAPI; profile metadata exports exclude credentials.
-- A dedicated fixed-path UAC helper, a desktop-side Xray tunnel supervisor wrapper, read-only Windows adapter/route/DNS diagnostics, and a Program Files installer script; the helper keeps the desktop at normal integrity and supervises Xray in a Job Object.
-- Strict Xray config parsing that rejects duplicate JSON keys and non-finite constants before execution.
-- A transport-neutral profile model and tunnel-engine contract.
-- A test-only mock engine that does not touch the network.
-- Windows Job Object process-tree containment for the Xray runner.
-- Windows GitHub Actions tests and a PyInstaller build job that publishes a portable Windows x64 application-folder artifact (14-day retention).
-- A pinned runtime packaging step for Xray-core v26.11.9 and Wintun 0.14.1, with archive hash, PE architecture, Authenticode and version checks.
+**Active development:** [PR #6](https://github.com/meicamghe/ApnaWin/pull/6), branch `vpn/dual-stack-egress-readiness`. The PR remains Draft and unmerged pending real-provider acceptance.
 
-The Connect button is intentionally disabled. The Xray process runner now validates both a local SOCKS config and a strict full-tunnel TUN config. Xray-core itself has a native Windows TUN implementation through Wintun, including route/DNS and WFP controls; this is the preferred path over a separate Python tunnel stack. The app is not yet a complete, verified VPN client; the runtime package is pinned and packaged, and imported Xray configs are encrypted. The UAC helper now has a graceful CTRL_BREAK shutdown request with Job Object fallback, but is not yet integrated into the Connect UI; route/DNS restoration tests, a verified APNA configuration source and end-to-end connection tests remain outstanding. The CI build artifact is an early portable application build, not a signed installer and not a VPN client with working tunnel connectivity. No APNA TUNNEL server compatibility is claimed.
+Implemented in the active branch:
 
-The Android app may refresh its server catalog and connection parameters remotely. This is a first-class requirement for the Windows product, but the actual API, schema, authentication and refresh policy have not yet been verified. See [remote configuration discovery](docs/remote-configuration.md); no guessed backend endpoint or static replacement server list will be shipped.
+- Native PySide6 desktop UI, profile lifecycle, diagnostics, and fixed-path elevated helper for Windows TUN operation.
+- **APNA SSH/Payload:** bounded APNA Lite APK catalog decoder/import, supported SSH-family profile mapping, payload expansion and split behavior, direct/TLS/HTTP payload socket setup, strict SSH host-key verification, Paramiko authentication, loopback SOCKS5 TCP forwarding, and SSH-carried BadVPN-compatible UDPGW framing.
+- **APNA full tunnel:** local SOCKS5/UDPGW path connected to Xray-core + Wintun dual-stack TUN. Startup fails closed unless UDP DNS and certificate-validated IPv4 and IPv6 TLS egress checks succeed. Cleanup retains ownership when a resource cannot be confirmed stopped.
+- **Xray outbound profiles:** VLESS, VMess, Trojan, Shadowsocks, Hysteria 2, WireGuard, MASQUE, plus HTTP and SOCKS5 proxy outbounds. WireGuard imports standard `.conf`; MASQUE imports a single strict Xray JSON outbound; share links support the URI schemes implemented by the importer. Credentials, private keys and proxy headers are stored only in the current-user Windows DPAPI-protected config store.
+- **Xray transports:** TCP, WebSocket, gRPC, HTTPUpgrade, XHTTP (including bounded `extra`/XMUX and verified-TLS `downloadSettings`) and mKCP. Legacy mKCP header/seed options are translated to Xray FinalMask `mkcp-legacy`.
+- HTTP/SOCKS outbounds are TCP proxy modes, not encrypted VPN protocols; HTTP is plaintext unless imported as HTTPS. MASQUE, Hysteria 2 and WireGuard use the Xray full-tunnel path.
+- Windows x64 packaging, runtime hash/architecture checks, helper security checks, Ruff, unit/integration tests and VPN readiness/egress tests in GitHub Actions.
+- **Experimental UDPQ/StarUDP path:** generic manual-profile importer and conditional Windows engine registration when the pinned sidecar, source/patch provenance and executable hash validate. It composes the sidecar SOCKS5 endpoint with the existing Xray/Wintun full-tunnel path. It is not an APNA catalog mapping and has no proven APNA-server interoperability.
+- A pinned BadVPN Windows x64 native build workflow. Its artifact is research-only and is **not integrated** into the product because its upstream Windows TUN backend targets TAP-Windows while ApnaWin currently uses Wintun.
+
+## Actual support boundary
+
+- The desktop engine registry always activates **APNA SSH** and **Xray** when the protected Windows installation helper is present. It conditionally activates **UDPQ** only when the separately installed Windows sidecar and its runtime-manifest provenance/hash validate. UDPQ is experimental and accepts generic StarUDP-compatible manual profiles only. VLESS, VMess, Trojan, Shadowsocks, Hysteria 2, WireGuard, MASQUE, HTTP and SOCKS are Xray outbound protocols, not separate Windows engine processes.
+- OpenVPN and standalone SOCKS profile enum values do not have a registered production engine in the desktop application. They must not be presented as working connections.
+- APNA catalog categories outside the verified SSH-family mapper (including Xray/Trojan/Shadowsocks/UDP-labelled categories) remain unsupported until their protected Android runtime field mapping is verified. Category names alone are not sufficient evidence to map them to a protocol.
+- CI and successful packaging do not prove that an APNA provider accepted SSH authentication or carried real traffic.
+
+## Release gates
+
+A release requires a clean Windows 10/11 acceptance run against an authorized APNA provider endpoint: independently verified SSH host key, successful authentication, real UDPGW datagram round-trip, routed TCP/UDP/DNS, IPv4/IPv6 egress and leak checks, plus disconnect/crash cleanup. Follow [the APNA live Windows acceptance runbook](docs/apna-live-windows-acceptance.md). Do not merge or mark the PR ready before those gates pass.
+
+See [the current session handoff](docs/SESSION-HANDOFF.md), [architecture](docs/architecture.md), and [APNA upstream evidence](docs/apna-tunnel-lite-upstream-evidence.md) for implementation detail and evidence limits.
 
 ## Run from source
 
@@ -35,7 +45,13 @@ python -m apnawin
 
 ## Build artifact
 
-On pushes to `main` and pull requests, the Windows workflow runs tests first, then builds the native desktop app with PyInstaller. On a successful run, download the `ApnaWin-Windows-x64` artifact from the workflow run's **Artifacts** section. Extract the ZIP and launch `ApnaWin.exe` from the extracted `ApnaWin` folder. The artifact is temporary CI output (14-day retention), not a signed installer. For the elevated TUN helper, extract the folder and run Install-ApnaWin.ps1 as Administrator; it installs under Program Files with standard-user read/execute ACLs. The helper is not Authenticode-signed.
+GitHub Actions uses separate validation and packaging workflows:
+
+- `.github/workflows/tests.yml` runs on pull requests targeting `main` and pushes to `main`. It runs Ruff, the full Windows test suite, installer/runtime security checks, VPN readiness/egress tests, pinned-Xray share-link compatibility, and a pinned UDPQ sidecar build. This workflow does not publish the desktop package.
+- `.github/workflows/udpq-windows-test-build.yml` runs for pull-request changes under its configured source/build paths (or by manual dispatch). It builds and smoke-tests the Windows x64 desktop/helper executables, stages pinned Xray/Wintun and the experimental UDPQ sidecar, and uploads the temporary `ApnaWin-Windows-x64-UDPQ-Test` artifact (7-day retention). This is a test package, not a signed installer or APNA-compatible release.
+- `.github/workflows/udpq-sidecar-build.yml` independently builds the pinned Windows x64 UDPQ sidecar and runs a local TLS/QUIC SOCKS5 TCP/UDP loopback test when its configured paths change (or by manual dispatch).
+
+For the test package, download `ApnaWin-Windows-x64-UDPQ-Test` from the relevant workflow run's **Artifacts** section, extract it, and launch `ApnaWin.exe`. For the elevated TUN helper, run `Install-ApnaWin.ps1` as Administrator; it installs under Program Files with standard-user read/execute ACLs. The helper is not Authenticode-signed.
 
 Run tests:
 
@@ -47,9 +63,11 @@ python -m pytest
 
 Profiles are saved under the current user's application-data directory in `profiles.json`. Writes use a unique temporary file in the same directory and atomic replacement; malformed JSON, duplicate keys, unsupported schema versions, unexpected fields and duplicate profile names are rejected. The current schema stores only:
 - Profile name
-- Transport selection (Xray, OpenVPN or SOCKS)
+- Transport selection (`XRAY`, `APNA_SSH`, `UDPQ`, `OPENVPN` or `SOCKS`). `XRAY` and `APNA_SSH` have production registrations when the protected Windows helper is valid; `UDPQ` is conditionally registered only when its separately installed sidecar and runtime-manifest hashes validate. `OPENVPN` and standalone `SOCKS` currently have no production engine registration.
 - Server host
 - Server port
+
+UDPQ's protocol credentials and transport settings are stored separately in the encrypted, current-user UDPQ config store; they are not part of the plaintext profile metadata.
 
 It does not store passwords, access tokens, private keys or other credentials. Do not place secrets in profile names or endpoint fields.
 
@@ -57,13 +75,15 @@ It does not store passwords, access tokens, private keys or other credentials. D
 
 - `src/apnawin/` — application package and desktop entry point
 - `src/apnawin/domain/` — transport-neutral domain models
-- `src/apnawin/engines/` — tunnel-engine contract, test-only mock and Xray process runner
+- `src/apnawin/engines/` — APNA SSH/payload/UDPGW adapters, Xray runtime and tunnel engine, experimental UDPQ sidecar composition, transport dispatcher and shared engine contracts
 - `src/apnawin/storage/` — profile and encrypted Xray-config persistence
 - `src/apnawin/services/` — UAC helper lifecycle and read-only Windows tunnel diagnostics
 - `tests/` — automated tests, including desktop profile workflow checks
 - `docs/architecture.md` — architecture, milestones and security boundaries
 - `docs/SESSION-HANDOFF.md` — durable implementation status and next engineering steps
 - `docs/apk-analysis.md` — preliminary APK observations and reproducible verification checklist
+- `docs/apna-tunnel-lite-upstream-evidence.md` — third-party APNA Lite catalog/engine findings, evidence limits and next verification gates
+- `docs/apna-upstream-framework-comparison.md` — public SSH/TUN framework comparison, payload behavior, security and licensing caveats
 - `docs/remote-configuration.md` — evidence plan and security contract for Android-style server/config refresh
 - `docs/engine-contract.md` — requirements for production tunnel adapters
 - `docs/profile-storage.md` — schema, atomic-write behavior and credential boundary
@@ -73,7 +93,7 @@ It does not store passwords, access tokens, private keys or other credentials. D
 
 ## Important compatibility note
 
-Android ARM64 native libraries are not Windows binaries. The current Windows path is an imported Xray TUN configuration plus a Windows Xray/Wintun runtime. No APNA-specific server endpoint, authentication schema or remote configuration protocol has been verified; the client does not fabricate these details. APK class and library names are only clues; they do not prove backend compatibility. See the analysis document before making implementation assumptions.
+Android ARM64 native libraries are not Windows binaries. The current Windows path uses Windows-native Xray/Wintun plus the APNA SSH engine; UDPQ is a separate experimental Windows sidecar path. Static fingerprints strongly associate APNA's libudpqtwo.so with the StarUDP/Hysteria-v1 source family, but its protected launch/configuration contract and APNA-server interoperability remain unverified. The APNA-specific catalog decoder works against the supplied embedded APK sample; live refresh and end-to-end APNA connection are not yet verified. APK class and library names are clues, not proof of compatibility. See the upstream evidence document before making implementation assumptions.
 
 ## Development direction
 

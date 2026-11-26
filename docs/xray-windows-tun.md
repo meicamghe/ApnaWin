@@ -25,7 +25,7 @@ The runner accepts exactly one supported inbound. For TUN mode it requires:
 - both `0.0.0.0/0` and `::/0` in `autoSystemRoutingTable`;
 - `autoOutboundsInterface: "auto"` to prevent Xray's own server connections looping into the tunnel;
 - exactly `autoSystemWfpBlockLeak: ["allexceptlan", "dns"]`, which includes DNS leak blocking and blocks non-LAN traffic from escaping outside the TUN while preserving local-LAN traffic;
-- at least one Xray outbound.
+- the first outbound must be a supported remote proxy protocol (`vless`, `vmess`, `trojan`, `shadowsocks`, `socks`, `http`, `wireguard`, `hysteria` or `masque`); direct `freedom`, local `loopback`, unsupported protocols and any later direct outbound are rejected. `blackhole` is allowed only as a non-primary auxiliary outbound. The special `dns` outbound is rejected until its resolver detour can be validated against the no-leak policy.
 
 The full config is then checked by Xray's own `run -test -c` command. The Python validator is deliberately stricter than the general Xray schema: it rejects partial/split-tunnel configurations and unsafe leak-protection settings for this product's full-tunnel mode.
 
@@ -46,7 +46,7 @@ Forced process termination is different: it bypasses Go cleanup code. The upstre
 
 ## Privilege boundary
 
-Creating a Wintun adapter and modifying Windows routes, DNS and WFP requires an elevated execution context. The current runner now checks `IsUserAnAdmin` and refuses to start TUN when the process is not elevated. It still inherits the desktop process token and does not elevate itself. The product needs a deliberate UAC/helper strategy and tests proving that Xray runs with the minimum required rights. Do not enable Connect until this is implemented.
+Creating a Wintun adapter and modifying Windows routes, DNS and WFP requires an elevated execution context. The Xray runner checks `IsUserAnAdmin` and refuses to start TUN without an elevated token. The desktop remains medium-integrity and launches a fixed-path helper from Program Files through the UAC `runas` flow. The helper validates the installed runtime hashes, decrypts only the selected current-user DPAPI config, and supervises Xray in a kill-on-close Job Object. The parent can request graceful shutdown; forced termination is only a timeout fallback. The helper performs a certificate-validated IPv4 TLS egress probe through the system TUN route before signaling ready. This is a basic data-plane smoke test, not a provider-specific traffic test or proof of IPv6 egress. The Windows desktop is now wired to this supervisor; Connect is enabled only when the protected helper and an encrypted imported TUN profile are available. Connected means local readiness checks passed, not that APNA-specific service traffic has been accepted. Xray's native WFP leak filters are process-owned and are removed when Xray exits; ApnaWin does not yet provide an independent persistent kill switch. Forced termination bypasses Xray cleanup, so route, DNS and adapter recovery still require clean-machine Windows acceptance. Do not describe the release as leak-free or APNA-compatible until IPv4/IPv6/DNS leak tests, abrupt-exit and reboot recovery, and authorized APNA traffic tests pass on Windows 10/11.
 
 ## Binary provenance
 

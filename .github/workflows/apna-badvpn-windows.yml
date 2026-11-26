@@ -1,0 +1,67 @@
+name: APNA BadVPN research build (manual only)
+
+# This separate upstream experiment is not part of ApnaWin's Wintun runtime.
+# Keep it manual so ordinary reverse-engineering changes never produce binaries.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  badvpn-windows-x64:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Set up MinGW-w64 x64 toolchain
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            git
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+      - name: Checkout pinned BadVPN source
+        run: |
+          git clone https://github.com/ambrop72/badvpn.git badvpn-src
+          git -C badvpn-src checkout 07268f02706e78e282e19641b5d1d41e8e89bf31
+          test "$(git -C badvpn-src rev-parse HEAD)" = "07268f02706e78e282e19641b5d1d41e8e89bf31"
+      - name: Configure native Windows build
+        run: |
+          cmake -S badvpn-src -B badvpn-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DBUILD_NOTHING_BY_DEFAULT=ON \
+            -DBUILD_TUN2SOCKS=ON \
+            -DBUILD_UDPGW=ON
+      - name: Compile tun2socks and UDPGW
+        run: cmake --build badvpn-build --parallel
+      - name: Verify x64 PE binaries and CLI startup
+        run: |
+          test -f badvpn-build/tun2socks/badvpn-tun2socks.exe
+          test -f badvpn-build/udpgw/badvpn-udpgw.exe
+          objdump -f badvpn-build/tun2socks/badvpn-tun2socks.exe | grep -q "pei-x86-64"
+          objdump -f badvpn-build/udpgw/badvpn-udpgw.exe | grep -q "pei-x86-64"
+          badvpn-build/tun2socks/badvpn-tun2socks.exe --version
+          badvpn-build/udpgw/badvpn-udpgw.exe --version
+      - name: Package binaries with source and license provenance
+        run: |
+          mkdir -p dist
+          cp badvpn-build/tun2socks/badvpn-tun2socks.exe dist/
+          cp badvpn-build/udpgw/badvpn-udpgw.exe dist/
+          cp badvpn-src/COPYING dist/LICENSE-BadVPN.txt
+          printf '%s\n' "repository=https://github.com/ambrop72/badvpn" \
+            "commit=07268f02706e78e282e19641b5d1d41e8e89bf31" \
+            "compiler=MinGW-w64 x86_64" \
+            "build=Windows x64; tun2socks + UDPGW" > dist/build-manifest.txt
+      - name: Upload native build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apnawin-badvpn-windows-x64
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,302 @@
+# APNA Tunnel Lite upstream framework comparison
+
+**Purpose:** record the additional public GitHub source comparison performed on 2026-11-16. This document separates APNA-specific APK evidence from behavior found in a related, publicly available SSH/TUN framework. It is research evidence, not an assertion that the APNA APK contains byte-for-byte identical source.
+
+## 1. Sources inspected
+
+### APNA catalog research
+
+- Repository: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM
+- APNA Lite decoder at inspected commit b66fd18dce1a51d932a32776696ca4a190a3eaac: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM/tree/b66fd18dce1a51d932a32776696ca4a190a3eaac/decoders/Python/apps/APNA_Tunnel_Lite
+- Decoder README: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM/blob/b66fd18dce1a51d932a32776696ca4a190a3eaac/decoders/Python/apps/APNA_Tunnel_Lite/README.md
+- Decoder implementation: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM/blob/b66fd18dce1a51d932a32776696ca4a190a3eaac/decoders/Python/apps/APNA_Tunnel_Lite/APNA_Tunnel_Lite.py
+- External integration report: https://github.com/gokussj092/NSKSDKLDLDLDMDNDNDNNDNDNDNDNDNDNDNDNDMDM/blob/b66fd18dce1a51d932a32776696ca4a190a3eaac/analysis/platform/supplied-integrations/2026-11-14/ANALYSIS.md
+
+### Additional sibling service implementation
+
+- Repository: https://github.com/justinaxie911/SpeedLiteVpn
+- Inspected commit: 4833190b14f9b8b21b366c4cc5314787a13d440c
+- [SocksDNSService.java](https://github.com/justinaxie911/SpeedLiteVpn/blob/4833190b14f9b8b21b366c4cc5314787a13d440c/app/src/main/java/com/jvinjector/jenrri/service/SocksDNSService.java)
+- [TunnelManagerThread.java](https://github.com/justinaxie911/SpeedLiteVpn/blob/4833190b14f9b8b21b366c4cc5314787a13d440c/app/src/main/java/com/jvinjector/jenrri/tunnel/TunnelManagerThread.java)
+- [UDPTunnel.java](https://github.com/justinaxie911/SpeedLiteVpn/blob/4833190b14f9b8b21b366c4cc5314787a13d440c/app/src/main/java/com/jvinjector/jenrri/tunnel/UDPTunnel.java)
+- [V2Tunnel.java](https://github.com/justinaxie911/SpeedLiteVpn/blob/4833190b14f9b8b21b366c4cc5314787a13d440c/app/src/main/java/com/jvinjector/jenrri/tunnel/V2Tunnel.java)
+- [DNSTunnelThread.java](https://github.com/justinaxie911/SpeedLiteVpn/blob/4833190b14f9b8b21b366c4cc5314787a13d440c/app/src/main/java/com/jvinjector/jenrri/tunnel/DNSTunnelThread.java)
+
+### BadVPN UDP gateway implementation
+
+- Repository: https://github.com/shirokhorshid/shirokhorshid-android
+- Inspected commit: 2c719306c2340938cbafcb3dc59c8e03173bcf8c
+- [UDP gateway wire header](https://github.com/shirokhorshid/shirokhorshid-android/blob/2c719306c2340938cbafcb3dc59c8e03173bcf8c/app/src/main/jni/badvpn/protocol/udpgw_proto.h)
+- [UDP gateway client](https://github.com/shirokhorshid/shirokhorshid-android/blob/2c719306c2340938cbafcb3dc59c8e03173bcf8c/app/src/main/jni/badvpn/udpgw_client/UdpGwClient.c)
+- [SOCKS-to-UDPGW bridge](https://github.com/shirokhorshid/shirokhorshid-android/blob/2c719306c2340938cbafcb3dc59c8e03173bcf8c/app/src/main/jni/badvpn/tun2socks/SocksUdpGwClient.c)
+- [UDPGW server](https://github.com/shirokhorshid/shirokhorshid-android/blob/2c719306c2340938cbafcb3dc59c8e03173bcf8c/app/src/main/jni/badvpn/udpgw/udpgw.c)
+- [tun2socks command-line implementation](https://github.com/shirokhorshid/shirokhorshid-android/blob/2c719306c2340938cbafcb3dc59c8e03173bcf8c/app/src/main/jni/badvpn/tun2socks/tun2socks.c)
+- [BadVPN changelog](https://github.com/shirokhorshid/shirokhorshid-android/blob/2c719306c2340938cbafcb3dc59c8e03173bcf8c/app/src/main/jni/badvpn/ChangeLog)
+
+This repository also uses a different Java package and app identity. Its same-named SocksDNSService is a comparative lead only; it is not evidence that its bytecode is the implementation referenced by APNA.
+
+### Related SSH/TUN framework source
+
+A public source repository contains the same uncommon method names seen in the APNA primary DEX, including startClienteSSH, startForwarder, formatCustomPayload, injectSplitPayload, and the TunnelVpnSettings SOCKS/DNS fields:
+
+- Repository: https://github.com/sauceisgood/sockshttp
+- Inspected source commit: ab177ac896896c592caed750d74100518c230b62
+- [TunnelManagerThread.java](https://github.com/sauceisgood/sockshttp/blob/ab177ac896896c592caed750d74100518c230b62/service/src/main/java/com/slipkprojects/ultrasshservice/tunnel/TunnelManagerThread.java)
+- [TunnelUtils.java](https://github.com/sauceisgood/sockshttp/blob/ab177ac896896c592caed750d74100518c230b62/service/src/main/java/com/slipkprojects/ultrasshservice/tunnel/TunnelUtils.java)
+- [HttpProxyCustom.java](https://github.com/sauceisgood/sockshttp/blob/ab177ac896896c592caed750d74100518c230b62/service/src/main/java/com/slipkprojects/ultrasshservice/tunnel/HttpProxyCustom.java)
+- [Tunnel.java](https://github.com/sauceisgood/sockshttp/blob/ab177ac896896c592caed750d74100518c230b62/service/src/main/java/com/slipkprojects/ultrasshservice/tunnel/vpn/Tunnel.java)
+- [TunnelVpnSettings.java](https://github.com/sauceisgood/sockshttp/blob/ab177ac896896c592caed750d74100518c230b62/service/src/main/java/com/slipkprojects/ultrasshservice/tunnel/vpn/TunnelVpnSettings.java)
+- [TunnelVpnManager.java](https://github.com/sauceisgood/sockshttp/blob/ab177ac896896c592caed750d74100518c230b62/service/src/main/java/com/slipkprojects/ultrasshservice/tunnel/vpn/TunnelVpnManager.java)
+
+The public framework uses package com.slipkprojects.ultrasshservice, whereas the inspected APNA DEX uses prince.open.vpn. The matching method names and data-flow shape are strong evidence of a shared framework lineage or close adaptation, but they do **not** prove identical implementation, configuration defaults, service wiring, or version. The public source is therefore used as a behavioral cross-check only.
+
+## 2. SSH-to-TUN flow corroborated by the public source
+
+The related TunnelManagerThread implements this sequence:
+
+1. Read SSH host, port, username, password/key path and local forwarder port from its settings object.
+2. Create an SSH connection, optionally attach an HTTP proxy transport, then connect with finite connection/read timeouts.
+3. Authenticate using password and/or a configured public key.
+4. Create a dynamic local SOCKS port forwarder using the SSH connection.
+5. Start the Android TUN service, passing the local SOCKS endpoint and DNS/UDP resolver settings.
+6. During shutdown, stop TUN routing and close the local SOCKS forwarder before closing the SSH connection.
+
+This closely matches the APNA primary-DEX evidence: startClienteSSH, startForwarder(int), TunnelVpnSettings.mSocksServer, separate DNS/UDP resolver fields, and the TUN-to-SOCKS handoff. It raises confidence in the broad architecture:
+
+**APNA server/proxy endpoint -> optional HTTP payload handshake -> SSH transport -> local SOCKS forwarder -> TUN-to-SOCKS packet bridge**
+
+**Still unproven for APNA:** the exact settings source, whether all APNA SSH categories use this path, the local listener address/port, service implementation identity, credential selection, and whether the APK's protected service diverges from this public framework.
+
+## 2D. Windows UDPGW integration: TAP-Windows is not Wintun
+
+The inspected BadVPN revision does have Windows-specific socket backends and an MSVC build path, but its TUN/TAP device abstraction matters:
+
+- `tuntap/BTap.c` selects `BADVPN_USE_WINAPI` on Windows and uses `tapwin32-funcs.c`, `CreateFile`, and `TAP_IOCTL_CONFIG_TUN` to open/configure a TAP-Windows-style adapter.
+- `BTap_InitWithFD` is explicitly documented as unsupported on Windows. The Android app's supplied TUN file descriptor therefore cannot be passed into this implementation on Windows.
+- The BadVPN `INSTALL-WINDOWS` guide documents an MSVC build. Its `tun2socks` target can be built separately, but the documented device path is TAP-Windows, not the Wintun adapter already used by ApnaWin.
+- The wire-protocol codec is now implemented independently in `src/apnawin/engines/udpgw_protocol.py`: PacketProto's 16-bit little-endian frame length, the 3-byte UDPGW flags/connection-ID header, IPv4/IPv6 destination encoding, network-order destination port, DNS/REBIND/IPv6 flags, keepalive frames, and incremental stream decoding. Unit tests cover fragmentation, coalesced frames, IPv4/IPv6, keepalive and malformed inputs.
+
+**Architecture decision under evaluation:** retain the existing Xray/Wintun TUN owner and supply it a local SOCKS5 endpoint that supports both TCP CONNECT (delegated through the SSH dynamic-forwarding endpoint) and UDP ASSOCIATE (translated to UDPGW frames over an SSH-carried TCP stream). This avoids installing a second TAP driver. The UDPGW codec is only the wire-format layer; the SOCKS5 gateway, flow-ID lifecycle, keepalives, DNS policy and real end-to-end tests are still outstanding.
+
+## 2C. Payload formatter and SSH-over-proxy transport details
+
+The same SecondVPN source snapshot also exposes a fuller transport sequence:
+
+- `TunnelUtils.formatCustomPayload(hostname, port, payload)` fills `[method]` as `CONNECT`; `[host]` and `[ip]` as the target hostname; `[host_port]`, `[ssh]`, and `[vpn]` as host:port; `[protocol]` as `HTTP/1.0`; `[port]`; `[ua]`; CR/LF tokens and escaped `\\n` / `\\r`. It then applies `parseRotate`, `parseRandom`, and repeated line-ending macros such as `[cr*3]`, `[lf*2]`, `[crlf*2]`, and `[lfcr*2]`.
+- `[rotate=...]` advances round-robin per occurrence and resets when the substituted payload template changes. `[random=...]` chooses one semicolon-separated value for that formatting call.
+- `HttpProxyCustom.openConnection` opens a TCP connection to the configured proxy, writes the formatted payload with split/flush handling, and normally reads an HTTP status line before handing the resulting stream to the SSH client. A Dropbear mode skips response parsing and immediately returns the socket.
+- The SSH manager attaches that socket as the SSH library's proxy transport, calls SSH connect with a 10-second connect timeout and 20-second read timeout, tries password authentication and then a configured public key, requires completed authentication, opens a local dynamic SOCKS forwarder, and only then starts the Android TUN/tun2socks service.
+- HTTPS modes are separate: one path establishes TLS to the configured host/SNI before injecting payload; another can place an SSL tunnel proxy in the SSH transport. The source's SSLPayloadTunnelProxy uses the platform trust manager in its active code path; its adjacent unused trust-all array must not be copied.
+
+This is detailed sibling-framework evidence, not yet proof of APNA's exact protected mode-selection logic. The implementation now has two deliberately separate pieces:
+- `apna_payload.py` compiles payload tokens and split boundaries.
+- `apna_payload_socket.py` opens a direct TCP, HTTP-payload, or TLS-before-payload stream and validates HTTP 200 responses by default. Its Dropbear option skips that response wait. It fails closed on non-200 status and bounds the response header; unlike the sibling's permissive non-200 branch, it does not pass rejected proxy responses to SSH.
+
+Neither component is yet an authenticated SSH client or a TUN data plane. No APNA server profile has been authenticated with these modules.
+
+## 2B. Independent confirmation of the exact APNA split tokens
+
+A second public implementation contains the exact method pair `formatCustomPayload` / `injectSplitPayload` and, importantly, an `injectSimpleSplit` branch that explicitly recognizes `[instant_split]`:
+
+- Repository: https://github.com/Andley302/SecondVPN
+- Inspected file at commit `8e6e96fb8b437efbff6e9df03b9683ef17cfee44`: [TunnelUtils.java](https://github.com/Andley302/SecondVPN/blob/8e6e96fb8b437efbff6e9df03b9683ef17cfee44/app/src/main/java/app/one/secondvpnlite/tunnel/TunnelUtils.java)
+- Additional related copy: [flutter_vpn TunnelUtils.java](https://github.com/hossein119gh/flutter_vpn/blob/02ff60c86e7b4f02a1008e49f3706baed4aa6ca3/android/src/main/java/com/slipkprojects/ultrasshservice/tunnel/TunnelUtils.java)
+
+The SecondVPN implementation confirms the following behavior in that codebase:
+- `[instant_split]` divides the payload into sequential writes, each followed by flush, with no deliberate sleep.
+- `[delay_split]` divides it into pieces and sleeps 1,000 ms between pieces.
+- `[rotate=a;b;c]` chooses one list entry per formatter invocation and advances round-robin on subsequent invocations; it resets when the payload template changes.
+- `[host]`, `[host_port]`, `[port]`, `[protocol]`, `[ssh]`, `[crlf]`, `[cr]`, `[lf]`, and `[lfcr]` are expanded by the related formatter; its protocol default is HTTP/1.0 and SSH token becomes host:port.
+- Bytes are written using ISO-8859-1 and flushed after each segment.
+
+This is substantially stronger corroboration for APNA's observed `[instant_split]` token than the earlier source that only implemented `[split]`. However, it remains sibling-source evidence: the APNA protected bytecode has not yet been fully reconstructed, so the exact default protocol, delay duration, rotation state scope, and replacement order are still verification items.
+
+ApnaWin contains a tested payload compiler at `src/apnawin/engines/apna_payload.py` for DEX-observed placeholders, ISO-8859-1 encoding, instant/delayed segment boundaries and per-profile round-robin rotation. The one-second delay is configurable and explicitly documented as a sibling-derived default; unknown tokens are preserved rather than guessed. The compiler is now consumed by `ApnaPayloadSocketConnector`, which is used by `ApnaSSHSession` to establish the payload stream before SSH authentication. This confirms local integration of the payload layer, not APNA provider authentication or live connectivity.
+
+## 2A. SSH connection and proxy-handshake branches in the related source
+
+The related TunnelManagerThread reads SSH server/port, username, password, optional key path and local SOCKS port from its settings, connects with 10-second connect and 20-second read timeouts, authenticates, creates a dynamic local SOCKS forwarder, then starts the TUN service.
+
+Its addProxy method distinguishes two SSH transport modes:
+
+- SSH direct: if a custom payload exists, connect to the SSH server endpoint itself, write the expanded payload and use Dropbear mode, which returns the socket without waiting for an HTTP proxy response. With no payload, connect directly.
+- SSH proxy: connect to a separate proxy host/port, write the expanded payload (or a default CONNECT request), then parse the HTTP response before allowing SSH to continue. The source accepts the library's SSH_FXP_EXTENDED success status and rejects other response codes.
+
+The authentication routine attempts password authentication and then a configured public key; keyboard-interactive support is present only as commented-out code in this revision. The source's connect/read timeouts and the distinction between direct payload injection and HTTP-proxy response validation are useful compatibility hypotheses. APNA's own mode constants and exact config-to-branch mapping still need verification.
+
+## 3. Custom payload grammar found in the related source
+
+The public TunnelUtils.formatCustomPayload(hostname, port, payload) expands these tokens:
+
+| Token | Related-source expansion |
+|---|---|
+| [method] | CONNECT |
+| [host] | target hostname |
+| [port] | target port |
+| [host_port] | hostname and port joined as host:port |
+| [protocol] | HTTP/1.0 |
+| [ssh] | target hostname and port joined as host:port |
+| [crlf] | CRLF |
+| [cr] | CR |
+| [lf] | LF |
+| [lfcr] | LF followed by CR |
+| \\n, \\r | literal escaped newline/carriage-return sequences |
+| [ua] | platform HTTP agent, or a fallback browser user-agent |
+
+The same source recognizes:
+
+- [split]: write each segment and flush it immediately, without a deliberate delay.
+- [delay_split]: write and flush each segment, sleeping one second between segments.
+- [rotate=a;b;...]: cycle through the supplied alternatives.
+- [random=a;b;...]: select one alternative randomly.
+
+The public HttpProxyCustom connects to a configured proxy host/port, expands the payload using the SSH target host/port, writes it as ISO-8859-1 bytes, and flushes. In its non-Dropbear path it reads the proxy's HTTP response before allowing the SSH transport to continue. The Dropbear path returns the socket after writing the payload. These details are valuable hypotheses for test design, not yet APNA-confirmed behavior.
+
+The APNA DEX string table independently contains [host], [host_port], [port], [protocol], [ssh], [crlf], [cr], [lf], [lfcr], [delay_split], [instant_split], and a rotate-expression pattern. It does not contain the sibling's [method], [ua], [split], or [random=...] tokens in the inspected primary DEX. In particular, APNA uses [instant_split] where this sibling source uses [split]; do not silently substitute one for the other. The immediate-write semantics of [instant_split], the exact one-second timing of [delay_split], and the rotate implementation should be confirmed against APNA method bytecode before implementing them as compatibility requirements.
+
+## 3B. Exact uProxy JNI package match and missing native split
+
+The APNA primary DEX references the exact Java class descriptor org/uproxy/tun2socks/Tun2SocksJni and the library names libtun2socks and libtun2socks.so. A public repository, UWNetworksLab/cordova-plugin-tun2socks, contains that exact package/class:
+
+- [Tun2SocksJni.java](https://github.com/UWNetworksLab/cordova-plugin-tun2socks/blob/9b686fb3bad6792142425931799b8f7690a932eb/android/java/org/uproxy/tun2socks/Tun2SocksJni.java)
+- [Tunnel.java](https://github.com/UWNetworksLab/cordova-plugin-tun2socks/blob/9b686fb3bad6792142425931799b8f7690a932eb/android/java/org/uproxy/tun2socks/Tunnel.java)
+- [JNI/native bridge](https://github.com/UWNetworksLab/cordova-plugin-tun2socks/blob/9b686fb3bad6792142425931799b8f7690a932eb/android/jni/tun2socks/tun2socks.c)
+- [Plugin manifest and declared license](https://github.com/UWNetworksLab/cordova-plugin-tun2socks/blob/9b686fb3bad6792142425931799b8f7690a932eb/plugin.xml)
+
+The public JNI method signature is:
+
+`runTun2Socks(fd, mtu, vpnIpAddress, vpnNetMask, socksServerAddress, udpRelayAddress, dnsResolverAddress, transparentDNS)`
+
+Its source comment explicitly describes TCP being routed through the SOCKS proxy and UDP being sent to a separate UDPGW server. The native JNI bridge maps those arguments to the native SOCKS address, UDP relay address, DNS resolver address and transparent-DNS setting. The public Tunnel wrapper passes the TUN descriptor, interface MTU/address/netmask and those endpoints to the native method.
+
+The exact class/package match plus the APNA DEX's UDPGW fields is strong evidence that APNA includes this uProxy/BadVPN-derived bridge or a close fork. It does not identify the precise native commit or prove the APNA argument values. The APNA DEX also contains the unusual string cluster TUN2SOCKS_BIN, fileTun2Socks, tun2SocksProcess, SUPPORTED_ABIS, nativeLibraryDir, sourceDir and getFilesDir, which matches the loader/executable-launch pattern in the related sockshttp source.
+
+**Important APK packaging gap:** the supplied file is named base.apk. A full ZIP scan of its 1,479 entries found no .so entry and no entry beginning with the ELF magic bytes. The DEX nevertheless references libtun2socks.so. This does not prove the installed app lacks the library: Android App Bundle delivery can put ABI-specific native libraries in a separate split APK (for example, an arm64-v8a split), or the protected app may extract/load it by another mechanism. The native implementation therefore cannot be audited from the supplied base.apk alone. A complete installed-package pull, including every split APK, is needed to recover the exact binary and version.
+
+
+
+A second related implementation, sockshttp's Tun2Socks.java plus CustomNativeLoader.java, shows a process-based loading path: check ApplicationInfo.nativeLibraryDir for tun2socks.so; if absent, enumerate supported ABIs and look for lib/<abi>/tun2socks.so or jni/<abi>/tun2socks.so in the APK; copy it to the app files directory as tun2socks; mark it executable; then launch it with the TUN fd, local SOCKS endpoint, optional UDPGW endpoint and DNS flags. Its code contains an old commented JNI/library-loading alternative as well. Because APNA DEX contains both Tun2SocksJni references and the process/ABI/file-path string cluster, the active APNA route should be determined from the actual method call graph rather than assuming the JNI wrapper is the active path. The absence of .so entries in base.apk is consistent with an ABI split being installed into nativeLibraryDir.
+
+The Cordova plugin is an Android/JNI integration and is not itself a Windows runtime. Its plugin manifest declares Apache 2.0, while individual Java/native source files carry Psiphon/BadVPN notices. Audit the exact file-level notices and transitive dependencies before reuse. For ApnaWin, the Windows side must implement an equivalent TUN-to-SOCKS plus UDPGW bridge with Windows-native TUN/Wintun handling; the Android JNI binary cannot simply be loaded on Windows.
+
+
+## 3B. Exact uProxy JNI package match and missing native split
+
+The APNA primary DEX references the exact Java class descriptor org/uproxy/tun2socks/Tun2SocksJni and the library names libtun2socks and libtun2socks.so. A public repository, UWNetworksLab/cordova-plugin-tun2socks, contains that exact package/class:
+
+- [Tun2SocksJni.java](https://github.com/UWNetworksLab/cordova-plugin-tun2socks/blob/9b686fb3bad6792142425931799b8f7690a932eb/android/java/org/uproxy/tun2socks/Tun2SocksJni.java)
+- [Tunnel.java](https://github.com/UWNetworksLab/cordova-plugin-tun2socks/blob/9b686fb3bad6792142425931799b8f7690a932eb/android/java/org/uproxy/tun2socks/Tunnel.java)
+- [JNI/native bridge](https://github.com/UWNetworksLab/cordova-plugin-tun2socks/blob/9b686fb3bad6792142425931799b8f7690a932eb/android/jni/tun2socks/tun2socks.c)
+- [Plugin manifest and declared license](https://github.com/UWNetworksLab/cordova-plugin-tun2socks/blob/9b686fb3bad6792142425931799b8f7690a932eb/plugin.xml)
+
+The public JNI method signature is:
+
+`runTun2Socks(fd, mtu, vpnIpAddress, vpnNetMask, socksServerAddress, udpRelayAddress, dnsResolverAddress, transparentDNS)`
+
+Its source comment explicitly describes TCP being routed through the SOCKS proxy and UDP being sent to a separate UDPGW server. The native JNI bridge maps those arguments to the native SOCKS address, UDP relay address, DNS resolver address and transparent-DNS setting. The public Tunnel wrapper passes the TUN descriptor, interface MTU/address/netmask and those endpoints to the native method.
+
+The exact class/package match plus the APNA DEX's UDPGW fields is strong evidence that APNA includes this uProxy/BadVPN-derived bridge or a close fork. It does not identify the precise native commit or prove the APNA argument values. The APNA DEX also contains the unusual string cluster TUN2SOCKS_BIN, fileTun2Socks, tun2SocksProcess, SUPPORTED_ABIS, nativeLibraryDir, sourceDir and getFilesDir, which matches the loader/executable-launch pattern in the related sockshttp source.
+
+**Important APK packaging gap:** the supplied file is named base.apk. A full ZIP scan of its 1,479 entries found no .so entry and no entry beginning with the ELF magic bytes. The DEX nevertheless references libtun2socks.so. This does not prove the installed app lacks the library: Android App Bundle delivery can put ABI-specific native libraries in a separate split APK (for example, an arm64-v8a split), or the protected app may extract/load it by another mechanism. The native implementation therefore cannot be audited from the supplied base.apk alone. A complete installed-package pull, including every split APK, is needed to recover the exact binary and version.
+
+
+
+A second related implementation, sockshttp's Tun2Socks.java plus CustomNativeLoader.java, shows a process-based loading path: check ApplicationInfo.nativeLibraryDir for tun2socks.so; if absent, enumerate supported ABIs and look for lib/<abi>/tun2socks.so or jni/<abi>/tun2socks.so in the APK; copy it to the app files directory as tun2socks; mark it executable; then launch it with the TUN fd, local SOCKS endpoint, optional UDPGW endpoint and DNS flags. Its code contains an old commented JNI/library-loading alternative as well. Because APNA DEX contains both Tun2SocksJni references and the process/ABI/file-path string cluster, the active APNA route should be determined from the actual method call graph rather than assuming the JNI wrapper is the active path. The absence of .so entries in base.apk is consistent with an ABI split being installed into nativeLibraryDir.
+
+The Cordova plugin is an Android/JNI integration and is not itself a Windows runtime. Its plugin manifest declares Apache 2.0, while individual Java/native source files carry Psiphon/BadVPN notices. Audit the exact file-level notices and transitive dependencies before reuse. For ApnaWin, the Windows side must implement an equivalent TUN-to-SOCKS plus UDPGW bridge with Windows-native TUN/Wintun handling; the Android JNI binary cannot simply be loaded on Windows.
+
+## 3A. UDP gateway path — strong framework match, APNA endpoint still unknown
+
+The APNA primary DEX string table contains all of the following exact identifiers:
+
+- mUdpResolver and mUdpDnsRelay in the VPN settings contract.
+- mUdpgwServerAddress and mUdpgwTransparentDNS in the TUN-to-SOCKS layer.
+- The native command option --udpgw-transparent-dns.
+- The native library name libtun2socks.so.
+
+The related sockshttp source contains the same mUdpgwServerAddress/mUdpgwTransparentDNS fields in Tun2Socks. Its TunnelVpnSettings carries mUdpResolver and mUdpDnsRelay, TunnelVpnManager passes those values into Tunnel.startTunneling, and Tunnel.routeThroughTunnel passes them to Tun2Socks. The command builder then adds:
+
+- --socks-server-addr for the local SOCKS endpoint.
+- --udpgw-remote-server-addr when a UDP gateway endpoint is configured.
+- --udpgw-transparent-dns when the boolean is enabled.
+- --dnsgw when a separate local DNS relay is configured.
+
+This is a much stronger match than a generic TUN/SOCKS resemblance. It supports the following interpretation of the APNA fields: mUdpResolver is the UDP gateway endpoint and mUdpDnsRelay controls transparent DNS forwarding through that gateway. The separate mDnsForward/mDnsResolver path can start a local Pdnsd resolver and pass its address as --dnsgw. Exact APNA constructor argument order and runtime values still need verification against the protected implementation.
+
+The related TunnelManagerThread computes mUdpDnsRelay as (dnsForward && udpResolver == null) || (!dnsForward && udpResolver != null), which is the logical XOR of DNS-forward mode and whether a UDPGW endpoint is configured. Tun2Socks only appends --udpgw-transparent-dns when a UDPGW endpoint exists. In this sibling implementation, that means:
+- DNS forward enabled: use the separate Pdnsd/--dnsgw path; do not enable transparent DNS on UDPGW.
+- DNS forward disabled with UDPGW configured: enable transparent DNS through UDPGW.
+- No UDPGW configured: the transparent-DNS boolean has no effect because no UDPGW option is emitted.
+
+This is a useful candidate DNS-routing matrix for APNA because the field names and call sequence match, but the exact boolean expression must still be confirmed in APNA's protected/runtime code.
+
+The BadVPN implementation shows that UDPGW is **not** SOCKS5 UDP ASSOCIATE. SocksUdpGwClient uses BSocksClient to open a SOCKS CONNECT stream to the configured remote UDPGW endpoint, then attaches UdpGwClient to that byte stream. Each PacketProto frame starts with a 16-bit little-endian payload length. Its payload is a 3-byte UDPGW header (one flags byte plus a 16-bit little-endian connection ID), followed by an IPv4 or IPv6 destination address and port in network byte order, then the UDP payload. Flag bits are KEEPALIVE=0x01, REBIND=0x02, DNS=0x04 and IPV6=0x08. New flows use REBIND; DNS packets set the DNS bit so the server can route them to its configured resolver instead of the packet's original destination. The client maintains 16-bit flow IDs, reuses the least-recently-used flow when its connection cap is reached, and sends a keepalive frame (unless the PSIPHON compile-time option disables it). The server maintains per-client UDP sockets and returns framed datagrams over the same stream.
+
+This means the APNA path likely has two independent transports after the TUN interface: TCP through the local SOCKS endpoint and UDP through a BadVPN-style UDP gateway reached through that SOCKS stream. This is the best current explanation for the separate UDP settings and transparent-DNS flag; the actual APNA native library/version and endpoint are not yet verified.
+
+**Windows implication:** the changelog for BadVPN 1.999.128 records that Windows support on the UDPGW side was not available at that historical point. However, the inspected source tree is newer/different in important ways: its root CMake defaults BUILD_TUN2SOCKS and BUILD_UDPGW on for non-Emscripten platforms, the tun2socks target links the udpgw_client library and includes SocksUdpGwClient.c, and system/CMakeLists selects BConnection_win.c/BDatagram_win.c on Windows. The UDPGW client initialization and packet-submit path in tun2socks.c are not guarded out by BADVPN_USE_WINAPI; that macro is used for platform-specific pieces such as syslog. This is evidence that client-side UDPGW may build on Windows in this source revision. It is not yet proof of a successful MSVC build or end-to-end Windows UDPGW session. The next gate is to build the exact source with the Windows toolchain and test SOCKS CONNECT -> UDPGW framing -> returned UDP datagrams on Windows; only if that fails should a port or alternative engine be designed.
+
+The BadVPN C files carry a BSD-style license notice; the Android Java wrappers and Psiphon-derived components have separate notices. Audit every native and Java dependency before reuse. The current work uses this source only to understand the protocol shape and does not copy its implementation.
+
+
+## 4. Security and licensing findings — do not copy blindly
+
+The related public TunnelManagerThread.verifyServerHostKey implementation returns true unconditionally after computing a fingerprint. That accepts an unverified SSH host key and is not an acceptable security design for ApnaWin. The Windows implementation must use strict host-key verification or an explicit, user-approved trust-on-first-use/pinning flow; never copy this permissive callback.
+
+The related Tunnel.java source carries a GPL-3.0-or-later notice. Other files and bundled dependencies may have separate terms. This research does not authorize copying or porting code. Before any source reuse, perform a file-by-file license and dependency audit and decide whether the project's distribution model is compatible. For now, only independently implement behavior supported by APNA evidence and use the public code as a comparison reference.
+
+The first comparison repository names its service SocksHttpService. The second repository contains a same-named SocksDNSService class, but under a different package and application identity. In that second source, SocksDNSService is a service wrapper: it starts a DNSTunnelThread for its SlowDNS setting and also starts TunnelManagerThread. That manager selects separate UDP, V2Ray, or SSH paths according to its own settings. This demonstrates why the service name alone cannot establish APNA's engine mapping. No matching public implementation for APNA's SalamanderService or XRayDNSService descriptors was found. APNA's own service class definitions remain absent from the inspected primary DEX.
+
+
+## 4A. What the sibling SocksDNSService source adds
+
+In the inspected SpeedLiteVpn source, SocksDNSService.onStartCommand starts a worker that:
+
+1. Reads its own tunnel-type preference.
+2. Starts DNSTunnelThread when that preference is SlowDNS.
+3. Starts TunnelManagerThread for the main connection lifecycle.
+
+That sibling TunnelManagerThread branches among three distinct modes: UDP starts UDPTunnel, V2Ray starts V2Tunnel with a stored JSON config, and the default branch starts the SSH client. The separate DNSTunnelThread launches a native libdns process with a DNS server, public-key value, nameserver and a local 127.0.0.1:2222 endpoint.
+
+The sibling UDPTunnel builds a local SOCKS5 listener configuration at 127.0.0.1:1080 and launches a native client binary with a JSON configuration. Its sample configuration includes an insecure TLS setting and a repository-specific certificate. Those values and that binary are specific to the sibling project and must not be copied or treated as APNA protocol data. The V2Tunnel path launches a separate V2Ray service and supplies a stored JSON config.
+
+This gives us concrete comparison questions for the APNA DEX: does its protected TunnelManagerThread branch on equivalent mode constants; does its UDP path create a local SOCKS listener; does XRayDNSService accept a JSON config; and does SalamanderService own SSH, DNS-over-SSH, or another forwarder? None of these answers is established by the sibling repository alone. APNA's server/payload mapping must still be traced from APNA call sites or runtime observations.
+
+The SpeedLiteVpn repository's own license page describes a mixture of components and inherited SSH Tunnel/Trilead code; it does not provide a single clear license grant for every project-authored file. Together with the different project identity, this is a research reference only, not a source-code reuse authorization.
+
+## 5. Catalog downloader: discrepancies and freshness
+
+The exact-package manifest in the external analysis repository marks the overall APNA Lite integration as PARTIAL: its catalog target is CONNECTED, but connection_authentication is explicitly UNCONFIRMED and the limitations say no new live service validation was asserted. This matches the boundary in this project: catalog decoding and provider discovery are not evidence of a successful VPN handshake.
+
+The same external repository also analyzes a different product, APNA VPN 3.9 (package my.teamapna.tunnel, versionCode 30). That report shows OpenVPNClient.r() performing the catalog updater GET. It is a separate package and only a cross-check for the catalog algorithm; it is not proof that APNA Lite uses OpenVPN on the wire. The class name OpenVPNClient must not be treated as a protocol identification.
+
+The external APNA decoder's README reports a live observation dated 2026-11-13: catalog version 850, 50 free servers and 644 payloads. The external 2026-11-14 integration report explicitly says APNA's integration path had no new remote verification in that delivery. These statements are compatible: the README records an earlier observation, while the later integration pass did not repeat it.
+
+The external script adds a ranged-download fallback after ordinary GET attempts fail. Its own comments describe this as a downloader workaround because the host sometimes truncates bodies. It is **not** evidence that the Android app sends Range headers. The script itself says the app makes a plain GET; its retry/resume behavior belongs to the research tool unless separately verified.
+
+The external notes describe Dalvik/2.1.0 and Accept-Encoding: identity as the effective request headers, while also explaining that the app does not set custom authentication/signature headers and that the Dalvik agent is the platform default. Treat these as reported effective headers, not proof that the Android app explicitly adds both headers in source code. The local APK's protected updater implementation was not fully recovered.
+
+A live request attempted from this environment on 2026-11-16 failed before HTTP because DNS resolution for paperonboard.com failed. HTTP status was 000; no response body was received. This is an environment DNS failure, not evidence that the provider endpoint is offline. The current live catalog version/counts remain unverified.
+
+The ApnaWin discovery-only HTTP source has since been hardened to require HTTP 200, reject non-identity content encoding, enforce the declared Content-Length against the configured size limit, and reject truncated bodies. The tests for these checks use mocked responses; they do not imply a successful live fetch.
+
+## 6. Consequences for ApnaWin implementation
+
+- Keep the APNA catalog adapter in discovery-only mode until a fresh response and schema are validated.
+- Do not port the external script's Range fallback as if it were Android behavior. If a Windows downloader later needs resume support, design it as a separate reliability feature with strict Content-Range/ETag/length checks and independent tests.
+- Add a provider-neutral SSH/payload engine boundary only after the APNA call sites establish the required fields and sequencing.
+- Implement payload expansion as a deterministic, testable component; add only tokens proven in APNA bytecode or runtime traces.
+- Test split timing and response handling with synthetic local proxy fixtures; never use embedded catalog credentials in tests.
+- Keep SSH host-key verification strict. The permissive callback in the comparison source is specifically rejected.
+- Do not map ocsws, ocscf, ocsudp, ocsshadow, ocstrojanworker, ocsxray, or ocsv2ray to an engine based only on their names.
+- Do not claim APNA compatibility until a real Windows 10/11 session completes the provider handshake, routes traffic, verifies DNS/IPv4/IPv6 behavior, and cleans up routes/adapters on disconnect.
+
+## 7. Next reverse-engineering work
+
+1. Trace every APNA call site into formatCustomPayload, injectSplitPayload, and injectSimpleSplit; recover argument sources and exact substitution order.
+2. Recover the protected SSH service's SSH library, authentication flow, host-key verification, proxy type, keepalive and reconnect behavior.
+3. Trace the APNA startXRay and startSocksHttp service paths independently; identify their configuration inputs and local listener endpoints.
+4. Trace UDP resolver setup and framing independently from TCP/SSH.
+5. Recover server/payload matching, host-pool rotation, Pulled port resolution, and meanings of sslws, sausage, query, dothost, and custom_cert.
+6. Obtain a fresh catalog response from a network where DNS works; compare only redacted schema/count metadata and never log credentials.
+7. Build a synthetic local integration test that exercises payload -> SSH proxy handshake -> local SOCKS -> Wintun routing without requiring a real APNA credential.

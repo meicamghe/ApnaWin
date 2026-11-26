@@ -85,7 +85,7 @@ def _report_fixtures(dex_count=2):
             {"abi": "x86_64", "library_name": "libordinary2.so", "file_size_bytes": 30},
         ],
     }
-    manifest = {"package_name": "org.example.app", "vpn_services": [".TunnelService"]}
+    manifest = {"package_name": "org.example.app", "application_class": ".ApnaApplication", "vpn_services": [".TunnelService"], "components": [{"type": "service", "name": ".TunnelService"}]}
     dex = {
         "dex_file_count": dex_count,
         "manifest_service_classes": [
@@ -127,6 +127,8 @@ def test_combined_report_correlates_evidence_and_summarizes_abis():
         timeout=30,
         manifest_services=[".TunnelService"],
         package_name="org.example.app",
+        manifest_application_class=".ApnaApplication",
+        manifest_service_components=[{"type": "service", "name": ".TunnelService"}],
     )
     assert report["native"]["library_count"] == 3
     assert report["native"]["abi_library_counts"] == {
@@ -263,3 +265,42 @@ def test_combined_report_does_not_flag_abi_mismatch_when_none_was_found():
     assert result["interpretation"]["native_abi_mismatch_count"] == 0
     assert result["interpretation"]["native_abi_checked_library_count"] == 2
     assert result["interpretation"]["native_abi_mismatch_detected"] is False
+
+
+def test_combined_report_correlates_literal_loads_to_exact_native_filenames():
+    inventory, manifest, dex = _report_fixtures()
+    inventory["native_libraries"] = [
+        {"abi": "arm64-v8a", "library_name": "libsalamander.so", "file_size_bytes": 100},
+        {"abi": "x86_64", "library_name": "libsalamander.so", "file_size_bytes": 90},
+        {"abi": "arm64-v8a", "library_name": "libudpqtwo.so", "file_size_bytes": 200},
+    ]
+    dex["manifest_service_component_classes"] = [{
+        "manifest_name": ".SalamanderService",
+        "resolved_class_name": "org.example.app.SalamanderService",
+        "native_library_loads": ["salamander", "/data/app/lib/libudpqtwo.so", "missing"],
+    }]
+    dex["manifest_application_class"] = {
+        "resolved_class_name": "org.example.app.ApnaApplication",
+        "native_library_loads": ["salamander"],
+    }
+    elf = {"libraries": [], "libraries_inspected": 0, "jni_exported_library_count": 0,
+        "jni_onload_library_count": 0, "skipped_library_count": 0, "bytes_read_in_memory": 0,
+        "archive_members_written": False, "native_code_executed": False, "raw_symbol_names_included": False}
+    with (
+        patch.object(apk_report, "inspect_apk", return_value=inventory),
+        patch.object(apk_report, "inspect_apk_manifest", return_value=manifest),
+        patch.object(apk_report, "inspect_apk_dex", return_value=dex),
+        patch.object(apk_report, "inspect_apk_native_libraries", return_value=elf),
+    ):
+        result = apk_report.inspect_apk_report("sample.apk")
+    correlations = result["native"]["native_load_correlations"]
+    service = correlations[1]
+    assert service["owner_type"] == "service"
+    assert service["loads"][0]["expected_library_name"] == "libsalamander.so"
+    assert service["loads"][0]["matching_abis"] == ["arm64-v8a", "x86_64"]
+    assert service["loads"][0]["match_status"] == "filename_match"
+    assert service["loads"][1]["matching_abis"] == ["arm64-v8a"]
+    assert service["loads"][2]["match_status"] == "not_found"
+    assert service["loads"][2]["expected_library_name"] == "libmissing.so"
+    assert correlations[0]["owner_type"] == "application"
+    assert result["interpretation"]["native_service_linkage_verified"] is False

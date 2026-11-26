@@ -1,0 +1,23 @@
+diff --git a/app/cmd/config.go b/app/cmd/config.go
+index 0000000..0000000 100644
+--- a/app/cmd/config.go
++++ b/app/cmd/config.go
+@@ -351,7 +351,17 @@ func (c *clientConfig) Fill() {
+ }
+ 
+ func (c *clientConfig) String() string {
+-	return fmt.Sprintf("%+v", *c)
++	// The caller logs this value at INFO level. Never print credentials or
++	// traffic-obfuscation secrets from a client profile.
++	redacted := *c
++	redacted.Auth = nil
++	redacted.AuthString = ""
++	redacted.Obfs = ""
++	redacted.SOCKS5.User = ""
++	redacted.SOCKS5.Password = ""
++	redacted.HTTP.User = ""
++	redacted.HTTP.Password = ""
++	return fmt.Sprintf("%+v", redacted)
+ }
+ 
+ func stringToBps(s string) uint64 {

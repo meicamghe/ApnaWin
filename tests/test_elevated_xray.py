@@ -143,6 +143,51 @@ def test_elevated_launcher_uses_runas_and_returns_supervisor_handle(tmp_path, mo
     assert 102 in api.kernel32.closed
 
 
+def test_ensure_tun_adapter_available_refuses_existing_adapter():
+    from types import SimpleNamespace
+
+    class Diagnostics:
+        def __init__(self, **kwargs):
+            assert kwargs["adapter_name"] == "ApnaWin"
+        def snapshot(self):
+            return SimpleNamespace(adapter_present=True)
+
+    inbound = SimpleNamespace(name="ApnaWin")
+    with pytest.raises(elevated_xray.ElevatedXrayError, match="refusing to reuse"):
+        elevated_xray._ensure_tun_adapter_available(
+            inbound, diagnostics_factory=Diagnostics
+        )
+
+
+def test_ensure_tun_adapter_available_accepts_absent_adapter():
+    from types import SimpleNamespace
+
+    class Diagnostics:
+        def __init__(self, **kwargs):
+            pass
+        def snapshot(self):
+            return SimpleNamespace(adapter_present=False)
+
+    inbound = SimpleNamespace(name="ApnaWin")
+    snapshot = elevated_xray._ensure_tun_adapter_available(
+        inbound, diagnostics_factory=Diagnostics
+    )
+    assert snapshot.adapter_present is False
+
+
+def test_tun_snapshot_matches_requires_every_configured_dns_server():
+    from types import SimpleNamespace
+
+    inbound = SimpleNamespace(dns=("1.1.1.1", "9.9.9.9"))
+    snapshot = SimpleNamespace(
+        routing_ready=True,
+        dns_servers=("1.1.1.1",),
+    )
+    assert not elevated_xray._tun_snapshot_matches(snapshot, inbound)
+    snapshot.dns_servers = ("1.1.1.1", "9.9.9.9", "8.8.8.8")
+    assert elevated_xray._tun_snapshot_matches(snapshot, inbound)
+
+
 def test_wait_for_tun_network_ready_requires_stable_routes_and_dns():
     from types import SimpleNamespace
 
@@ -255,6 +300,24 @@ def test_wait_for_tun_network_ready_aborts_when_desktop_exits():
         )
 
 
+def test_elevated_launcher_requests_graceful_stop_after_readiness_timeout(
+    tmp_path, monkeypatch
+):
+    helper, store = setup_install_paths(tmp_path, monkeypatch)
+    monkeypatch.setattr(elevated_xray.os, "name", "nt")
+    api = FakeApi(ready=False)
+
+    with pytest.raises(TimeoutError, match="did not become ready"):
+        elevated_xray.ElevatedXrayProcess.launch(
+            helper, store, "Office", readiness_timeout=0.001, api=api
+        )
+
+    assert api.kernel32.set_events == [102]
+    assert api.kernel32.terminated == []
+    assert 200 in api.kernel32.closed
+    assert 102 in api.kernel32.closed
+
+
 def test_elevated_launcher_reports_cancelled_uac_consent(tmp_path, monkeypatch):
     helper, store = setup_install_paths(tmp_path, monkeypatch)
     monkeypatch.setattr(elevated_xray.os, "name", "nt")
@@ -302,6 +365,8 @@ def test_elevated_launcher_rejects_symlinked_helper_or_store(tmp_path, monkeypat
 def test_helper_supervises_xray_until_parent_exits(tmp_path, monkeypatch):
     monkeypatch.setattr(elevated_xray.os, "name", "nt")
     monkeypatch.setattr(elevated_xray, "_open_helper_install_root", lambda: tmp_path)
+    verified_runtime = []
+    monkeypatch.setattr(elevated_xray, "verify_vpn_runtime", lambda path: verified_runtime.append(Path(path)))
     monkeypatch.setattr(elevated_xray, "_validate_config_store_path", lambda path: Path(path))
     monkeypatch.setattr(elevated_xray, "is_windows_elevated", lambda: True)
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "LocalAppData"))
@@ -342,7 +407,7 @@ def test_helper_supervises_xray_until_parent_exits(tmp_path, monkeypatch):
                         "autoSystemWfpBlockLeak": ["allexceptlan", "dns"],
                     },
                 }],
-                "outbounds": [{"protocol": "freedom"}],
+                "outbounds": [{"protocol": "vless"}],
             }
 
         def start(self, _profile):
@@ -360,6 +425,15 @@ def test_helper_supervises_xray_until_parent_exits(tmp_path, monkeypatch):
         elevated_xray, "_wait_for_tun_network_ready",
         lambda *_args, **_kwargs: None,
     )
+    monkeypatch.setattr(
+        elevated_xray, "_ensure_tun_adapter_available",
+        lambda *_args, **_kwargs: None,
+    )
+    egress_probes = []
+    monkeypatch.setattr(
+        elevated_xray, "probe_tun_egress",
+        lambda: egress_probes.append(True),
+    )
 
     ready_name = "Local\\ApnaWinReady-" + "a" * 32
     stop_name = "Local\\ApnaWinStop-" + "b" * 32
@@ -372,7 +446,22 @@ def test_helper_supervises_xray_until_parent_exits(tmp_path, monkeypatch):
     ])
     assert result == 0
     assert FakeRunner.instance is not None
+    assert verified_runtime == [tmp_path / "engine"]
+    assert egress_probes == [True]
     assert FakeRunner.instance.running is False
     assert FakeRunner.instance.new_console is True
     assert api.kernel32.set_events == [32]
     assert not list((tmp_path / "LocalAppData" / "ApnaWin" / "runtime").glob("xray-*.json"))
+
+
+
+def test_tun_egress_health_fails_closed_when_tls_probe_fails():
+    from apnawin.services.elevated_xray import _tun_egress_is_healthy
+    from apnawin.services.windows_tunnel_egress import TunnelEgressError
+
+    assert _tun_egress_is_healthy(lambda: True) is True
+
+    def unavailable():
+        raise TunnelEgressError("no external TLS route")
+
+    assert _tun_egress_is_healthy(unavailable) is False

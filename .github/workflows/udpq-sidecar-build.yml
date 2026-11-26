@@ -1,0 +1,248 @@
+name: UDPQ Sidecar Build
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tools/build_udpq_sidecar.sh"
+      - "native/udpq/**"
+      - ".gitattributes"
+      - ".github/workflows/udpq-sidecar-build.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64:
+    name: Build pinned UDPQ client for Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.20.14"
+          cache: false
+
+      - name: Fetch pinned MIT source
+        shell: pwsh
+        run: |
+          $repo = Join-Path $env:RUNNER_TEMP "starudp"
+          git clone --no-checkout https://github.com/starrising321/starudp.git $repo
+          git -C $repo checkout --detach 23fa29bb4fad600330b30e2b703b8029ef091446
+          $actual = (git -C $repo rev-parse HEAD).Trim()
+          if ($actual -ne "23fa29bb4fad600330b30e2b703b8029ef091446") {
+            throw "Pinned StarUDP source commit mismatch: $actual"
+          }
+          git -C $repo apply "$env:GITHUB_WORKSPACE/native/udpq/patches/redact-client-config-logs.patch"
+          if ($LASTEXITCODE -ne 0) { throw "Could not apply UDPQ credential-redaction patch" }
+          "STARUDP_SOURCE=$repo" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build client sidecar
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP "apnawin-udpq"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Push-Location (Join-Path $env:STARUDP_SOURCE "app")
+          try {
+            $env:GOTOOLCHAIN = "local"
+            $env:GOOS = "windows"
+            $env:GOARCH = "amd64"
+            $env:CGO_ENABLED = "0"
+            go build -trimpath -ldflags "-s -w" -o (Join-Path $out "udpq-client.exe") ./cmd
+            if ($LASTEXITCODE -ne 0) { throw "Go build failed: $LASTEXITCODE" }
+          }
+          finally {
+            Pop-Location
+          }
+          go version -m (Join-Path $out "udpq-client.exe")
+          if ($LASTEXITCODE -ne 0) { throw "Go binary metadata inspection failed" }
+          Get-FileHash (Join-Path $out "udpq-client.exe") -Algorithm SHA256
+          & (Join-Path $out "udpq-client.exe") --help
+          if ($LASTEXITCODE -ne 0) { throw "Sidecar help smoke test failed: $LASTEXITCODE" }
+          "Built and smoke-tested the Windows x64 client. No server was contacted."
+
+
+  linux-loopback-integration:
+    name: Verify QUIC TCP and UDP through loopback SOCKS5
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.20.14"
+          cache: false
+      - name: Fetch pinned MIT source
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="$RUNNER_TEMP/starudp"
+          git clone --no-checkout https://github.com/starrising321/starudp.git "$repo"
+          git -C "$repo" checkout --detach 23fa29bb4fad600330b30e2b703b8029ef091446
+          test "$(git -C "$repo" rev-parse HEAD)" = "23fa29bb4fad600330b30e2b703b8029ef091446"
+          git -C "$repo" apply "$GITHUB_WORKSPACE/native/udpq/patches/redact-client-config-logs.patch"
+          echo "STARUDP_SOURCE=$repo" >> "$GITHUB_ENV"
+      - name: Build Linux reference client/server
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$STARUDP_SOURCE/app"
+          go build -trimpath -o "$RUNNER_TEMP/udpq-reference" ./cmd
+          "$RUNNER_TEMP/udpq-reference" --no-check --help >/dev/null
+      - name: Run local verified-TLS TCP and UDP relay test
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="$RUNNER_TEMP/udpq-reference"
+          cert="$RUNNER_TEMP/udpq-test.crt"
+          key="$RUNNER_TEMP/udpq-test.key"
+          server_cfg="$RUNNER_TEMP/udpq-server.json"
+          client_cfg="$RUNNER_TEMP/udpq-client.json"
+          server_log="$RUNNER_TEMP/udpq-server.log"
+          client_log="$RUNNER_TEMP/udpq-client.log"
+
+          openssl req -x509 -newkey rsa:2048 -nodes \
+            -keyout "$key" -out "$cert" -days 1 \
+            -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
+            -addext "basicConstraints=critical,CA:TRUE"
+
+          python3 - "$cert" "$key" "$server_cfg" "$client_cfg" <<'PY'
+          import json, sys
+          cert, key, server_cfg, client_cfg = sys.argv[1:]
+          with open(server_cfg, "w", encoding="utf-8") as f:
+              json.dump({
+                  "listen": "127.0.0.1:18443",
+                  "protocol": "udp",
+                  "cert": cert,
+                  "key": key,
+                  "up_mbps": 10,
+                  "down_mbps": 10,
+                  "alpn": "hysteria",
+                  "auth": {"mode": "password", "config": {"password": "loopback-test-secret"}},
+              }, f)
+          with open(client_cfg, "w", encoding="utf-8") as f:
+              json.dump({
+                  "server": "127.0.0.1:18443",
+                  "protocol": "udp",
+                  "up_mbps": 10,
+                  "down_mbps": 10,
+                  "alpn": "hysteria",
+                  "server_name": "localhost",
+                  "auth_str": "loopback-test-secret",
+                  "ca": cert,
+                  "insecure": False,
+                  "socks5": {
+                      "listen": "127.0.0.1:10808",
+                      "disable_udp": False,
+                  },
+              }, f)
+          PY
+
+          http_pid=""
+          udp_pid=""
+          server_pid=""
+          client_pid=""
+          cleanup() {
+            for pid in "$client_pid" "$server_pid" "$http_pid" "$udp_pid"; do
+              if [[ -n "$pid" ]]; then kill "$pid" 2>/dev/null || true; fi
+            done
+          }
+          trap cleanup EXIT
+
+          python3 -m http.server 18080 --bind 127.0.0.1 \
+            >"$RUNNER_TEMP/udpq-http.log" 2>&1 &
+          http_pid=$!
+          python3 - <<'PY' >"$RUNNER_TEMP/udpq-echo.log" 2>&1 &
+          import socket
+          sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+          sock.bind(("127.0.0.1", 18081))
+          while True:
+              payload, peer = sock.recvfrom(4096)
+              sock.sendto(b"echo:" + payload, peer)
+          PY
+          udp_pid=$!
+
+          "$bin" --no-check server --config "$server_cfg" >"$server_log" 2>&1 &
+          server_pid=$!
+          for _ in $(seq 1 60); do
+            if grep -q "Server up and running" "$server_log"; then break; fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then cat "$server_log"; exit 1; fi
+            sleep 0.25
+          done
+          grep -q "Server up and running" "$server_log" || { cat "$server_log"; exit 1; }
+
+          "$bin" --no-check client --config "$client_cfg" >"$client_log" 2>&1 &
+          client_pid=$!
+          for _ in $(seq 1 80); do
+            if grep -q "SOCKS5 server up and running" "$client_log"; then break; fi
+            if ! kill -0 "$client_pid" 2>/dev/null; then cat "$client_log"; exit 1; fi
+            sleep 0.25
+          done
+          grep -q "SOCKS5 server up and running" "$client_log" || { cat "$client_log"; exit 1; }
+
+          curl --fail --silent --show-error --max-time 10 \
+            --socks5-hostname 127.0.0.1:10808 \
+            http://127.0.0.1:18080/ >"$RUNNER_TEMP/udpq-http-body.html"
+          grep -qi "directory listing" "$RUNNER_TEMP/udpq-http-body.html"
+
+          python3 - <<'PY'
+          import socket, struct
+
+          def exact(sock, size):
+              data = b""
+              while len(data) < size:
+                  part = sock.recv(size - len(data))
+                  if not part:
+                      raise RuntimeError("SOCKS5 control channel closed")
+                  data += part
+              return data
+
+          control = socket.create_connection(("127.0.0.1", 10808), timeout=5)
+          control.settimeout(5)
+          control.sendall(b"\x05\x01\x00")
+          if exact(control, 2) != b"\x05\x00":
+              raise RuntimeError("SOCKS5 no-auth negotiation failed")
+          control.sendall(b"\x05\x03\x00\x01\x00\x00\x00\x00\x00\x00")
+          ver, rep, reserved, atyp = exact(control, 4)
+          if (ver, rep, reserved) != (5, 0, 0):
+              raise RuntimeError("SOCKS5 UDP ASSOCIATE failed")
+          if atyp == 1:
+              relay_host = socket.inet_ntoa(exact(control, 4))
+          elif atyp == 4:
+              relay_host = socket.inet_ntop(socket.AF_INET6, exact(control, 16))
+          elif atyp == 3:
+              relay_host = exact(control, exact(control, 1)[0]).decode("ascii")
+          else:
+              raise RuntimeError("Unsupported SOCKS5 relay address type")
+          relay_port = struct.unpack("!H", exact(control, 2))[0]
+
+          udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+          udp.settimeout(5)
+          payload = b"apnawin-udpq-loopback"
+          request = (
+              b"\x00\x00\x00\x01"
+              + socket.inet_aton("127.0.0.1")
+              + struct.pack("!H", 18081)
+              + payload
+          )
+          udp.sendto(request, (relay_host, relay_port))
+          response, _ = udp.recvfrom(4096)
+          if not response.endswith(b"echo:" + payload):
+              raise RuntimeError(f"Unexpected UDP relay response: {response!r}")
+          print("Verified SOCKS5 UDP ASSOCIATE through QUIC DATAGRAM.")
+          control.close()
+          udp.close()
+          PY
+
+          echo "Verified TLS 1.3 + QUIC handshake, TCP CONNECT and UDP DATAGRAM over loopback."
+          echo "No external endpoint was contacted; no binary artifact was published."

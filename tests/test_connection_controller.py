@@ -128,3 +128,16 @@ def test_controller_disconnect_is_idempotent():
     controller.disconnect()
     assert engine.disconnect_calls == 0
     assert controller.state is ConnectionState.DISCONNECTED
+
+def test_controller_refresh_propagates_supervised_tunnel_loss(profile):
+    class SupervisedEngine(RecordingEngine):
+        def refresh(self):
+            self._state = ConnectionState.ERROR
+            return self._state
+
+    engine = SupervisedEngine()
+    controller = ConnectionController(engine)
+    controller.connect(profile)
+    assert controller.refresh() is ConnectionState.ERROR
+    assert controller.state is ConnectionState.ERROR
+    assert controller.active_profile == profile

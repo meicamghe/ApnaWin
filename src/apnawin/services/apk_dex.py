@@ -18,6 +18,7 @@ _MAX_TIMEOUT_SECONDS = 30
 _MAX_DEX_FILES = 128
 _MAX_CLASSES = 100_000
 _MAX_RELEVANT_CLASSES = 2_000
+_MAX_MANIFEST_SERVICE_COMPONENTS = 128
 _DEX_NAME = re.compile(r"classes(?:[2-9]|[1-9][0-9]+)?\.dex\Z")
 _CLASS_NAME = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*\Z")
 _PACKAGE_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)*\Z")
@@ -162,6 +163,144 @@ def _parse_native_method_count(output: str) -> int:
     return count
 
 
+def _parse_invoke_registers(operands: str, *, is_range: bool) -> list[str]:
+    """Parse bounded DEX invoke registers, including the /range form."""
+    if not is_range:
+        return [item.strip() for item in operands.split(",") if item.strip()]
+    match = re.fullmatch(r"\s*([vp])(\d+)\s*\.\.\s*([vp])(\d+)\s*", operands)
+    if match is None or match.group(1) != match.group(3):
+        return []
+    first, last = int(match.group(2)), int(match.group(4))
+    # DEX invoke-range has at most 255 argument words; reject malformed spans.
+    if last < first or last - first > 254:
+        return []
+    return [f"{match.group(1)}{index}" for index in range(first, last + 1)]
+
+
+def _parse_native_library_loads(output: str) -> list[str]:
+    """Extract literal System.loadLibrary/ load call arguments from one smali class.
+
+    Only literal constants passed directly to a recognized Android/JVM loader
+    are reported. Dynamic values, reflection, JNI registration and process
+    launches are intentionally not guessed.
+    """
+    if len(output.encode("utf-8")) > _MAX_OUTPUT_BYTES:
+        raise ValueError("DEX class code exceeds the allowed size")
+    registers: dict[str, str] = {}
+    libraries: set[str] = set()
+    in_method = False
+    const_pattern = re.compile(
+        r'^\s*const-string(?:/jumbo)?\s+([vp][0-9]+),\s+"([^"\r\n]{1,512})"'
+    )
+    invoke_pattern = re.compile(r"^\s*invoke-(?:static|virtual)(?:/range)?\s+\{([^}]*)\}.*")
+    for line in output.splitlines():
+        if len(line) > 16_384:
+            raise ValueError("DEX class code contains an oversized line")
+        if line.startswith(".method "):
+            in_method = True
+            registers.clear()
+            continue
+        if line == ".end method":
+            in_method = False
+            registers.clear()
+            continue
+        if not in_method:
+            continue
+        const_match = const_pattern.match(line)
+        if const_match:
+            registers[const_match.group(1)] = const_match.group(2)
+            continue
+        invoke_match = invoke_pattern.match(line)
+        if invoke_match:
+            invocation = line.lstrip().split(None, 1)[0]
+            operands = _parse_invoke_registers(
+                invoke_match.group(1), is_range=invocation.endswith("/range")
+            )
+            owner, separator, target = line.partition("->")
+            owner = owner.strip().rsplit(",", 1)[-1].strip() if separator else ""
+            argument_register = None
+            load_kind = None
+            if (
+                owner == "Ljava/lang/System;"
+                and invocation.startswith("invoke-static")
+                and target.startswith("loadLibrary(Ljava/lang/String;)V")
+            ):
+                if operands:
+                    argument_register, load_kind = operands[0], "library"
+            elif (
+                owner == "Ljava/lang/System;"
+                and invocation.startswith("invoke-static")
+                and target.startswith("load(Ljava/lang/String;)V")
+            ):
+                if operands:
+                    argument_register, load_kind = operands[0], "path"
+            elif (
+                owner == "Ljava/lang/Runtime;"
+                and invocation.startswith("invoke-virtual")
+                and target.startswith("loadLibrary(Ljava/lang/String;)V")
+            ):
+                if len(operands) > 1:
+                    argument_register, load_kind = operands[1], "library"
+            elif (
+                owner == "Ljava/lang/Runtime;"
+                and invocation.startswith("invoke-virtual")
+                and target.startswith("load(Ljava/lang/String;)V")
+            ):
+                if len(operands) > 1:
+                    argument_register, load_kind = operands[1], "path"
+            if argument_register in registers:
+                value = registers[argument_register]
+                if load_kind == "library":
+                    if re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", value):
+                        libraries.add(value)
+                elif load_kind == "path":
+                    match = re.search(r"(?:^|[/\\])(lib[A-Za-z0-9_.-]+\.so)$", value)
+                    if match:
+                        libraries.add(match.group(1))
+            continue
+        # A write to a tracked destination invalidates the previous literal.
+        fields = line.strip().split(None, 1)
+        # DEX instructions that write their first register operand invalidate
+        # a previously tracked const-string. In particular, move-result-object
+        # can overwrite a register between a literal and System.loadLibrary().
+        writes_first_register = (
+            "move",
+            "const",
+            "new-",
+            "iget",
+            "sget",
+            "aget",
+            "array-length",
+            "instance-of",
+            "cmp",
+            "neg-",
+            "not-",
+            "int-to-",
+            "long-to-",
+            "float-to-",
+            "double-to-",
+            "add-",
+            "sub-",
+            "mul-",
+            "div-",
+            "rem-",
+            "and-",
+            "or-",
+            "xor-",
+            "shl-",
+            "shr-",
+            "ushr-",
+        )
+        if (
+            len(fields) == 2
+            and fields[0].startswith(writes_first_register)
+            and not fields[0].startswith(("invoke-", "iput", "sput", "aput"))
+        ):
+            destination = fields[1].split(",", 1)[0].strip()
+            registers.pop(destination, None)
+    return sorted(libraries)
+
+
 def parse_reference_counts(output: str) -> dict[str, int]:
     if len(output.encode("utf-8")) > _MAX_OUTPUT_BYTES:
         raise ValueError("DEX reference listing exceeds the allowed size")
@@ -184,6 +323,8 @@ def inspect_apk_dex(
     timeout: float = _MAX_TIMEOUT_SECONDS,
     manifest_services: list[str] | None = None,
     package_name: str | None = None,
+    manifest_application_class: str | None = None,
+    manifest_service_components: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Return DEX file counts and candidate VPN/network class names."""
     path = Path(apk_path)
@@ -196,6 +337,17 @@ def inspect_apk_dex(
         resolved = str(Path(executable).resolve())
     if resolved is None:
         raise RuntimeError("Android SDK apkanalyzer was not found on PATH")
+
+    components = manifest_service_components or []
+    if not isinstance(components, list) or len(components) > _MAX_MANIFEST_SERVICE_COMPONENTS:
+        raise ValueError("manifest contains too many service components for DEX inspection")
+    for component in components:
+        if (
+            not isinstance(component, dict)
+            or component.get("type") != "service"
+            or not isinstance(component.get("name"), str)
+        ):
+            raise ValueError("manifest service component metadata is invalid")
 
     apk = str(path.resolve())
     dex_files = parse_dex_file_list(_run(resolved, ["dex", "list", apk], timeout))
@@ -220,6 +372,24 @@ def inspect_apk_dex(
                 }
                 for service in (manifest_services or [])
             ],
+            "manifest_application_class": {
+                "resolved_class_name": _resolve_manifest_class(manifest_application_class, package_name)
+                if manifest_application_class else None,
+                "defined_in_dex": False,
+                "native_library_loads": [],
+                "inspection_completed": False,
+            },
+            "manifest_service_component_classes": [
+                {
+                    "manifest_name": component["name"],
+                    "resolved_class_name": _resolve_manifest_class(component["name"], package_name),
+                    "defined_in_dex": False,
+                    "native_method_count": None,
+                    "native_library_loads": [],
+                    "inspection_completed": False,
+                }
+                for component in components
+            ],
             "source": "apkanalyzer",
             "raw_dex_output_included": False,
         }
@@ -228,6 +398,7 @@ def inspect_apk_dex(
     class_count, candidates, class_metadata = _parse_defined_class_metadata(class_output)
     service_matches = []
     native_method_counts: dict[str, int] = {}
+    class_code_cache: dict[str, str] = {}
     for service in manifest_services or []:
         resolved_name = _resolve_manifest_class(service, package_name)
         evidence = class_metadata.get(resolved_name) if resolved_name else None
@@ -240,6 +411,7 @@ def inspect_apk_dex(
                     ["dex", "code", "--class", resolved_name, apk],
                     timeout,
                 )
+                class_code_cache[resolved_name] = code_output
                 native_method_counts[resolved_name] = _parse_native_method_count(code_output)
             native_count = native_method_counts[resolved_name]
             inspection_completed = True
@@ -253,6 +425,53 @@ def inspect_apk_dex(
             "native_method_count": native_count,
             "native_method_inspection_completed": inspection_completed,
         })
+    service_component_matches = []
+    for component in components:
+        manifest_name = component["name"]
+        resolved_name = _resolve_manifest_class(manifest_name, package_name)
+        evidence = class_metadata.get(resolved_name) if resolved_name else None
+        native_count = None
+        loads: list[str] = []
+        inspection_completed = False
+        if evidence is not None and resolved_name is not None:
+            code_output = class_code_cache.get(resolved_name)
+            if code_output is None:
+                code_output = _run(
+                    resolved, ["dex", "code", "--class", resolved_name, apk], timeout
+                )
+                class_code_cache[resolved_name] = code_output
+            native_count = native_method_counts.get(resolved_name)
+            if native_count is None:
+                native_count = _parse_native_method_count(code_output)
+                native_method_counts[resolved_name] = native_count
+            loads = _parse_native_library_loads(code_output)
+            inspection_completed = True
+        service_component_matches.append({
+            "manifest_name": manifest_name,
+            "resolved_class_name": resolved_name,
+            "defined_in_dex": evidence is not None,
+            "native_method_count": native_count,
+            "native_library_loads": loads,
+            "inspection_completed": inspection_completed,
+        })
+
+    application_name = (
+        _resolve_manifest_class(manifest_application_class, package_name)
+        if manifest_application_class else None
+    )
+    application_evidence = class_metadata.get(application_name) if application_name else None
+    application_loads: list[str] = []
+    application_inspection_completed = False
+    if application_evidence is not None and application_name is not None:
+        application_code = class_code_cache.get(application_name)
+        if application_code is None:
+            application_code = _run(
+                resolved, ["dex", "code", "--class", application_name, apk], timeout
+            )
+            class_code_cache[application_name] = application_code
+        application_loads = _parse_native_library_loads(application_code)
+        application_inspection_completed = True
+
     reference_output = _run(resolved, ["dex", "references", apk], timeout)
     references = parse_reference_counts(reference_output)
     if set(references) - set(dex_files):
@@ -265,6 +484,13 @@ def inspect_apk_dex(
         "method_references": references,
         "candidate_classes": candidates,
         "manifest_service_classes": service_matches,
+        "manifest_service_component_classes": service_component_matches,
+        "manifest_application_class": {
+            "resolved_class_name": application_name,
+            "defined_in_dex": application_evidence is not None,
+            "native_library_loads": application_loads,
+            "inspection_completed": application_inspection_completed,
+        },
         "source": "apkanalyzer",
         "raw_dex_output_included": False,
     }

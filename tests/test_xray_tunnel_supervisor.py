@@ -63,6 +63,7 @@ def test_supervisor_starts_fixed_helper_with_selected_profile_and_store(tmp_path
         "profile": "Office",
         "readiness_timeout": 12.0,
     }
+    assert supervisor.has_process
     assert supervisor.is_running
 
 
@@ -91,9 +92,37 @@ def test_supervisor_requires_xray_profile_and_imported_config(tmp_path):
         supervisor.start(xray_profile())
 
 
-def test_supervisor_poll_closes_exited_helper_and_allows_restart(tmp_path):
+def test_supervisor_retains_abnormally_exited_helper_and_refuses_restart(tmp_path):
     store = FakeStore(tmp_path / "xray-configs.json")
-    processes = [FakeProcess(exit_code=7), FakeProcess()]
+    first_process = FakeProcess(exit_code=7)
+    launches = []
+
+    def factory(*_args, **_kwargs):
+        launches.append(True)
+        return first_process
+
+    supervisor = XrayTunnelSupervisor(
+        tmp_path / "ApnaWinElevator.exe", store, process_factory=factory
+    )
+    supervisor.start(xray_profile())
+
+    assert supervisor.poll() == 7
+    assert first_process.closed is False
+    assert supervisor.has_process
+    assert supervisor._process is first_process
+    assert supervisor.is_running is False
+    with pytest.raises(RuntimeError, match="cleanup is unverified"):
+        supervisor.start(xray_profile())
+    with pytest.raises(RuntimeError, match="cleanup cannot be confirmed"):
+        supervisor.stop()
+    assert launches == [True]
+    assert first_process.closed is False
+
+
+def test_supervisor_clean_exit_is_released_only_on_explicit_stop(tmp_path):
+    store = FakeStore(tmp_path / "xray-configs.json")
+    processes = [FakeProcess(exit_code=0), FakeProcess()]
+    first_process = processes[0]
 
     def factory(*_args, **_kwargs):
         return processes.pop(0)
@@ -101,14 +130,14 @@ def test_supervisor_poll_closes_exited_helper_and_allows_restart(tmp_path):
     supervisor = XrayTunnelSupervisor(
         tmp_path / "ApnaWinElevator.exe", store, process_factory=factory
     )
-    first_process = processes[0]
     supervisor.start(xray_profile())
-    assert supervisor.poll() == 7
-    assert first_process.closed
-    assert not supervisor.is_running
+    assert supervisor.poll() == 0
+    assert first_process.closed is False
+    supervisor.stop()
+    assert first_process.closed is True
     assert supervisor._process is None
+    assert not supervisor.has_process
     assert supervisor.start(xray_profile()) == 1234
-    assert supervisor.is_running
 
 
 def test_supervisor_stop_signals_and_closes_helper(tmp_path):

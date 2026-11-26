@@ -58,6 +58,8 @@ def test_inspect_xray_inbound_selects_tun_mode():
         (lambda c: c["inbounds"][0].update(port=1080), "port"),
         (lambda c: c["inbounds"][0].update(port=False), "port"),
         (lambda c: c["inbounds"][0]["settings"].update(listen="0.0.0.0"), "unsupported fields"),
+        (lambda c: c["inbounds"][0]["settings"].update(name="bad';command"), "safe Windows adapter alias"),
+        (lambda c: c["inbounds"][0]["settings"].update(name="bad\\nalias"), "safe Windows adapter alias"),
         (lambda c: c["inbounds"][0]["settings"].update(mtu=True), "MTU"),
         (lambda c: c["inbounds"][0]["settings"].update(mtu=9001), "MTU"),
         (lambda c: c["inbounds"][0]["settings"].update(gateway=["10.0.0.1/30"]), "one IPv4 and one IPv6"),
@@ -69,9 +71,23 @@ def test_inspect_xray_inbound_selects_tun_mode():
         (lambda c: c["inbounds"][0]["settings"].update(autoSystemRoutingTable=["0.0.0.0/1", "::/0"]), "unique IPv4 and IPv6 defaults"),
         (lambda c: c["inbounds"][0]["settings"].update(autoOutboundsInterface=""), "autoOutboundsInterface"),
         (lambda c: c["inbounds"][0]["settings"].update(autoSystemWfpBlockLeak=[]), "allexceptlan and dns"),
+        (lambda c: c["inbounds"][0]["settings"].update(autoSystemWfpBlockLeak=None), "allexceptlan and dns"),
+        (lambda c: c["inbounds"][0]["settings"].update(autoSystemWfpBlockLeak="allexceptlan,dns"), "allexceptlan and dns"),
+        (lambda c: c["inbounds"][0]["settings"].update(autoSystemWfpBlockLeak=["allexceptlan"]), "allexceptlan and dns"),
+        (lambda c: c["inbounds"][0]["settings"].update(autoSystemWfpBlockLeak=["allexceptlan", "dns", "extra"]), "allexceptlan and dns"),
+        (lambda c: c["inbounds"][0]["settings"].update(autoSystemWfpBlockLeak=["allexceptlan", "allexceptlan"]), "allexceptlan and dns"),
+        (lambda c: c["inbounds"][0]["settings"].update(autoSystemWfpBlockLeak=["allexceptlan", 1]), "allexceptlan and dns"),
+        (lambda c: c["inbounds"][0]["settings"].update(autoSystemWfpBlockLeak=["allexceptlan", "DNS"]), "allexceptlan and dns"),
         (lambda c: c["inbounds"][0]["settings"].update(autoSystemDnsToGateway=True), "must be false"),
         (lambda c: c["inbounds"][0]["settings"].update(autoSystemDnsToGateway="false"), "must be false"),
         (lambda c: c["inbounds"][0]["settings"].update(extra="no"), "unsupported fields"),
+        (lambda c: c["outbounds"][0].update(protocol="freedom"), "direct or unsupported outbound"),
+        (lambda c: c["outbounds"][0].update(protocol="blackhole"), "first Xray TUN outbound must be a remote proxy"),
+        (lambda c: c["outbounds"].append({"protocol": "dns", "tag": "dns-out"}), "direct or unsupported outbound"),
+        (lambda c: c["outbounds"].append({"protocol": "freedom", "tag": "direct"}), "direct or unsupported outbound"),
+        (lambda c: c["outbounds"][0].update(protocol="unknown-protocol"), "direct or unsupported outbound"),
+        (lambda c: c["outbounds"][0].update(protocol="tuic"), "direct or unsupported outbound"),
+        (lambda c: c["outbounds"][0].update(protocol="hysteria2"), "direct or unsupported outbound"),
         (lambda c: c["outbounds"].clear(), "at least one outbound"),
     ],
 )
@@ -156,3 +172,14 @@ def test_is_windows_elevated_uses_windows_admin_token_api(monkeypatch):
         raising=False,
     )
     assert xray_process.is_windows_elevated() is True
+
+@pytest.mark.parametrize(
+    "protocol",
+    ["vless", "vmess", "trojan", "shadowsocks", "socks", "http", "wireguard", "hysteria", "masque"],
+)
+def test_inspect_tun_inbound_accepts_supported_proxy_outbound_protocols(protocol):
+    config = valid_tun_config()
+    config["outbounds"][0]["protocol"] = protocol
+    inbound = inspect_tun_inbound(config)
+    assert inbound.name == "ApnaWin"
+
