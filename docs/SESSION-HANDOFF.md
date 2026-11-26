@@ -161,3 +161,13 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - The Windows test job installed dependencies and executed the complete pytest suite: **900 passed, 1 skipped, 1 warning**. The warning is the intentional duplicate ZIP-entry fixture in `tests/test_apk_inventory.py`.
 - The `build-windows` job was **skipped** by the reverse-engineering gate; no Windows package was built.
 - This validates the latest parser hardening on the tested PR merge ref. The APK extraction workflow remains manual-only and still has no fresh artifact; GoReSym recovery remains unverified.
+
+
+### VLESS parser compatibility hardening — 2026-11-26
+
+- Checked the current Project X VLESS outbound and transport compatibility references.
+- Custom VLESS identifiers are now limited to 30 UTF-8 bytes unless they are a canonical UUID.
+- VLESS Vision flow accepts only `xtls-rprx-vision` and `xtls-rprx-vision-udp443`, and only with TCP/RAW plus TLS or REALITY in the parser's supported subset. Unsupported flow names, security-less Vision and Vision over WebSocket/gRPC are rejected.
+- Added regression coverage for custom ID bounds, both Vision flow variants, TLS and REALITY combinations, and invalid flow/transport combinations.
+- Commits: `d46948de0beac1e24cb4d27dc80feba3cd919273`, `d1efb084820bc8adfbb46504dab67d5dbd2baec3`, `6408a07b838f0d4bd1d378bd1adbcccd0db433ec`.
+- Previous full-suite run `45797619263` passed 900 tests on the earlier head `5510736`; these latest parser changes still require a fresh CI run. Windows packaging remains gated off.
