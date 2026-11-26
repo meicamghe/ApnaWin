@@ -132,7 +132,10 @@ def test_parse_hysteria2_basic_link_with_default_port_and_auth():
     assert parsed.protocol == "hysteria"
     assert parsed.name == "Fast UDP"
     assert outbound["settings"] == {
-        "version": 2, "address": "hy.example", "port": 443, "auth": "secret",
+        "version": 2, "address": "hy.example", "port": 443,
+    }
+    assert outbound["streamSettings"]["hysteriaSettings"] == {
+        "version": 2, "auth": "secret",
     }
     assert outbound["streamSettings"]["method"] == "hysteria"
     assert outbound["streamSettings"]["security"] == "tls"
@@ -173,7 +176,7 @@ def test_hysteria2_rejects_unsupported_or_unsafe_link_options(link):
 def test_hysteria2_credentials_are_hidden_from_repr():
     parsed = parse_proxy_link("hy2://very-secret@hy.example:443")
     assert "very-secret" not in repr(parsed)
-    assert parsed.to_outbound()["settings"]["auth"] == "very-secret"
+    assert parsed.to_outbound()["streamSettings"]["hysteriaSettings"]["auth"] == "very-secret"
 
 
 def test_parse_shadowsocks_sip002_base64_userinfo():
