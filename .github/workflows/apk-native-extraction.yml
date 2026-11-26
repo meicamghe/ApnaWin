@@ -134,15 +134,22 @@ jobs:
           for label, va in (("pclntab_candidate", 0xc1a200), ("header_derived_functab", 0xef4ba0), ("moduledata_candidate", 0x10ee3a0), ("reported_bad_ftab_pointer", 0x11cf540)):
               off = va_to_off(va)
               emit(f"{label}: VA={va:#x} file_offset={off:#x}" if off is not None else f"{label}: VA={va:#x} NOT FILE-BACKED BY PT_LOAD")
-          off = va_to_off(0xc1a200, 80)
+          off = va_to_off(0xc1a200, 72)
           if off is not None:
-              words = struct.unpack_from("<8Q", data, off)
+              header = struct.unpack_from("<I4B8Q", data, off)
+              magic, pad1, pad2, min_lc, ptr_size = header[:5]
+              nfunc, nfiles, text_start, funcname_offset, cu_offset, filetab_offset, pctab_offset, pcln_offset = header[5:]
               emit()
-              emit("Candidate pclntab header (8 uint64 words):")
-              for i, value in enumerate(words):
-                  emit(f"word[{i}]={value:#x}")
-              nfunc = words[0]
-              ftab_va = 0xc1a200 + words[7]
+              emit("Candidate pclntab header:")
+              emit(f"magic={magic:#x} pad=({pad1:#x},{pad2:#x}) minLC={min_lc} ptrSize={ptr_size}")
+              for name, value in (
+                  ("nfunc", nfunc), ("nfiles", nfiles), ("textStart", text_start),
+                  ("funcnameOffset", funcname_offset), ("cuOffset", cu_offset),
+                  ("filetabOffset", filetab_offset), ("pctabOffset", pctab_offset),
+                  ("pclnOffset", pcln_offset),
+              ):
+                  emit(f"{name}={value:#x}")
+              ftab_va = 0xc1a200 + pcln_offset
               ftab_size = (2*nfunc + 1) * 4
               ftab_off = va_to_off(ftab_va, ftab_size)
               emit(f"derived_nfunc={nfunc:#x}")
