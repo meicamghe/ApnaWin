@@ -137,7 +137,8 @@ def test_parse_hysteria2_basic_link_with_default_port_and_auth():
     assert outbound["streamSettings"]["hysteriaSettings"] == {
         "version": 2, "auth": "secret",
     }
-    assert outbound["streamSettings"]["method"] == "hysteria"
+    assert outbound["streamSettings"]["network"] == "hysteria"
+    assert "method" not in outbound["streamSettings"]
     assert outbound["streamSettings"]["security"] == "tls"
     assert outbound["streamSettings"]["tlsSettings"] == {
         "alpn": ["h3"], "allowInsecure": False,
