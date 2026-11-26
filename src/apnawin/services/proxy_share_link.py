@@ -293,8 +293,6 @@ def _parse_hysteria2(parts) -> ParsedProxyLink:
         raise ValueError("Hysteria2 obfs-password requires obfs=salamander")
 
     settings: dict[str, object] = {"version": 2, "address": server, "port": port}
-    if auth:
-        settings["auth"] = auth
     return ParsedProxyLink(_name(parts.fragment, server), "hysteria", server, port, settings, stream)
 
 
