@@ -196,3 +196,11 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - Added exact UTF-8 boundary cases: 29 ASCII bytes and 28 multibyte bytes are accepted; 30 ASCII bytes and 30 multibyte bytes are rejected. Uppercase canonical UUID acceptance is also covered.
 - GitHub Actions run [45799245783](https://github.com/meicamghe/ApnaWin/actions/runs/45799245783) passed **912 tests, 1 skipped, 1 warning** on PR merge ref containing head `9d412d2e5438cb948c83301fe0dc4f3e86d65bfb`. Windows packaging remained skipped by the reverse-engineering gate.
 - The APK extraction workflow now inventories SHA-256 hashes for each APK split and every embedded ABI `.so` entry in `apk-native-inventory.txt`, without executing native code. This workflow/documentation update is pending its own CI validation and a manual extraction run.
+
+
+### Latest PR validation after APK inventory workflow update — 2026-11-26
+
+- GitHub Actions run [45799645047](https://github.com/meicamghe/ApnaWin/actions/runs/45799645047) passed **912 tests, 1 skipped, 1 warning** on PR merge ref containing head `f25474c7cc492ab889e9880cb8b9cdb20e3ad581`.
+- The `build-windows` job was skipped by the reverse-engineering gate.
+- The manual APK extraction workflow now emits `apk-native-inventory.txt` with APK archive hashes and hashes of every embedded ABI shared library. The workflow code was inspected after the edit, but it has not been manually dispatched; artifact generation and the ELF report remain unverified.
+- No new native-library artifact exists and no Go symbol-recovery success is claimed.
