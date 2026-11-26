@@ -93,11 +93,11 @@ def _vless_user_id(value: str) -> str:
         parsed = uuid.UUID(value)
     except (ValueError, AttributeError):
         if len(value.encode("utf-8")) >= 30:
-            raise ValueError("VLESS user ID must be a UUID or at most 30 UTF-8 bytes")
+            raise ValueError("VLESS user ID must be a UUID or fewer than 30 UTF-8 bytes")
     else:
         if str(parsed) != value.lower():
             if len(value.encode("utf-8")) > 30:
-                raise ValueError("VLESS user ID must be a UUID or at most 30 UTF-8 bytes")
+                raise ValueError("VLESS user ID must be a UUID or fewer than 30 UTF-8 bytes")
     return value
 
 
