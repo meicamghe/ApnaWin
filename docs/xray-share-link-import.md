@@ -33,3 +33,20 @@ The first slice supports common RAW/TCP, WebSocket and gRPC links. XHTTP, mKCP, 
 - Project X transport settings: https://xtls.github.io/en/config/transport.html
 
 These links are used as the source of truth for the current outbound configuration shape. The parser intentionally does not claim compatibility with private APNA TUNNEL subscription/catalog formats.
+
+## Multi-profile text import foundation
+
+`parse_proxy_links()` accepts a plain UTF-8 text document containing one supported share link per line. Blank lines and full-line `#` comments are ignored. Parsing is all-or-nothing: one malformed or unsupported line rejects the batch with its line number, without echoing the credential-bearing link. Input is capped at 1 MiB and 500 profiles; each individual link retains the 16 KiB cap.
+
+This is not a subscription downloader or provider API client. Base64-wrapped subscription responses, remote URLs, provider-specific metadata and unknown URI extensions are not guessed or decoded. Those formats need evidence from authorized provider samples before support is added.
+
+## Additional validation
+
+- Server names are checked with the same IP/IDNA hostname validator used by stored profile metadata.
+- TLS/REALITY-only parameters cannot be silently supplied with `security=none`; REALITY requires `sni`, `fp` and `pbk` and is limited to RAW/TCP or gRPC in this first slice.
+- WebSocket and gRPC parameters are accepted only with their matching transport; unsupported gRPC modes are rejected.
+- Legacy Shadowsocks whole-payload Base64 links preserve standard Base64 path characters such as `/`.
+
+## Verification
+
+CI run [45795956357](https://github.com/meicamghe/ApnaWin/actions/runs/45795956357) passed 888 tests, with 1 skipped and 1 warning. Windows packaging was skipped by the reverse-engineering gate. The parser still has no UI integration and does not enable Connect.
