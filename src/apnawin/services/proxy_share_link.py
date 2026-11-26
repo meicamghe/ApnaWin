@@ -1,6 +1,6 @@
 """Strict parser for standard Xray share links.
 
-This module parses VLESS, VMess, Trojan and Shadowsocks links into Xray
+This module parses VLESS, VMess, Trojan, Shadowsocks and Hysteria2 links into Xray
 outbound objects. It does not fetch subscriptions, resolve DNS, validate
 credentials, or establish a connection. Unsupported URI extensions fail closed.
 """
@@ -275,7 +275,7 @@ def _parse_hysteria2(parts) -> ParsedProxyLink:
         tls["serverName"] = _bounded(params["sni"], "Hysteria2 SNI", 253)
 
     stream: dict[str, object] = {
-        "method": "hysteria",
+        "network": "hysteria",
         "security": "tls",
         "tlsSettings": tls,
         "hysteriaSettings": {"version": 2, **({"auth": auth} if auth else {})},
@@ -439,7 +439,7 @@ def parse_proxy_link(link: str) -> ParsedProxyLink:
         return _parse_vless(parts)
     if parts.scheme.lower() == "trojan":
         return _parse_trojan(parts)
-    raise ValueError("Unsupported share-link scheme; expected VLESS, VMess, Trojan or Shadowsocks")
+    raise ValueError("Unsupported share-link scheme; expected VLESS, VMess, Trojan, Shadowsocks or Hysteria2")
 
 
 def parse_proxy_links(document: str | bytes) -> tuple[ParsedProxyLink, ...]:
