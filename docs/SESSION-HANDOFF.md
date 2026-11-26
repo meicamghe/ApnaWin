@@ -221,3 +221,10 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - TLS verification remains enabled; insecure mode and unsupported options fail closed. Realm URIs, port hopping, ECH and certificate pinning remain unsupported.
 - Added tests for the protocol mapping, alias, IPv6, defaults, Salamander, hidden credentials and rejected options. Auth is emitted in Xray `hysteriaSettings`, not the outbound address settings.
 - See `docs/xray-share-link-import.md` for exact mapping and upstream references. Fresh CI validation is pending.
+
+
+### Hysteria2 schema verification — 2026-11-26
+
+- Verified the Xray Hysteria transport object against the current Project X transport documentation and outbound examples: the transport selector is `streamSettings.network: "hysteria"`, with version/auth under `hysteriaSettings` and endpoint address/port under outbound `settings`.
+- Corrected the parser and regression test to emit/assert `network`, not the generic `method` key. This is a schema-only correction; it does not enable connection runtime or alter the disabled Connect state.
+- CI passed for the previous head `0572e4d12fe08b855f13c0aab1704df2358c37fe`; the correction is newer and requires its own CI result.
