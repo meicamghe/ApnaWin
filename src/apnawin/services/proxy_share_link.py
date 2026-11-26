@@ -30,7 +30,7 @@ _SS_METHODS = {
 _QUERY_KEYS = {
     "type", "security", "sni", "fp", "alpn", "host", "path",
     "serviceName", "mode", "pbk", "sid", "spx", "flow",
-    "encryption", "headerType",
+    "encryption",
 }
 
 
@@ -90,7 +90,7 @@ def _decode_b64(value: str, field_name: str) -> bytes:
         raise ValueError(f"{field_name} is empty or too large")
     raw += "=" * (-len(raw) % 4)
     try:
-        return base64.urlsafe_b64decode(raw.encode("ascii"))
+        return base64.b64decode(raw.encode("ascii"), altchars=b"-_", validate=True)
     except (UnicodeEncodeError, binascii.Error, ValueError) as exc:
         raise ValueError(f"{field_name} is not valid URL-safe Base64") from exc
 
@@ -118,9 +118,17 @@ def _stream(params: dict[str, str], protocol: str) -> dict[str, object]:
     if transport not in transport_names:
         raise ValueError(f"Unsupported Xray transport: {transport}")
     network = transport_names[transport]
+    if transport != "ws" and any(key in params for key in ("host", "path")):
+        raise ValueError("WebSocket host/path parameters require type=ws")
+    if transport != "grpc" and any(key in params for key in ("serviceName", "mode")):
+        raise ValueError("gRPC parameters require type=grpc")
     security = params.get("security", "tls" if protocol == "trojan" else "none").lower()
     if security not in {"none", "tls", "reality"}:
         raise ValueError(f"Unsupported transport security: {security}")
+    if security == "none" and any(key in params for key in ("sni", "fp", "alpn", "pbk", "sid", "spx")):
+        raise ValueError("TLS/REALITY parameters require transport security")
+    if security == "tls" and any(key in params for key in ("pbk", "sid", "spx")):
+        raise ValueError("REALITY parameters cannot be used with TLS")
     if protocol == "trojan" and security == "none":
         raise ValueError("Trojan links require TLS or REALITY transport security")
     if security == "reality" and network not in {"tcp", "grpc"}:
@@ -195,6 +203,8 @@ def _parse_trojan(parts) -> ParsedProxyLink:
     if not parts.username or parts.password is not None:
         raise ValueError("Trojan link must contain a password in its user-info")
     params = _query(parts.query)
+    if "flow" in params or "encryption" in params:
+        raise ValueError("VLESS-only parameters cannot be used in a Trojan link")
     password = _bounded(unquote(parts.username), "Trojan password")
     server = _bounded(parts.hostname or "", "Server host", 253)
     port = _port(parts.port)
@@ -260,9 +270,14 @@ def _parse_vmess(link: str) -> ParsedProxyLink:
         raise ValueError("VMess payload must be Base64-encoded UTF-8 JSON") from exc
     if not isinstance(config, dict):
         raise ValueError("VMess payload must be a JSON object")
-    host = _bounded(str(config.get("add", "")), "Server host", 253)
+    allowed_fields = {"v", "ps", "add", "port", "id", "aid", "scy", "net", "type", "host", "path", "tls", "sni", "alpn", "fp"}
+    if set(config) - allowed_fields:
+        raise ValueError("VMess payload contains unsupported fields")
+    if not isinstance(config.get("add"), str) or not isinstance(config.get("id"), str):
+        raise ValueError("VMess server address and user ID must be strings")
+    host = _bounded(config["add"], "Server host", 253)
     port = _port(config.get("port"))
-    user_id = _bounded(str(config.get("id", "")), "VMess user ID", 128)
+    user_id = _bounded(config["id"], "VMess user ID", 128)
     security = str(config.get("scy", "auto")).lower()
     if security not in {"auto", "aes-128-gcm", "chacha20-poly1305"}:
         raise ValueError(f"Unsupported VMess security: {security}")
@@ -273,6 +288,9 @@ def _parse_vmess(link: str) -> ParsedProxyLink:
     transport = {"tcp": "tcp", "raw": "tcp", "ws": "ws", "grpc": "grpc"}.get(network)
     if transport is None:
         raise ValueError(f"Unsupported VMess transport: {network}")
+    header_type = str(config.get("type", "none")).lower()
+    if header_type not in {"", "none"}:
+        raise ValueError(f"Unsupported VMess header type: {header_type}")
     tls_value = str(config.get("tls", "")).lower()
     if tls_value not in {"", "none", "tls"}:
         raise ValueError(f"Unsupported VMess security mode: {tls_value}")
