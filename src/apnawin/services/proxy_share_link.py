@@ -131,7 +131,7 @@ def _stream(params: dict[str, str], protocol: str) -> dict[str, object]:
         raise ValueError("REALITY parameters cannot be used with TLS")
     if protocol == "trojan" and security == "none":
         raise ValueError("Trojan links require TLS or REALITY transport security")
-    if security == "reality" and network not in {"tcp", "grpc"}:
+    if security == "reality" and network not in {"raw", "grpc"}:
         raise ValueError("REALITY is supported here only with TCP or gRPC")
 
     stream: dict[str, object] = {"method": network, "security": security}
@@ -160,7 +160,7 @@ def _stream(params: dict[str, str], protocol: str) -> dict[str, object]:
             raise ValueError("REALITY links require sni, fp and pbk parameters")
         stream["realitySettings"] = reality
 
-    if network == "ws":
+    if network == "websocket":
         ws: dict[str, object] = {}
         if params.get("path"):
             ws["path"] = _bounded(params["path"], "WebSocket path", 2048)
