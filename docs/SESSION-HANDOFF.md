@@ -225,6 +225,6 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 
 ### Hysteria2 schema verification — 2026-11-26
 
-- Verified the Xray Hysteria transport object against the current Project X transport documentation and outbound examples: the transport selector is `streamSettings.network: "hysteria"`, with version/auth under `hysteriaSettings` and endpoint address/port under outbound `settings`.
-- Corrected the parser and regression test to emit/assert `network`, not the generic `method` key. This is a schema-only correction; it does not enable connection runtime or alter the disabled Connect state.
+- Verified the Xray Hysteria transport object against the current Project X transport documentation: the correct transport selector is `streamSettings.method: "hysteria"`, with version/auth under `hysteriaSettings` and endpoint address/port under outbound `settings`.
+- A temporary `network` experiment was reverted after checking the authoritative schema. The parser and regression test retain/assert the documented `method` key. This does not enable connection runtime or alter the disabled Connect state.
 - CI passed for the previous head `0572e4d12fe08b855f13c0aab1704df2358c37fe`; the correction is newer and requires its own CI result.
