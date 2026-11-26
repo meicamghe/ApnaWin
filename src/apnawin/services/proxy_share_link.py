@@ -36,6 +36,7 @@ _QUERY_KEYS = {
     "serviceName", "mode", "pbk", "sid", "spx", "flow",
     "encryption",
 }
+_HYSTERIA2_QUERY_KEYS = {"sni", "obfs", "obfs-password", "insecure"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,13 +131,13 @@ def _decode_b64(value: str, field_name: str) -> bytes:
         raise ValueError(f"{field_name} is not valid URL-safe Base64") from exc
 
 
-def _query(query: str) -> dict[str, str]:
+def _query(query: str, allowed_keys: set[str] = _QUERY_KEYS) -> dict[str, str]:
     pairs = parse_qsl(query, keep_blank_values=True, strict_parsing=True, max_num_fields=32, errors="strict")
     result: dict[str, str] = {}
     for key, value in pairs:
         if key in result:
             raise ValueError(f"Duplicate share-link parameter: {key}")
-        if key not in _QUERY_KEYS:
+        if key not in allowed_keys:
             raise ValueError(f"Unsupported share-link parameter: {key}")
         result[key] = value
     return result
@@ -248,6 +249,53 @@ def _parse_vless(parts) -> ParsedProxyLink:
             raise ValueError("VLESS Vision flow requires TLS or REALITY security")
         settings["flow"] = flow
     return ParsedProxyLink(_name(parts.fragment, server), "vless", server, port, settings, _stream(params, "vless"))
+
+
+def _parse_hysteria2(parts) -> ParsedProxyLink:
+    if parts.password is not None:
+        auth = _strict_unquote(parts.username or "", "Hysteria2 auth") + ":" + _strict_unquote(parts.password, "Hysteria2 auth")
+    elif parts.username is not None:
+        auth = _strict_unquote(parts.username, "Hysteria2 auth")
+    else:
+        auth = ""
+    if auth:
+        auth = _bounded(auth, "Hysteria2 auth")
+    if parts.path not in {"", "/"}:
+        raise ValueError("Hysteria2 URI paths are unsupported; realm links are not ordinary Hysteria2 links")
+    params = _query(parts.query, _HYSTERIA2_QUERY_KEYS)
+    server = _bounded(parts.hostname or "", "Server host", 253)
+    _validate_endpoint_host(server)
+    port = _port(parts.port if parts.port is not None else 443)
+
+    insecure = params.get("insecure", "0").lower()
+    if insecure not in {"0", "false"}:
+        raise ValueError("Hysteria2 insecure TLS mode is not supported; certificate verification must remain enabled")
+    tls: dict[str, object] = {"alpn": ["h3"], "allowInsecure": False}
+    if params.get("sni"):
+        tls["serverName"] = _bounded(params["sni"], "Hysteria2 SNI", 253)
+
+    stream: dict[str, object] = {
+        "method": "hysteria",
+        "security": "tls",
+        "tlsSettings": tls,
+        "hysteriaSettings": {"version": 2, **({"auth": auth} if auth else {})},
+    }
+    obfs = params.get("obfs", "").lower()
+    obfs_password = params.get("obfs-password", "")
+    if obfs:
+        if obfs != "salamander":
+            raise ValueError(f"Unsupported Hysteria2 obfuscation: {obfs}")
+        password = _bounded(obfs_password, "Hysteria2 obfuscation password")
+        stream["finalmask"] = {
+            "udp": [{"type": "salamander", "settings": {"password": password}}]
+        }
+    elif obfs_password:
+        raise ValueError("Hysteria2 obfs-password requires obfs=salamander")
+
+    settings: dict[str, object] = {"version": 2, "address": server, "port": port}
+    if auth:
+        settings["auth"] = auth
+    return ParsedProxyLink(_name(parts.fragment, server), "hysteria", server, port, settings, stream)
 
 
 def _parse_trojan(parts) -> ParsedProxyLink:
@@ -386,6 +434,8 @@ def parse_proxy_link(link: str) -> ParsedProxyLink:
     if scheme == "ss":
         parts = urlsplit(link)
         return _parse_shadowsocks(link, parts)
+    if scheme in {"hysteria2", "hy2"}:
+        return _parse_hysteria2(urlsplit(link))
     parts = urlsplit(link)
     if parts.scheme.lower() == "vless":
         return _parse_vless(parts)
