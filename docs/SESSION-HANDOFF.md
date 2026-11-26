@@ -228,3 +228,11 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - Verified the Xray Hysteria transport object against the current Project X transport documentation: the correct transport selector is `streamSettings.method: "hysteria"`, with version/auth under `hysteriaSettings` and endpoint address/port under outbound `settings`.
 - A temporary `network` experiment was reverted after checking the authoritative schema. The parser and regression test retain/assert the documented `method` key. This does not enable connection runtime or alter the disabled Connect state.
 - CI passed for the previous head `0572e4d12fe08b855f13c0aab1704df2358c37fe`; the correction is newer and requires its own CI result.
+
+
+### ELF metadata hardening — 2026-11-26
+
+- Hardened the bounded APK ELF inspector: a file with no section-header table may not claim a nonzero section count or a section-name string-table index.
+- Added ELF32 and ELF64 regression cases for both orphaned metadata fields.
+- This is static structural validation only; it does not execute or load native code and does not claim Go symbol recovery.
+- The parser and tests are committed; the latest CI result for this addition is pending.
