@@ -247,3 +247,13 @@ def test_parse_vless_grpc_rejects_unknown_mode():
         parse_proxy_link(
             "vless://user@vpn.example:443?type=grpc&security=tls&mode=invalid"
         )
+
+
+def test_parse_shadowsocks_legacy_base64_payload_with_slash():
+    password = "\U00092aff𬎋"
+    payload = base64.b64encode(
+        f"aes-256-gcm:{password}@ss.example:443".encode("utf-8")
+    ).decode("ascii")
+    assert "/" in payload
+    parsed = parse_proxy_link("ss://" + payload + "#legacy-slash")
+    assert parsed.to_outbound()["settings"]["password"] == password
