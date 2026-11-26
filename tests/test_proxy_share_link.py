@@ -279,3 +279,31 @@ def test_proxy_links_reject_raw_unicode_control_characters(link):
 def test_profile_name_strips_encoded_unicode_control_characters():
     parsed = parse_proxy_link("vless://user@vpn.example:443#office%C2%85vpn")
     assert parsed.name == "officevpn"
+
+
+@pytest.mark.parametrize("link", [
+    "vless://user%@vpn.example:443?security=tls",
+    "vless://user%2@vpn.example:443?security=tls",
+    "trojan://secret@vpn.example:443?security=tls&sni=%GG",
+    "vless://user@vpn.example:443?security=tls#bad%Q0name",
+])
+def test_proxy_links_reject_malformed_percent_escapes(link):
+    with pytest.raises(ValueError, match="malformed percent encoding"):
+        parse_proxy_link(link)
+
+
+@pytest.mark.parametrize("link", [
+    "vless://user%C3%28@vpn.example:443?security=tls",
+    "trojan://secret@vpn.example:443?security=tls&sni=%C3%28",
+])
+def test_proxy_links_reject_invalid_utf8_percent_escapes(link):
+    with pytest.raises(ValueError):
+        parse_proxy_link(link)
+
+
+def test_vmess_rejects_non_string_optional_transport_fields():
+    with pytest.raises(ValueError, match="must be strings"):
+        parse_proxy_link(vmess_link({
+            "add": "vpn.example", "port": 443, "id": "user",
+            "net": ["ws"], "tls": "tls",
+        }))
