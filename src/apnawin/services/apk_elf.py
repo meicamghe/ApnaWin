@@ -67,6 +67,8 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
     if header[8] != expected_header:
         raise ValueError("ELF header size is invalid")
     section_offset, section_entry_size, section_count = header[6], header[11], header[12]
+    if not section_offset and (section_count != 0 or header[13] != 0):
+        raise ValueError("ELF section metadata references a missing section-header table")
     if section_count and section_count > _MAX_SECTION_HEADERS:
         raise ValueError("ELF has too many section headers")
     if section_offset:
