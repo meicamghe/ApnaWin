@@ -415,7 +415,7 @@ def _parse_vmess(link: str) -> ParsedProxyLink:
 def parse_proxy_link(link: str) -> ParsedProxyLink:
     """Parse one standard share link into a credential-bearing Xray outbound.
 
-    Supported schemes: vless://, vmess://, trojan:// and ss://.
+    Supported schemes: vless://, vmess://, trojan://, ss://, hysteria2:// and hy2://.
     Unknown schemes, duplicate/unknown parameters and unsupported transports
     are rejected rather than silently discarded.
     """
