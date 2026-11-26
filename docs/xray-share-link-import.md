@@ -50,7 +50,7 @@ This is not a subscription downloader or provider API client. Base64-wrapped sub
 
 ## Verification
 
-The earlier full-suite run [45797619263](https://github.com/meicamghe/ApnaWin/actions/runs/45797619263) passed 900 tests, with 1 skipped and 1 warning on the preceding parser head. The VLESS ID and Vision-flow hardening described below was committed afterward and awaits its own CI run. Windows packaging was skipped by the reverse-engineering gate. The parser still has no UI integration and does not enable Connect.
+The full-suite run [45798144029](https://github.com/meicamghe/ApnaWin/actions/runs/45798144029) passed 907 tests, with 1 skipped and 1 warning on PR #8 head `6db562a7d0363551868c5053abc4f7358ae2c434`, including the VLESS ID and Vision-flow regression tests. Windows packaging was skipped by the reverse-engineering gate. The parser still has no UI integration and does not enable Connect.
 
 
 ## Strict decoding and JSON types
