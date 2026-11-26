@@ -13,6 +13,8 @@ import re
 from dataclasses import dataclass, field
 from urllib.parse import parse_qsl, unquote, urlsplit
 
+from apnawin.domain.profile import _validate_endpoint_host
+
 MAX_LINK_BYTES = 16 * 1024
 MAX_CREDENTIAL_BYTES = 1024
 MAX_LABEL_LENGTH = 128
@@ -142,9 +144,14 @@ def _stream(params: dict[str, str], protocol: str) -> dict[str, object]:
         if params.get("fp"):
             tls["fingerprint"] = _bounded(params["fp"], "TLS fingerprint", 64)
         if params.get("alpn"):
-            tls["alpn"] = [_bounded(x.strip(), "ALPN", 32) for x in params["alpn"].split(",") if x.strip()]
+            protocols = [_bounded(x.strip(), "ALPN", 32) for x in params["alpn"].split(",") if x.strip()]
+            if not protocols:
+                raise ValueError("ALPN must contain at least one protocol")
+            tls["alpn"] = protocols
         stream["tlsSettings"] = tls
     elif security == "reality":
+        if "alpn" in params:
+            raise ValueError("ALPN is not supported as a REALITY link parameter")
         reality: dict[str, object] = {}
         if params.get("sni"):
             reality["serverName"] = _bounded(params["sni"], "REALITY server name", 253)
@@ -172,7 +179,10 @@ def _stream(params: dict[str, str], protocol: str) -> dict[str, object]:
         if params.get("serviceName"):
             grpc["serviceName"] = _bounded(params["serviceName"], "gRPC service name", 256)
         if params.get("mode"):
-            grpc["multiMode"] = params["mode"].lower() == "multi"
+            mode = params["mode"].lower()
+            if mode not in {"multi", "gun"}:
+                raise ValueError("gRPC mode must be multi or gun")
+            grpc["multiMode"] = mode == "multi"
         stream["grpcSettings"] = grpc
     return stream
 
@@ -183,6 +193,7 @@ def _parse_vless(parts) -> ParsedProxyLink:
     params = _query(parts.query)
     user_id = _bounded(unquote(parts.username), "VLESS user ID", 128)
     server = _bounded(parts.hostname or "", "Server host", 253)
+    _validate_endpoint_host(server)
     port = _port(parts.port)
     encryption = params.get("encryption", "none")
     if not encryption:
@@ -207,6 +218,7 @@ def _parse_trojan(parts) -> ParsedProxyLink:
         raise ValueError("VLESS-only parameters cannot be used in a Trojan link")
     password = _bounded(unquote(parts.username), "Trojan password")
     server = _bounded(parts.hostname or "", "Server host", 253)
+    _validate_endpoint_host(server)
     port = _port(parts.port)
     settings = {"address": server, "port": port, "password": password}
     return ParsedProxyLink(_name(parts.fragment, server), "trojan", server, port, settings, _stream(params, "trojan"))
@@ -256,6 +268,7 @@ def _parse_shadowsocks(link: str, parts) -> ParsedProxyLink:
     if method not in _SS_METHODS:
         raise ValueError(f"Unsupported Shadowsocks cipher: {method}")
     server = _bounded(server, "Server host", 253)
+    _validate_endpoint_host(server)
     settings = {"address": server, "port": port, "method": method, "password": password}
     return ParsedProxyLink(_name(parts.fragment, server), "shadowsocks", server, port, settings)
 
@@ -276,6 +289,7 @@ def _parse_vmess(link: str) -> ParsedProxyLink:
     if not isinstance(config.get("add"), str) or not isinstance(config.get("id"), str):
         raise ValueError("VMess server address and user ID must be strings")
     host = _bounded(config["add"], "Server host", 253)
+    _validate_endpoint_host(host)
     port = _port(config.get("port"))
     user_id = _bounded(config["id"], "VMess user ID", 128)
     security = str(config.get("scy", "auto")).lower()
@@ -300,7 +314,10 @@ def _parse_vmess(link: str) -> ParsedProxyLink:
         if value:
             params[target] = str(value)
     settings = {"address": host, "port": port, "id": user_id, "security": security, "level": 0}
-    return ParsedProxyLink(_name(fragment if separator else str(config.get("ps", "")), host), "vmess", host, port, settings, _stream(params, "vmess"))
+    display_name = config.get("ps", "")
+    if not isinstance(display_name, str):
+        raise ValueError("VMess profile name must be a string")
+    return ParsedProxyLink(_name(fragment if separator else display_name, host), "vmess", host, port, settings, _stream(params, "vmess"))
 
 
 def parse_proxy_link(link: str) -> ParsedProxyLink:
@@ -328,3 +345,44 @@ def parse_proxy_link(link: str) -> ParsedProxyLink:
     if parts.scheme.lower() == "trojan":
         return _parse_trojan(parts)
     raise ValueError("Unsupported share-link scheme; expected VLESS, VMess, Trojan or Shadowsocks")
+
+
+def parse_proxy_links(document: str | bytes) -> tuple[ParsedProxyLink, ...]:
+    """Parse a plain-text, newline-separated list atomically.
+
+    Blank lines and full-line comments beginning with # are ignored. The
+    function does not decode provider-specific subscription wrappers or fetch
+    URLs; every remaining line must be a supported individual share link.
+    """
+    if isinstance(document, bytes):
+        if len(document) > 1024 * 1024:
+            raise ValueError("Share-link list exceeds the 1 MiB limit")
+        try:
+            text = document.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError("Share-link list must be valid UTF-8") from exc
+    elif isinstance(document, str):
+        try:
+            encoded = document.encode("utf-8")
+        except UnicodeEncodeError as exc:
+            raise ValueError("Share-link list must be valid UTF-8") from exc
+        if len(encoded) > 1024 * 1024:
+            raise ValueError("Share-link list exceeds the 1 MiB limit")
+        text = document
+    else:
+        raise TypeError("Share-link list must be str or bytes")
+
+    parsed: list[ParsedProxyLink] = []
+    for line_number, raw_line in enumerate(text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if len(parsed) >= 500:
+            raise ValueError("Share-link list exceeds the 500-profile limit")
+        try:
+            parsed.append(parse_proxy_link(line))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid share link on line {line_number}: {exc}") from exc
+    if not parsed:
+        raise ValueError("Share-link list contains no supported profiles")
+    return tuple(parsed)
