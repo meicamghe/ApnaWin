@@ -275,7 +275,7 @@ def _parse_hysteria2(parts) -> ParsedProxyLink:
         tls["serverName"] = _bounded(params["sni"], "Hysteria2 SNI", 253)
 
     stream: dict[str, object] = {
-        "network": "hysteria",
+        "method": "hysteria",
         "security": "tls",
         "tlsSettings": tls,
         "hysteriaSettings": {"version": 2, **({"auth": auth} if auth else {})},
