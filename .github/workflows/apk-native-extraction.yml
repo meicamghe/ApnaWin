@@ -34,6 +34,7 @@ jobs:
           LIBRARY_NAME: ${{ inputs.library_name }}
         run: |
           set -euo pipefail
+          [[ "$LIBRARY_NAME" =~ ^[A-Za-z0-9_.+-]+\.so$ ]] || { echo "Invalid library filename" >&2; exit 4; }
           mkdir -p analysis
           mapfile -t apks < <(find APNA-APKs -maxdepth 1 -type f -name '*.apk' -print | sort)
           if (( ${#apks[@]} == 0 )); then
