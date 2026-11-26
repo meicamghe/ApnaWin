@@ -104,3 +104,30 @@ Added XrayTunnelSupervisor as the desktop-side lifecycle abstraction: XRAY-only,
 ## Latest verified Windows build (2026-11-15)
 
 CI run 43724914682 completed successfully: 848 tests passed, one skipped, and the Windows build, elevated helper build, pinned Xray/Wintun runtime installation, packaged-app smoke test and artifact upload all succeeded. Artifact ApnaWin-Windows-x64: ID 14165469958, 75,925,661 bytes, not expired. Commit 6410a2cf5b0b651dd48519bcdca299f246e64143 includes the desktop-side XrayTunnelSupervisor wrapper. The latest commit adds read-only adapter/route/DNS diagnostics. Connect remains disabled; no APNA endpoint/auth format has been established, and live route/DNS/WFP/e2e acceptance is still pending.
+
+## Current handoff — 2026-11-26
+
+- APK reverse engineering remains the active priority. The `libudpqtwo.so` candidate
+  addresses and GoReSym v3.4.1 parser findings are recorded in
+  [libudpqtwo-stomped-pclntab.md](reverse-engineering/libudpqtwo-stomped-pclntab.md).
+- The suspected pclntab is at VA `0xc1a200`; the likely moduledata candidate
+  is at `0x10ee3a0`. The moduledata ftab pointer remains unreadable. The
+  header-derived functab hypothesis is still unvalidated against a fresh
+  extracted binary artifact.
+- PR [#8](https://github.com/meicamghe/ApnaWin/pull/8) contains the manual APK
+  native-library extraction workflow, its corrected Go pclntab header reader,
+  the lazy diagnostics fix in `elevated_xray.py`, and a CI guard that keeps
+  Windows packaging opt-in while reverse engineering is in progress.
+- CI run [45794271848](https://github.com/meicamghe/ApnaWin/actions/runs/45794271848)
+  passed 852 tests with 1 skipped and 1 warning. The Windows packaging job was
+  skipped by the new gate. An earlier run before that gate completed both
+  tests and Windows packaging successfully; do not treat that as authorization
+  for further Windows builds.
+- The APK extraction workflow is manual-only and has not yet produced an
+  artifact. Do not claim the native library has been freshly re-extracted or
+  that GoReSym symbol recovery has succeeded.
+- Keep the PR open; do not merge without explicit user approval. Do not start
+  another Windows packaging build until APK reverse engineering is complete.
+- SSH remains on hold. Continue with APK/native reverse engineering and
+  non-SSH protocol support, without guessing APNA endpoints, credentials or
+  server-side configuration formats.
