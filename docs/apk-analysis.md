@@ -142,8 +142,9 @@ The combined report reads selected native-library members in bounded memory
 (no archive member is written to disk and no native code is executed). It
 parses ELF identification and section metadata for supported 32-bit and
 64-bit, little- or big-endian ELF layouts. It records machine architecture,
-file type, whether a dynamic symbol table is available, and counts of
-exported function symbols using the JNI-style `Java_...` naming convention and an exported function symbol named `JNI_OnLoad`. Data objects with those names are not counted as callable JNI entry points.
+file type, ELF entry-point address, whether a PT_INTERP segment is present,
+whether a dynamic symbol table is available, and counts of exported function
+symbols using the JNI-style `Java_...` naming convention and an exported function symbol named `JNI_OnLoad`. Data objects with those names are not counted as callable JNI entry points.
 Raw symbol names, symbol values, addresses, and binary contents are never
 included in the report. Per-library reads are capped at 64 MiB, aggregate
 reads at 256 MiB, analysis at 256 libraries, and each dynamic symbol table
@@ -155,6 +156,14 @@ ELF string-table section. The section-name string-table index is checked; refere
 must be in range and NUL-terminated. A missing section-name table
 (`SHN_UNDEF`) remains valid. `SHN_XINDEX` section-name indexes are rejected
 because their reserved index range exceeds this parser's 4096-section limit.
+
+A conservative `execution_model` hint distinguishes an ELF `ET_DYN`
+file with a nonzero entry point and a valid interpreter segment
+(`pie_executable_candidate`) from an `ET_DYN` file with no entry point and no
+interpreter (`shared_object_candidate`). Other combinations are
+`other_or_ambiguous`. These are structural candidates, not loader acceptance
+or runtime proof; a filename ending in `.so` does not prove that a file is a
+JNI library or that Java loads it through JNI.
 
 A matching exported `Java_...` name is evidence of a JNI-style export, not
 proof that a particular DEX native method resolves to it. An exported
