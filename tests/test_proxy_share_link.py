@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from apnawin.services.proxy_share_link import parse_proxy_link
+from apnawin.services.proxy_share_link import parse_proxy_link, parse_proxy_links
 
 
 def vmess_link(config):
@@ -193,3 +193,57 @@ def test_parse_vless_tcp_reality_uses_raw_transport():
     stream = parsed.to_outbound()["streamSettings"]
     assert stream["method"] == "raw"
     assert stream["realitySettings"]["publicKey"] == "public-key"
+
+
+def test_parse_proxy_links_supports_atomic_multiline_import():
+    links = "\n".join([
+        "# ApnaWin test import",
+        "vless://user@vpn.example:443?security=tls#first",
+        "",
+        "trojan://password@trojan.example:443#second",
+        "ss://" + ss_userinfo() + "@ss.example:8388#third",
+    ])
+    parsed = parse_proxy_links(links)
+    assert [item.protocol for item in parsed] == ["vless", "trojan", "shadowsocks"]
+    assert [item.name for item in parsed] == ["first", "second", "third"]
+
+
+def test_parse_proxy_links_rejects_entire_batch_when_one_line_is_invalid():
+    with pytest.raises(ValueError, match="line 3"):
+        parse_proxy_links(
+            "vless://user@vpn.example:443?security=tls\n\nnot-a-proxy-link"
+        )
+
+
+def test_parse_proxy_links_rejects_empty_and_oversized_batches():
+    with pytest.raises(ValueError, match="no supported profiles"):
+        parse_proxy_links("# comment only\n\n")
+    with pytest.raises(ValueError, match="1 MiB"):
+        parse_proxy_links(b"x" * (1024 * 1024 + 1))
+
+
+def test_parse_proxy_links_enforces_profile_count_limit():
+    link = "vless://user@vpn.example:443?security=tls"
+    with pytest.raises(ValueError, match="500-profile"):
+        parse_proxy_links("\n".join([link] * 501))
+
+
+@pytest.mark.parametrize("link", [
+    "vless://user@bad%20host:443?security=tls",
+    "trojan://password@bad%20host:443",
+])
+def test_proxy_links_reject_invalid_endpoint_hostnames(link):
+    with pytest.raises(ValueError, match="DNS hostname"):
+        parse_proxy_link(link)
+
+
+def test_parse_vless_ipv6_endpoint():
+    parsed = parse_proxy_link("vless://user@[2001:db8::1]:443?security=tls")
+    assert parsed.server == "2001:db8::1"
+
+
+def test_parse_vless_grpc_rejects_unknown_mode():
+    with pytest.raises(ValueError, match="mode must be multi or gun"):
+        parse_proxy_link(
+            "vless://user@vpn.example:443?type=grpc&security=tls&mode=invalid"
+        )
