@@ -128,3 +128,83 @@ The header-derived address and initial records support this hypothesis, but the 
 - [ ] Run `go test ./...` and build GoReSym.
 - [ ] Re-run GoReSym against `libudpqtwo.so`.
 - [ ] Verify recovered symbols and function metadata before treating the recovery as successful.
+
+
+## Upstream GoReSym v3.4.1 source confirmation
+
+The parser path was checked against the upstream `v3.4.1` tag
+(commit `722897e`, released 2026-09-14), matching the version used for the
+local analysis.
+
+### Pclntab header and functab offsets
+
+For Go 1.18+ the header begins with a 4-byte magic followed by four one-byte
+fields (`pad1`, `pad2`, PC quantum, pointer size). The eight uint64 fields
+begin at byte offset 8:
+
+| Header field | uint64 word | Byte offset |
+|---|---:|---:|
+| nfunctab | 0 | 8 |
+| nfiletab | 1 | 16 |
+| textStart | 2 | 24 |
+| funcnametab offset | 3 | 32 |
+| cutab offset | 4 | 40 |
+| filetab offset | 5 | 48 |
+| pctab offset | 6 | 56 |
+| pcln/functab offset | 7 | 64 |
+
+GoReSym's Go 1.18+ parser reads word 0 for `nfunctab`, word 7 for the
+functab offset, and sizes the serialized table as
+`(2*nfunctab + 1) * 4`. Therefore the candidate table address is
+`pclntabVA + word[7]`. The extraction workflow was corrected to decode this
+header layout rather than treating the first eight bytes as word 0.
+
+### Why the existing moduledata path cannot recover this candidate
+
+In v3.4.1, `main.go` calls `File.ModuleDataTable` with the pclntab VA,
+version/layout, pointer width and endianness. It does not pass
+`PclntabCandidate.StompMagicCandidateMeta`. The main loop checks
+`SuspectedModuleDataVa == tmpModData.VA` only after `ModuleDataTable`
+has returned successfully. That is too late to guide the current validator
+when the moduledata ftab pointer itself is unreadable.
+
+The Go 1.18+ `validateAndConvertModuleData` first reads
+`md.Ftab.Data` through the existing `read_memory` method and returns
+immediately on failure. The existing `textAddr(entryOffset, md.Text,
+textsectmap) == md.Minpc` validation occurs afterward. This confirms the
+narrow failure point: a guarded fallback must provide the first functab record
+without bypassing the existing Minpc validation.
+
+### Guard conditions for a future fallback
+
+The fallback remains proposed and unimplemented. It should run only when the
+normal ftab read fails and all of the following hold:
+
+- Stomp metadata is present and its pclntab VA equals the candidate VA.
+- Its suspected moduledata VA equals the moduledata candidate currently being validated.
+- Metadata endianness matches the parser's endianness.
+- The input is 64-bit little-endian and the parsed layout is Go 1.18+.
+- Header byte fields have valid PC quantum and pointer-size values.
+- Header-derived nfunctab is bounded and consistent with the moduledata ftab length.
+- The derived functab address and full serialized table size pass overflow and
+  file-backed `PT_LOAD` checks using the existing `read_memory` path.
+- The existing first-entry / Minpc / textsectmap validation still succeeds.
+
+Ordinary candidates must continue using the existing path. Do not broaden
+`read_memory` to arbitrary addresses or accept the invalid moduledata ftab
+pointer as BSS.
+
+## Independent moduledata scanner issue
+
+The v3.4.1 ELF `moduledata_scan` implementation uses one `bytes.Index`
+result per section. If that first pointer match is in the ignore list, it
+continues to the next section instead of searching for another occurrence
+later in the same section. This is a real scanner limitation, independent of
+the proposed ftab fallback. It may hide a valid later moduledata candidate
+when multiple references occur in one section, but that has not yet been
+demonstrated for this APK.
+
+A separate regression-tested fix should iterate subsequent matches within the
+same section after an ignored candidate. Keep the existing section-boundary
+check and preserve the concatenated-section behavior. Do not combine this
+scanner fix with the guarded ftab fallback until each has isolated tests.
