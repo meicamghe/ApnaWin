@@ -153,3 +153,11 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - Regression tests cover malformed escapes, invalid UTF-8 and non-string VMess transport fields.
 - Commits: `5e286b47774027650f7a5276f182f52cbfee201c`, `5b354cbd30c80197cecd5c37de86a81808ed0283`, `a507605f383fe7f08c61c7234c77d53b0bc38993`, `db00e63ecf7b7db915ef113eba56b84ee55cbf1b`.
 - Windows tests workflow [45797565757](https://github.com/meicamghe/ApnaWin/actions/runs/45797565757) was pending on the latest PR head at the time of this update; no result is claimed. Windows packaging remains gated off.
+
+
+## Fresh PR validation — 2026-11-26
+
+- GitHub Actions run [45797619263](https://github.com/meicamghe/ApnaWin/actions/runs/45797619263) completed successfully for the PR #8 merge ref containing head commit `5510736046e39383c36721e2108938ebcad77479`.
+- The Windows test job installed dependencies and executed the complete pytest suite: **900 passed, 1 skipped, 1 warning**. The warning is the intentional duplicate ZIP-entry fixture in `tests/test_apk_inventory.py`.
+- The `build-windows` job was **skipped** by the reverse-engineering gate; no Windows package was built.
+- This validates the latest parser hardening on the tested PR merge ref. The APK extraction workflow remains manual-only and still has no fresh artifact; GoReSym recovery remains unverified.
