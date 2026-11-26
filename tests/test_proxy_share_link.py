@@ -257,3 +257,11 @@ def test_parse_shadowsocks_legacy_base64_payload_with_slash():
     assert "/" in payload
     parsed = parse_proxy_link("ss://" + payload + "#legacy-slash")
     assert parsed.to_outbound()["settings"]["password"] == password
+
+@pytest.mark.parametrize("link", [
+    "trojan://secret%C2%85@vpn.example:443",
+    "vless://user%C2%85@vpn.example:443?security=tls",
+])
+def test_proxy_links_reject_unicode_control_characters_in_credentials(link):
+    with pytest.raises(ValueError, match="control characters"):
+        parse_proxy_link(link)
