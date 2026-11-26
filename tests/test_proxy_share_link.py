@@ -313,7 +313,7 @@ def test_vmess_rejects_non_string_optional_transport_fields():
         }))
 
 
-def test_vless_accepts_custom_ids_up_to_30_utf8_bytes():
+def test_vless_accepts_custom_ids_below_30_utf8_bytes():
     parsed = parse_proxy_link("vless://custom-user-id-1234567890@vpn.example:443?security=tls")
     assert parsed.to_outbound()["settings"]["id"] == "custom-user-id-1234567890"
 
@@ -336,3 +336,21 @@ def test_vless_accepts_vision_flow_with_reality_tcp():
 def test_vless_rejects_custom_ids_at_30_utf8_bytes():
     with pytest.raises(ValueError, match="fewer than 30 UTF-8 bytes"):
         parse_proxy_link(f"vless://{'u' * 30}@vpn.example:443?security=tls")
+
+
+@pytest.mark.parametrize("user_id", ["u" * 29, "é" * 14])
+def test_vless_accepts_custom_ids_below_30_utf8_bytes(user_id):
+    parsed = parse_proxy_link(f"vless://{user_id}@vpn.example:443?security=tls")
+    assert parsed.to_outbound()["settings"]["id"] == user_id
+
+
+@pytest.mark.parametrize("user_id", ["u" * 30, "é" * 15])
+def test_vless_rejects_custom_ids_at_or_above_30_utf8_bytes(user_id):
+    with pytest.raises(ValueError, match="fewer than 30 UTF-8 bytes"):
+        parse_proxy_link(f"vless://{user_id}@vpn.example:443?security=tls")
+
+
+def test_vless_accepts_uppercase_canonical_uuid():
+    user_id = "123E4567-E89B-12D3-A456-426614174000"
+    parsed = parse_proxy_link(f"vless://{user_id}@vpn.example:443?security=tls")
+    assert parsed.to_outbound()["settings"]["id"] == user_id
