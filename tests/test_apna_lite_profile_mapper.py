@@ -235,6 +235,26 @@ def test_websocket_status_mapping_is_case_and_horizontal_whitespace_insensitive(
 
 
 @pytest.mark.parametrize(
+    "separator",
+    [r"\\r\\n", r"\\n", r"\\r", "[lfcr]"],
+)
+def test_websocket_status_mapping_recognizes_all_renderer_linebreak_tokens(separator):
+    lines = [
+        "GET / HTTP/1.1",
+        "Host: [host]",
+        "Upgrade: websocket",
+        "Connection: Upgrade",
+        "Sec-WebSocket-Key: MDEyMzQ1Njc4OWFiY2RlZg==",
+        "Sec-WebSocket-Version: 13",
+    ]
+    payload = _payload(template=separator.join(lines) + separator + separator)
+    mapped = build_apna_lite_ssh_profile(
+        _catalog(), _server(), payload, host_selector=_first
+    )
+    assert mapped.session_config.payload.expected_http_statuses == (200, 101)
+
+
+@pytest.mark.parametrize(
     "template",
     [
         "CONNECT [host_port] HTTP/1.1[crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf]Sec-WebSocket-Key: MDEyMzQ1Njc4OWFiY2RlZg==[crlf]Sec-WebSocket-Version: 13[crlf][crlf]",
