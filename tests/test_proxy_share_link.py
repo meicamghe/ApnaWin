@@ -126,6 +126,56 @@ def test_parse_vmess_rejects_nonzero_legacy_alter_id():
         }))
 
 
+def test_parse_hysteria2_basic_link_with_default_port_and_auth():
+    parsed = parse_proxy_link("hysteria2://secret@hy.example#Fast%20UDP")
+    outbound = parsed.to_outbound()
+    assert parsed.protocol == "hysteria"
+    assert parsed.name == "Fast UDP"
+    assert outbound["settings"] == {
+        "version": 2, "address": "hy.example", "port": 443, "auth": "secret",
+    }
+    assert outbound["streamSettings"]["method"] == "hysteria"
+    assert outbound["streamSettings"]["security"] == "tls"
+    assert outbound["streamSettings"]["tlsSettings"] == {
+        "alpn": ["h3"], "allowInsecure": False,
+    }
+
+
+def test_parse_hy2_alias_with_sni_and_salamander_obfuscation():
+    parsed = parse_proxy_link(
+        "hy2://auth%3Apass@[2001:db8::2]:8443/?sni=cover.example"
+        "&obfs=salamander&obfs-password=mask-secret#hy2"
+    )
+    outbound = parsed.to_outbound()
+    assert outbound["settings"]["address"] == "2001:db8::2"
+    assert outbound["settings"]["port"] == 8443
+    assert outbound["streamSettings"]["tlsSettings"]["serverName"] == "cover.example"
+    assert outbound["streamSettings"]["finalmask"] == {
+        "udp": [{"type": "salamander", "settings": {"password": "mask-secret"}}]
+    }
+
+
+@pytest.mark.parametrize("link", [
+    "hysteria2://auth@hy.example:0",
+    "hy2://auth@hy.example/path",
+    "hy2://auth@hy.example?insecure=1",
+    "hy2://auth@hy.example?obfs=salamander",
+    "hy2://auth@hy.example?obfs-password=orphan",
+    "hy2://auth@hy.example?obfs=gecko&obfs-password=p",
+    "hy2://auth@hy.example?unknown=1",
+    "hy2://auth@hy.example?insecure=maybe",
+])
+def test_hysteria2_rejects_unsupported_or_unsafe_link_options(link):
+    with pytest.raises(ValueError):
+        parse_proxy_link(link)
+
+
+def test_hysteria2_credentials_are_hidden_from_repr():
+    parsed = parse_proxy_link("hy2://very-secret@hy.example:443")
+    assert "very-secret" not in repr(parsed)
+    assert parsed.to_outbound()["settings"]["auth"] == "very-secret"
+
+
 def test_parse_shadowsocks_sip002_base64_userinfo():
     parsed = parse_proxy_link(
         "ss://" + ss_userinfo() + "@ss.example:8388#SS%20Office"
