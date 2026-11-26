@@ -100,11 +100,10 @@ def _elf_with_two_interpreters(payload, elf_class):
     if elf_class == 64:
         phoff = struct.unpack_from("<Q", data, 32)[0]
         first_path_offset = struct.unpack_from("<Q", data, phoff + 8)[0]
-        path = bytes(data[first_path_offset:])
         data[first_path_offset:first_path_offset] = bytes(56)
         struct.pack_into("<Q", data, phoff + 8, first_path_offset + 56)
         second_path_offset = len(data)
-        second_path = b"/system/bin/linker64\\x00"
+        second_path = b"/system/bin/linker64\x00"
         data.extend(second_path)
         struct.pack_into(
             "<IIQQQQQQ", data, phoff + 56, 3, 4, second_path_offset,
@@ -117,7 +116,7 @@ def _elf_with_two_interpreters(payload, elf_class):
         data[first_path_offset:first_path_offset] = bytes(32)
         struct.pack_into("<I", data, phoff + 4, first_path_offset + 32)
         second_path_offset = len(data)
-        second_path = b"/system/bin/linker\\x00"
+        second_path = b"/system/bin/linker\x00"
         data.extend(second_path)
         struct.pack_into(
             "<IIIIIIII", data, phoff + 32, 3, second_path_offset,
