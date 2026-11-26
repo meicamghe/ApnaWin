@@ -95,10 +95,19 @@ def _payload_requests_websocket_upgrade(template: str) -> bool:
     version headers; keep the mapper's accepted-status policy consistent.
     """
     normalized = re.sub(
-        r"\[(?:crlf|lf|cr)\]",
+        r"\[(?:crlf|lfcr|lf|cr)\]",
         "\n",
         template,
         flags=re.IGNORECASE,
+    )
+    # render_apna_payload() also expands literal escaped line-break tokens.
+    # Normalize the same forms here so a valid WebSocket template is not
+    # misclassified as ordinary HTTP and rejected when its proxy returns 101.
+    normalized = (
+        normalized
+        .replace(r"\r\n", "\n")
+        .replace(r"\n", "\n")
+        .replace(r"\r", "\n")
     )
     lines = normalized.splitlines()
     if not lines:
