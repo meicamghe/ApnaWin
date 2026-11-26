@@ -303,6 +303,9 @@ def _parse_vmess(link: str) -> ParsedProxyLink:
     allowed_fields = {"v", "ps", "add", "port", "id", "aid", "scy", "net", "type", "host", "path", "tls", "sni", "alpn", "fp"}
     if set(config) - allowed_fields:
         raise ValueError("VMess payload contains unsupported fields")
+    string_fields = {"v", "ps", "add", "id", "scy", "net", "type", "host", "path", "tls", "sni", "alpn", "fp"}
+    if any(key in config and not isinstance(config[key], str) for key in string_fields):
+        raise ValueError("VMess textual fields must be strings")
     if not isinstance(config.get("add"), str) or not isinstance(config.get("id"), str):
         raise ValueError("VMess server address and user ID must be strings")
     host = _bounded(config["add"], "Server host", 253)
