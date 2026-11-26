@@ -65,7 +65,7 @@ def _elf32_with_jni_exports():
     return header + dynstr + dynsym + shstr + bytes(section_offset - shstr_offset - len(shstr)) + b"".join(sections)
 
 
-def _elf_with_interpreter(payload, elf_class, *, entry_point=0x1000, interpreter=b"/system/bin/linker\\x00"):
+def _elf_with_interpreter(payload, elf_class, *, entry_point=0x1000, interpreter=b"/system/bin/linker\x00"):
     data = bytearray(payload)
     if elf_class == 64:
         phoff = (len(data) + 7) & ~7
