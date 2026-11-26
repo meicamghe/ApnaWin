@@ -75,12 +75,12 @@ References: [Xray VLESS outbound](https://xtls.github.io/en/config/outbounds/vle
 ## Hysteria2 share links
 
 - Added `hysteria2://` and `hy2://` parsing, with optional authentication, default port 443, IPv4/IPv6 host handling, SNI, TLS ALPN `h3`, and Salamander UDP obfuscation.
-- Maps to the current Xray Hysteria v2 outbound (`protocol: hysteria`, `settings.version/address/port`, `streamSettings.network: hysteria`, TLS security and `hysteriaSettings.version/auth`). Salamander maps to `streamSettings.finalmask.udp`.
+- Maps to the current Xray Hysteria v2 outbound (`protocol: hysteria`, `settings.version/address/port`, `streamSettings.method: hysteria`, TLS security and `hysteriaSettings.version/auth`). Salamander maps to `streamSettings.finalmask.udp`.
 - TLS verification is forced on. Explicit `insecure=1`, unsupported obfuscation modes, orphan obfuscation passwords, unknown query parameters and non-root URI paths are rejected. Hysteria Realm URIs, port hopping, ECH and certificate pinning are not supported in this first slice.
 - References: [official Hysteria 2 URI scheme](https://v2.hysteria.network/docs/developers/URI-Scheme/), [Xray Hysteria outbound](https://xtls.github.io/en/config/outbounds/hysteria.html), [Xray Hysteria transport](https://xtls.github.io/en/config/transports/hysteria.html), [Xray FinalMask](https://xtls.github.io/en/config/transports/finalmask.html).
 - Regression tests cover aliases, IPv6, defaults, SNI, Salamander mapping, credential-safe repr and fail-closed handling.
 
 
-### Hysteria2 Xray schema correction
+### Hysteria2 Xray schema verification
 
-The Hysteria2 transport selector is emitted as `streamSettings.network: "hysteria"` (not the generic `method` property). Authentication remains in `streamSettings.hysteriaSettings.auth`, while endpoint address and port remain in outbound `settings`. This follows the current Project X Hysteria transport object and outbound examples.
+The Hysteria2 transport selector is emitted as `streamSettings.method: "hysteria"`. Authentication remains in `streamSettings.hysteriaSettings.auth`, while endpoint address and port remain in outbound `settings`. This follows the current [Project X transport schema](https://xtls.github.io/en/config/transport.html) and [Hysteria transport object](https://xtls.github.io/en/config/transports/hysteria.html).
