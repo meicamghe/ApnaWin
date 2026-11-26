@@ -63,3 +63,10 @@ The parser rejects incomplete/non-hex percent escapes before URL parsing and rej
 The current Xray VLESS outbound contract accepts a valid UUID or a custom user ID of fewer than 30 UTF-8 bytes. Longer non-UUID values are rejected before an outbound object is produced. Vision flow is restricted to the documented `xtls-rprx-vision` and `xtls-rprx-vision-udp443` values and requires TCP/RAW plus TLS or REALITY in this parser's supported transport subset. Unknown flow strings, Vision over WebSocket/gRPC, and Vision without transport security fail closed.
 
 References: [Xray VLESS outbound](https://xtls.github.io/en/config/outbounds/vless.html) and [Xray transport compatibility](https://xtls.github.io/en/config/transport.html).
+
+
+## VMess link version gate
+
+- VMess JSON links default a missing `v` field to version `2`, matching the commonly emitted v2 share-link format.
+- Explicit version values other than `2` are rejected rather than interpreted using an unknown schema.
+- Regression tests cover absent version and unsupported/empty explicit versions.
