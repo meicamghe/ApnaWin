@@ -110,9 +110,9 @@ def _query(query: str) -> dict[str, str]:
 def _stream(params: dict[str, str], protocol: str) -> dict[str, object]:
     transport = params.get("type", "tcp").lower()
     transport_names = {
-        "tcp": "tcp",
-        "raw": "tcp",
-        "ws": "ws",
+        "tcp": "raw",
+        "raw": "raw",
+        "ws": "websocket",
         "grpc": "grpc",
     }
     if transport not in transport_names:
@@ -126,7 +126,7 @@ def _stream(params: dict[str, str], protocol: str) -> dict[str, object]:
     if security == "reality" and network not in {"tcp", "grpc"}:
         raise ValueError("REALITY is supported here only with TCP or gRPC")
 
-    stream: dict[str, object] = {"network": network, "security": security}
+    stream: dict[str, object] = {"method": network, "security": security}
     if security == "tls":
         tls: dict[str, object] = {}
         if params.get("sni"):
@@ -180,14 +180,14 @@ def _parse_vless(parts) -> ParsedProxyLink:
     if not encryption:
         raise ValueError("VLESS encryption cannot be empty")
     settings: dict[str, object] = {
-        "vnext": [{"address": server, "port": port, "users": [{
-            "id": user_id,
-            "encryption": _bounded(encryption, "VLESS encryption", 256),
-            "level": 0,
-        }]}]
+        "address": server,
+        "port": port,
+        "id": user_id,
+        "encryption": _bounded(encryption, "VLESS encryption", 256),
+        "level": 0,
     }
     if params.get("flow"):
-        settings["vnext"][0]["users"][0]["flow"] = _bounded(params["flow"], "VLESS flow", 64)
+        settings["flow"] = _bounded(params["flow"], "VLESS flow", 64)
     return ParsedProxyLink(_name(parts.fragment, server), "vless", server, port, settings, _stream(params, "vless"))
 
 
@@ -198,7 +198,7 @@ def _parse_trojan(parts) -> ParsedProxyLink:
     password = _bounded(unquote(parts.username), "Trojan password")
     server = _bounded(parts.hostname or "", "Server host", 253)
     port = _port(parts.port)
-    settings = {"servers": [{"address": server, "port": port, "password": password}]}
+    settings = {"address": server, "port": port, "password": password}
     return ParsedProxyLink(_name(parts.fragment, server), "trojan", server, port, settings, _stream(params, "trojan"))
 
 
@@ -229,7 +229,8 @@ def _parse_shadowsocks(link: str, parts) -> ParsedProxyLink:
             server = parts.hostname
             port = _port(parts.port)
     else:
-        payload = _decode_b64(parts.path.lstrip("/"), "Legacy Shadowsocks link").decode("utf-8")
+        encoded_payload = parts.path.lstrip("/") or parts.netloc
+        payload = _decode_b64(encoded_payload, "Legacy Shadowsocks link").decode("utf-8")
         if "@" not in payload:
             raise ValueError("Legacy Shadowsocks link must encode method:password@host:port")
         credentials, endpoint = payload.rsplit("@", 1)
@@ -245,7 +246,7 @@ def _parse_shadowsocks(link: str, parts) -> ParsedProxyLink:
     if method not in _SS_METHODS:
         raise ValueError(f"Unsupported Shadowsocks cipher: {method}")
     server = _bounded(server, "Server host", 253)
-    settings = {"servers": [{"address": server, "port": port, "method": method, "password": password}]}
+    settings = {"address": server, "port": port, "method": method, "password": password}
     return ParsedProxyLink(_name(parts.fragment, server), "shadowsocks", server, port, settings)
 
 
@@ -280,9 +281,7 @@ def _parse_vmess(link: str) -> ParsedProxyLink:
         value = config.get(source, "")
         if value:
             params[target] = str(value)
-    settings = {"vnext": [{"address": host, "port": port, "users": [{
-        "id": user_id, "security": security, "level": 0,
-    }]}]}
+    settings = {"address": host, "port": port, "id": user_id, "security": security, "level": 0}
     return ParsedProxyLink(_name(fragment if separator else str(config.get("ps", "")), host), "vmess", host, port, settings, _stream(params, "vmess"))
 
 
