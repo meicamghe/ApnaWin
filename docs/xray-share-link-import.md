@@ -70,3 +70,12 @@ References: [Xray VLESS outbound](https://xtls.github.io/en/config/outbounds/vle
 - VMess JSON links default a missing `v` field to version `2`, matching the commonly emitted v2 share-link format.
 - Explicit version values other than `2` are rejected rather than interpreted using an unknown schema.
 - Regression tests cover absent version and unsupported/empty explicit versions.
+
+
+## Hysteria2 share links
+
+- Added `hysteria2://` and `hy2://` parsing, with optional authentication, default port 443, IPv4/IPv6 host handling, SNI, TLS ALPN `h3`, and Salamander UDP obfuscation.
+- Maps to the current Xray Hysteria v2 outbound (`protocol: hysteria`, `streamSettings.method: hysteria`, TLS security and Hysteria v2 settings). Salamander maps to `streamSettings.finalmask.udp`.
+- TLS verification is forced on. Explicit `insecure=1`, unsupported obfuscation modes, orphan obfuscation passwords, unknown query parameters and non-root URI paths are rejected. Hysteria Realm URIs, port hopping, ECH and certificate pinning are not supported in this first slice.
+- References: [official Hysteria 2 URI scheme](https://v2.hysteria.network/docs/developers/URI-Scheme/), [Xray Hysteria outbound](https://xtls.github.io/en/config/outbounds/hysteria.html), [Xray Hysteria transport](https://xtls.github.io/en/config/transports/hysteria.html), [Xray FinalMask](https://xtls.github.io/en/config/transports/finalmask.html).
+- Regression tests cover aliases, IPv6, defaults, SNI, Salamander mapping, credential-safe repr and fail-closed handling.
