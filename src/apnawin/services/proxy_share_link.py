@@ -251,7 +251,7 @@ def _parse_shadowsocks(link: str, parts) -> ParsedProxyLink:
             server = parts.hostname
             port = _port(parts.port)
     else:
-        encoded_payload = parts.path.lstrip("/") or parts.netloc
+        encoded_payload = (parts.netloc + parts.path).lstrip("/")
         payload = _decode_b64(encoded_payload, "Legacy Shadowsocks link").decode("utf-8")
         if "@" not in payload:
             raise ValueError("Legacy Shadowsocks link must encode method:password@host:port")
