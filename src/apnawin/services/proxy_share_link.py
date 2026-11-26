@@ -10,6 +10,7 @@ import base64
 import binascii
 import json
 import re
+import uuid
 from dataclasses import dataclass, field
 from unicodedata import category
 from urllib.parse import parse_qsl, unquote, urlsplit
@@ -82,6 +83,21 @@ def _bounded(value: str, field_name: str, limit: int = MAX_CREDENTIAL_BYTES) -> 
         raise ValueError(f"{field_name} must contain 1 to {limit} UTF-8 bytes")
     if any(category(ch) == "Cc" for ch in value):
         raise ValueError(f"{field_name} contains control characters")
+    return value
+
+
+def _vless_user_id(value: str) -> str:
+    """Accept Xray's UUID form or a custom VLESS ID of at most 30 UTF-8 bytes."""
+    value = _bounded(value, "VLESS user ID", 128)
+    try:
+        parsed = uuid.UUID(value)
+    except (ValueError, AttributeError):
+        if len(value.encode("utf-8")) > 30:
+            raise ValueError("VLESS user ID must be a UUID or at most 30 UTF-8 bytes")
+    else:
+        if str(parsed) != value.lower():
+            if len(value.encode("utf-8")) > 30:
+                raise ValueError("VLESS user ID must be a UUID or at most 30 UTF-8 bytes")
     return value
 
 
@@ -208,7 +224,7 @@ def _parse_vless(parts) -> ParsedProxyLink:
     if not parts.username or parts.password is not None:
         raise ValueError("VLESS link must contain a user ID and no password field")
     params = _query(parts.query)
-    user_id = _bounded(_strict_unquote(parts.username, "VLESS user ID"), "VLESS user ID", 128)
+    user_id = _vless_user_id(_strict_unquote(parts.username, "VLESS user ID"))
     server = _bounded(parts.hostname or "", "Server host", 253)
     _validate_endpoint_host(server)
     port = _port(parts.port)
@@ -223,7 +239,14 @@ def _parse_vless(parts) -> ParsedProxyLink:
         "level": 0,
     }
     if params.get("flow"):
-        settings["flow"] = _bounded(params["flow"], "VLESS flow", 64)
+        flow = _bounded(params["flow"], "VLESS flow", 64)
+        if flow not in {"xtls-rprx-vision", "xtls-rprx-vision-udp443"}:
+            raise ValueError(f"Unsupported VLESS flow: {flow}")
+        if params.get("type", "tcp").lower() not in {"tcp", "raw"}:
+            raise ValueError("VLESS Vision flow requires TCP/RAW transport")
+        if params.get("security", "none").lower() not in {"tls", "reality"}:
+            raise ValueError("VLESS Vision flow requires TLS or REALITY security")
+        settings["flow"] = flow
     return ParsedProxyLink(_name(parts.fragment, server), "vless", server, port, settings, _stream(params, "vless"))
 
 
