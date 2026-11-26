@@ -95,6 +95,38 @@ def _elf_with_interpreter(payload, elf_class, *, entry_point=0x1000, interpreter
     return bytes(data)
 
 
+def _elf_with_two_interpreters(payload, elf_class):
+    data = bytearray(_elf_with_interpreter(payload, elf_class))
+    if elf_class == 64:
+        phoff = struct.unpack_from("<Q", data, 32)[0]
+        first_path_offset = struct.unpack_from("<Q", data, phoff + 8)[0]
+        path = bytes(data[first_path_offset:])
+        data[first_path_offset:first_path_offset] = bytes(56)
+        struct.pack_into("<Q", data, phoff + 8, first_path_offset + 56)
+        second_path_offset = len(data)
+        second_path = b"/system/bin/linker64\\x00"
+        data.extend(second_path)
+        struct.pack_into(
+            "<IIQQQQQQ", data, phoff + 56, 3, 4, second_path_offset,
+            0, 0, len(second_path), len(second_path), 1,
+        )
+        struct.pack_into("<H", data, 56, 2)
+    else:
+        phoff = struct.unpack_from("<I", data, 28)[0]
+        first_path_offset = struct.unpack_from("<I", data, phoff + 4)[0]
+        data[first_path_offset:first_path_offset] = bytes(32)
+        struct.pack_into("<I", data, phoff + 4, first_path_offset + 32)
+        second_path_offset = len(data)
+        second_path = b"/system/bin/linker\\x00"
+        data.extend(second_path)
+        struct.pack_into(
+            "<IIIIIIII", data, phoff + 32, 3, second_path_offset,
+            0, 0, len(second_path), len(second_path), 4, 1,
+        )
+        struct.pack_into("<H", data, 44, 2)
+    return bytes(data)
+
+
 @pytest.mark.parametrize(
     ("payload", "elf_class"),
     [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
@@ -133,15 +165,8 @@ def test_inspect_elf_rejects_malformed_interpreter_path(payload, elf_class):
     [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
 )
 def test_inspect_elf_rejects_multiple_interpreter_segments(payload, elf_class):
-    data = bytearray(_elf_with_interpreter(payload, elf_class))
-    if elf_class == 64:
-        phoff = struct.unpack_from("<Q", data, 32)[0]
-        struct.pack_into("<I", data, phoff + 56, 3)
-    else:
-        phoff = struct.unpack_from("<I", data, 28)[0]
-        struct.pack_into("<I", data, phoff + 32, 3)
     with pytest.raises(ValueError, match="multiple interpreter segments"):
-        inspect_elf_bytes(bytes(data))
+        inspect_elf_bytes(_elf_with_two_interpreters(payload, elf_class))
 
 
 @pytest.mark.parametrize(
