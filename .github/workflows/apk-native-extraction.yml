@@ -49,6 +49,7 @@ jobs:
                 matches+=("$apk|$entry")
               fi
             done < <(unzip -Z1 "$apk")
+          done
 
           if (( ${#matches[@]} == 0 )); then
             echo "Library $LIBRARY_NAME was not found in the committed APK files." >&2
