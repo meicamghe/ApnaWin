@@ -265,3 +265,17 @@ def test_parse_shadowsocks_legacy_base64_payload_with_slash():
 def test_proxy_links_reject_unicode_control_characters_in_credentials(link):
     with pytest.raises(ValueError, match="control characters"):
         parse_proxy_link(link)
+
+
+@pytest.mark.parametrize("link", [
+    "vless://user@vpn.example:443#office%C2%85vpn",
+    "trojan://secret@vpn.example:443?security=tls%C2%85",
+])
+def test_proxy_links_reject_raw_unicode_control_characters(link):
+    with pytest.raises(ValueError, match="control characters"):
+        parse_proxy_link(link)
+
+
+def test_profile_name_strips_encoded_unicode_control_characters():
+    parsed = parse_proxy_link("vless://user@vpn.example:443#office%C2%85vpn")
+    assert parsed.name == "officevpn"
