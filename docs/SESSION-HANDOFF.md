@@ -143,3 +143,13 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - APK extraction remains manual-only and has not produced a fresh artifact. The GoReSym `moduledata` fallback is still a guarded design proposal, not implemented or validated against a fresh extraction.
 - PR [#8](https://github.com/meicamghe/ApnaWin/pull/8) remains open and unmerged. Do not merge without explicit approval; do not start Windows packaging until APK reverse engineering is complete.
 - SSH remains on hold. Continue APK/native reverse engineering and non-SSH protocol implementation; do not infer APNA-specific endpoints, credentials or subscription formats.
+
+
+### Share-link parser hardening — 2026-11-26
+
+- Reject malformed percent escapes and invalid UTF-8 in percent-encoded components.
+- Apply strict decoding to URI credentials and profile labels; query decoding uses strict UTF-8 handling.
+- VMess textual JSON fields are validated as strings instead of being coerced from arrays, objects or booleans.
+- Regression tests cover malformed escapes, invalid UTF-8 and non-string VMess transport fields.
+- Commits: `5e286b47774027650f7a5276f182f52cbfee201c`, `5b354cbd30c80197cecd5c37de86a81808ed0283`, `a507605f383fe7f08c61c7234c77d53b0bc38993`, `db00e63ecf7b7db915ef113eba56b84ee55cbf1b`.
+- Windows tests workflow [45797565757](https://github.com/meicamghe/ApnaWin/actions/runs/45797565757) was pending on the latest PR head at the time of this update; no result is claimed. Windows packaging remains gated off.
