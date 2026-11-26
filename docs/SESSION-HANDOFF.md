@@ -131,3 +131,15 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - SSH remains on hold. Continue with APK/native reverse engineering and
   non-SSH protocol support, without guessing APNA endpoints, credentials or
   server-side configuration formats.
+
+## Parallel engineering update — 2026-11-26
+
+- Added `src/apnawin/services/proxy_share_link.py`: strict Xray outbound parsing for VLESS, VMess, Trojan and Shadowsocks individual links. It supports RAW/TCP, WebSocket and gRPC in the tested subset, TLS/REALITY where applicable, SIP002 and legacy Shadowsocks forms, and rejects unknown URI extensions rather than silently dropping them.
+- Added bounded newline-separated multi-profile parsing: UTF-8 only, 1 MiB document limit, 500 profile limit, 16 KiB per link, blank/comment lines ignored, and all-or-nothing batch failure with line numbers. No subscription URL fetching or provider-specific Base64/catalog decoding is implemented.
+- Added tests for outbound schema mapping, TLS/REALITY, WebSocket/gRPC, four protocols, secret-safe repr, malformed/unknown parameters, host validation, IPv6, batch limits and legacy Shadowsocks Base64 paths.
+- CI run [45795956357](https://github.com/meicamghe/ApnaWin/actions/runs/45795956357) passed 888 tests, 1 skipped, 1 warning. Windows packaging was skipped by the reverse-engineering gate.
+- Parser output is not wired into the UI or `XrayConfigStore`; do not treat a parsed link as a stored/working profile. The caller must persist credential-bearing config through the existing current-user DPAPI store. Connect remains disabled.
+- Xray schema references and current parser limits are recorded in [xray-share-link-import.md](xray-share-link-import.md).
+- APK extraction remains manual-only and has not produced a fresh artifact. The GoReSym `moduledata` fallback is still a guarded design proposal, not implemented or validated against a fresh extraction.
+- PR [#8](https://github.com/meicamghe/ApnaWin/pull/8) remains open and unmerged. Do not merge without explicit approval; do not start Windows packaging until APK reverse engineering is complete.
+- SSH remains on hold. Continue APK/native reverse engineering and non-SSH protocol implementation; do not infer APNA-specific endpoints, credentials or subscription formats.
