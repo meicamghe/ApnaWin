@@ -204,3 +204,11 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - The `build-windows` job was skipped by the reverse-engineering gate.
 - The manual APK extraction workflow now emits `apk-native-inventory.txt` with APK archive hashes and hashes of every embedded ABI shared library. The workflow code was inspected after the edit, but it has not been manually dispatched; artifact generation and the ELF report remain unverified.
 - No new native-library artifact exists and no Go symbol-recovery success is claimed.
+
+
+### VMess import validation — 2026-11-26
+
+- The share-link parser now treats VMess JSON version `2` as the supported format. A missing version defaults to `2` for compatibility; explicit unsupported or empty versions fail closed.
+- Added regression coverage for absent, valid-default and unsupported VMess versions.
+- Implementation, tests and protocol documentation are committed on PR #8. Fresh CI validation is pending; no Windows package was built or requested.
+- The latest completed pre-change PR validation is [run 45799895731](https://github.com/meicamghe/ApnaWin/actions/runs/45799895731): **912 passed, 1 skipped, 1 warning** on head `c3c012e481a9c9231509f134ab316274350622bd`. Windows packaging was skipped by the reverse-engineering gate.
