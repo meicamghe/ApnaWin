@@ -151,6 +151,10 @@ def test_parse_shadowsocks_legacy_base64_whole_payload():
     "trojan://password@vpn.example:443?security=tls&flow=xtls-rprx-vision",
     "vless://user@vpn.example:443?type=tcp&security=tls&path=%2Fignored",
     "vless://user@vpn.example:443?security=none&sni=cdn.example",
+    "vless://user@vpn.example:443?flow=xtls-rprx-vision",
+    "vless://user@vpn.example:443?security=tls&type=ws&flow=xtls-rprx-vision",
+    "vless://user@vpn.example:443?security=tls&flow=vision",
+    "vless://this-is-a-custom-vless-identifier-longer-than-thirty-bytes@vpn.example:443?security=tls",
     "ss://aes-128-cfb:password@vpn.example:443",
     "vmess://not-base64",
 ])
@@ -307,3 +311,23 @@ def test_vmess_rejects_non_string_optional_transport_fields():
             "add": "vpn.example", "port": 443, "id": "user",
             "net": ["ws"], "tls": "tls",
         }))
+
+
+def test_vless_accepts_custom_ids_up_to_30_utf8_bytes():
+    parsed = parse_proxy_link("vless://custom-user-id-1234567890@vpn.example:443?security=tls")
+    assert parsed.to_outbound()["settings"]["id"] == "custom-user-id-1234567890"
+
+
+def test_vless_accepts_vision_udp443_flow_on_tls_tcp():
+    parsed = parse_proxy_link(
+        "vless://user@vpn.example:443?security=tls&type=tcp&flow=xtls-rprx-vision-udp443"
+    )
+    assert parsed.to_outbound()["settings"]["flow"] == "xtls-rprx-vision-udp443"
+
+
+def test_vless_accepts_vision_flow_with_reality_tcp():
+    parsed = parse_proxy_link(
+        "vless://user@vpn.example:443?security=reality&type=tcp"
+        "&sni=cover.example&fp=chrome&pbk=public-key&flow=xtls-rprx-vision"
+    )
+    assert parsed.to_outbound()["settings"]["flow"] == "xtls-rprx-vision"
