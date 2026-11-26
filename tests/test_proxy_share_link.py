@@ -148,6 +148,9 @@ def test_parse_shadowsocks_legacy_base64_whole_payload():
     "vless://user@vpn.example:443?security=reality&type=ws&sni=x&fp=chrome&pbk=key",
     "trojan://password@vpn.example:443?security=none",
     "trojan://password@vpn.example:443?plugin=obfs",
+    "trojan://password@vpn.example:443?security=tls&flow=xtls-rprx-vision",
+    "vless://user@vpn.example:443?type=tcp&security=tls&path=%2Fignored",
+    "vless://user@vpn.example:443?security=none&sni=cdn.example",
     "ss://aes-128-cfb:password@vpn.example:443",
     "vmess://not-base64",
 ])
@@ -165,3 +168,18 @@ def test_credentials_are_not_in_repr():
     parsed = parse_proxy_link("trojan://secret-password@vpn.example:443#node")
     assert "secret-password" not in repr(parsed)
     assert "secret-password" in parsed.to_outbound()["settings"]["password"]
+
+
+def test_vmess_rejects_unknown_fields_instead_of_silently_ignoring_them():
+    with pytest.raises(ValueError, match="unsupported fields"):
+        parse_proxy_link(vmess_link({
+            "add": "vmess.example", "port": 443, "id": "user",
+            "aid": "0", "net": "tcp", "allowInsecure": True,
+        }))
+
+
+def test_vmess_rejects_non_string_host_and_user_id():
+    with pytest.raises(ValueError, match="must be strings"):
+        parse_proxy_link(vmess_link({
+            "add": None, "port": 443, "id": "user", "aid": "0",
+        }))
