@@ -236,7 +236,7 @@ def test_websocket_status_mapping_is_case_and_horizontal_whitespace_insensitive(
 
 @pytest.mark.parametrize(
     "separator",
-    [r"\\r\\n", r"\\n", r"\\r", "[lfcr]"],
+    [r"\r\n", r"\n", r"\r", "[lfcr]"],
 )
 def test_websocket_status_mapping_recognizes_all_renderer_linebreak_tokens(separator):
     lines = [
