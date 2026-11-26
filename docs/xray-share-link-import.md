@@ -51,3 +51,8 @@ This is not a subscription downloader or provider API client. Base64-wrapped sub
 ## Verification
 
 CI run [45795956357](https://github.com/meicamghe/ApnaWin/actions/runs/45795956357) passed 888 tests, with 1 skipped and 1 warning. Windows packaging was skipped by the reverse-engineering gate. The parser still has no UI integration and does not enable Connect.
+
+
+## Strict decoding and JSON types
+
+The parser rejects incomplete/non-hex percent escapes before URL parsing and rejects percent-encoded byte sequences that are not valid UTF-8. This applies to credentials, query values and profile fragments; malformed escapes are never silently preserved or replacement-decoded. VMess textual fields are type-checked as JSON strings rather than coerced with `str()`, preventing arrays, objects and booleans from becoming plausible-looking transport settings.
