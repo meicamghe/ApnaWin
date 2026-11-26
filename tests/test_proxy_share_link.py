@@ -82,6 +82,25 @@ def test_parse_trojan_requires_tls_and_keeps_password_out_of_repr():
     assert outbound["streamSettings"]["tlsSettings"]["serverName"] == "cdn.example"
 
 
+@pytest.mark.parametrize("version", ["1", "3", ""])
+def test_vmess_rejects_unsupported_link_versions(version):
+    with pytest.raises(ValueError, match="Unsupported VMess link version"):
+        parse_proxy_link(vmess_link({
+            "v": version, "add": "vmess.example", "port": "443",
+            "id": "123e4567-e89b-12d3-a456-426614174000", "aid": "0",
+            "net": "tcp",
+        }))
+
+
+def test_vmess_defaults_missing_link_version_to_v2():
+    parsed = parse_proxy_link(vmess_link({
+        "add": "vmess.example", "port": "443",
+        "id": "123e4567-e89b-12d3-a456-426614174000", "aid": "0",
+        "net": "tcp",
+    }))
+    assert parsed.protocol == "vmess"
+
+
 def test_parse_vmess_base64_json_with_tls_and_websocket():
     parsed = parse_proxy_link(vmess_link({
         "v": "2", "ps": "VMess node", "add": "vmess.example",
