@@ -83,7 +83,7 @@ def _port(value: object) -> int:
 
 def _name(fragment: str, fallback: str) -> str:
     value = unquote(fragment).strip() or fallback
-    value = "".join(ch for ch in value if ord(ch) >= 32 and ord(ch) != 127)
+    value = "".join(ch for ch in value if category(ch) != "Cc")
     return (value[:MAX_LABEL_LENGTH] or fallback)
 
 
@@ -332,7 +332,7 @@ def parse_proxy_link(link: str) -> ParsedProxyLink:
         raise TypeError("Share link must be a string")
     if not link or len(link.encode("utf-8")) > MAX_LINK_BYTES:
         raise ValueError("Share link is empty or exceeds the 16 KiB limit")
-    if any(ord(ch) < 32 or ord(ch) == 127 for ch in link):
+    if any(category(ch) == "Cc" for ch in link):
         raise ValueError("Share link contains control characters")
     scheme = link.split(":", 1)[0].lower() if ":" in link else ""
     if scheme == "vmess":
