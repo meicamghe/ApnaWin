@@ -43,6 +43,7 @@ This is not a subscription downloader or provider API client. Base64-wrapped sub
 ## Additional validation
 
 - Server names are checked with the same IP/IDNA hostname validator used by stored profile metadata.
+- Credential and header/path values reject all Unicode control characters, including C1 controls, not only ASCII CR/LF/TAB.
 - TLS/REALITY-only parameters cannot be silently supplied with `security=none`; REALITY requires `sni`, `fp` and `pbk` and is limited to RAW/TCP or gRPC in this first slice.
 - WebSocket and gRPC parameters are accepted only with their matching transport; unsupported gRPC modes are rejected.
 - Legacy Shadowsocks whole-payload Base64 links preserve standard Base64 path characters such as `/`.
