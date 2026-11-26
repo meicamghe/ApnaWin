@@ -16,6 +16,7 @@ The workflow is manual-only. It does not run on pushes or pull requests, does no
 
 - `libudpqtwo.so`: extracted native library.
 - `extraction.txt`: source APK/archive entry, SHA-256 and file identification.
+- `apk-native-inventory.txt`: SHA-256 of each committed APK plus every embedded ABI `.so` entry and its uncompressed-content hash, across all APK splits. This is read-only and does not load or execute native code.
 - `readelf-report.txt`: ELF header, LOAD segments, sections, notes and dynamic section.
 - `elf-structural-report.txt`: file-backed VA mapping for the known pclntab/moduledata candidates, pclntab header words, derived functab range and initial records when readable.
 - `strings.txt` and `go-build-strings.txt`: printable strings and likely Go build metadata strings.
