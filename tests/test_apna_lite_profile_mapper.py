@@ -234,7 +234,7 @@ def test_websocket_status_mapping_is_case_and_horizontal_whitespace_insensitive(
     assert mapped.session_config.payload.expected_http_statuses == (200, 101)
 
 
-@pytest.mark.parametrize("separator", [r"\\r\\n", "[crlf]"])
+@pytest.mark.parametrize("separator", [r"\r\n", "[crlf]"])
 def test_websocket_status_mapping_recognizes_valid_crlf_renderer_tokens(separator):
     lines = [
         "GET / HTTP/1.1",
@@ -251,7 +251,7 @@ def test_websocket_status_mapping_recognizes_valid_crlf_renderer_tokens(separato
     assert mapped.session_config.payload.expected_http_statuses == (200, 101)
 
 
-@pytest.mark.parametrize("separator", [r"\\n", r"\\r", "[lfcr]"])
+@pytest.mark.parametrize("separator", [r"\n", r"\r", "[lfcr]"])
 def test_non_crlf_websocket_like_payload_does_not_admit_http_101(separator):
     lines = [
         "GET / HTTP/1.1",
