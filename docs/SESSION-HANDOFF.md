@@ -219,5 +219,5 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - Added `hysteria2://` and `hy2://` import into Xray's Hysteria v2 outbound schema.
 - Supports optional auth, default port 443, IPv4/IPv6, SNI, TLS ALPN h3 and Salamander UDP obfuscation.
 - TLS verification remains enabled; insecure mode and unsupported options fail closed. Realm URIs, port hopping, ECH and certificate pinning remain unsupported.
-- Added tests for the protocol mapping, alias, IPv6, defaults, Salamander, hidden credentials and rejected options.
+- Added tests for the protocol mapping, alias, IPv6, defaults, Salamander, hidden credentials and rejected options. Auth is emitted in Xray `hysteriaSettings`, not the outbound address settings.
 - See `docs/xray-share-link-import.md` for exact mapping and upstream references. Fresh CI validation is pending.
