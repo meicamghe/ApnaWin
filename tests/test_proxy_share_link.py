@@ -183,3 +183,13 @@ def test_vmess_rejects_non_string_host_and_user_id():
         parse_proxy_link(vmess_link({
             "add": None, "port": 443, "id": "user", "aid": "0",
         }))
+
+
+def test_parse_vless_tcp_reality_uses_raw_transport():
+    parsed = parse_proxy_link(
+        "vless://user@reality.example:443?security=reality&type=tcp"
+        "&sni=cover.example&fp=chrome&pbk=public-key"
+    )
+    stream = parsed.to_outbound()["streamSettings"]
+    assert stream["method"] == "raw"
+    assert stream["realitySettings"]["publicKey"] == "public-key"
