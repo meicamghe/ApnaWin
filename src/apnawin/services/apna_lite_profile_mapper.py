@@ -94,21 +94,9 @@ def _payload_requests_websocket_upgrade(template: str) -> bool:
     requires GET/HTTP/1.1 plus the mandatory Upgrade, Connection, key and
     version headers; keep the mapper's accepted-status policy consistent.
     """
-    normalized = re.sub(
-        r"\[(?:crlf|lfcr|lf|cr)\]",
-        "\n",
-        template,
-        flags=re.IGNORECASE,
-    )
-    # render_apna_payload() also expands literal escaped line-break tokens.
-    # Normalize the same forms here so a valid WebSocket template is not
-    # misclassified as ordinary HTTP and rejected when its proxy returns 101.
-    normalized = (
-        normalized
-        .replace(r"\r\n", "\n")
-        .replace(r"\n", "\n")
-        .replace(r"\r", "\n")
-    )
+    # HTTP/1.1 requires CRLF line endings. Mirror only the renderer's
+    # valid CRLF forms; LF-only and LFCR payloads must not be admitted as WS.
+    normalized = template.replace("[crlf]", "\r\n").replace(r"\r\n", "\r\n")
     lines = normalized.splitlines()
     if not lines:
         return False
