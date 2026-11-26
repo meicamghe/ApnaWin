@@ -323,6 +323,9 @@ def _parse_vmess(link: str) -> ParsedProxyLink:
         raise ValueError("VMess payload must be Base64-encoded UTF-8 JSON") from exc
     if not isinstance(config, dict):
         raise ValueError("VMess payload must be a JSON object")
+    version = config.get("v", "2")
+    if version != "2":
+        raise ValueError(f"Unsupported VMess link version: {version}")
     allowed_fields = {"v", "ps", "add", "port", "id", "aid", "scy", "net", "type", "host", "path", "tls", "sni", "alpn", "fp"}
     if set(config) - allowed_fields:
         raise ValueError("VMess payload contains unsupported fields")
