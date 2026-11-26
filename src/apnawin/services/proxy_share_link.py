@@ -61,6 +61,22 @@ class ParsedProxyLink:
         return outbound
 
 
+def _validate_percent_encoding(value: str) -> None:
+    """Reject incomplete or non-hex percent escapes before urllib can forgive them."""
+    for match in re.finditer("%", value):
+        token = value[match.start() + 1:match.start() + 3]
+        if len(token) != 2 or not re.fullmatch(r"[0-9A-Fa-f]{2}", token):
+            raise ValueError("Share link contains malformed percent encoding")
+
+
+def _strict_unquote(value: str, field_name: str) -> str:
+    _validate_percent_encoding(value)
+    try:
+        return unquote(value, errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{field_name} contains invalid UTF-8 percent encoding") from exc
+
+
 def _bounded(value: str, field_name: str, limit: int = MAX_CREDENTIAL_BYTES) -> str:
     if not value or len(value.encode("utf-8")) > limit:
         raise ValueError(f"{field_name} must contain 1 to {limit} UTF-8 bytes")
@@ -82,7 +98,7 @@ def _port(value: object) -> int:
 
 
 def _name(fragment: str, fallback: str) -> str:
-    value = unquote(fragment).strip() or fallback
+    value = _strict_unquote(fragment, "Profile name").strip() or fallback
     value = "".join(ch for ch in value if category(ch) != "Cc")
     return (value[:MAX_LABEL_LENGTH] or fallback)
 
@@ -99,7 +115,7 @@ def _decode_b64(value: str, field_name: str) -> bytes:
 
 
 def _query(query: str) -> dict[str, str]:
-    pairs = parse_qsl(query, keep_blank_values=True, strict_parsing=True, max_num_fields=32)
+    pairs = parse_qsl(query, keep_blank_values=True, strict_parsing=True, max_num_fields=32, errors="strict")
     result: dict[str, str] = {}
     for key, value in pairs:
         if key in result:
@@ -192,7 +208,7 @@ def _parse_vless(parts) -> ParsedProxyLink:
     if not parts.username or parts.password is not None:
         raise ValueError("VLESS link must contain a user ID and no password field")
     params = _query(parts.query)
-    user_id = _bounded(unquote(parts.username), "VLESS user ID", 128)
+    user_id = _bounded(_strict_unquote(parts.username, "VLESS user ID"), "VLESS user ID", 128)
     server = _bounded(parts.hostname or "", "Server host", 253)
     _validate_endpoint_host(server)
     port = _port(parts.port)
@@ -217,7 +233,7 @@ def _parse_trojan(parts) -> ParsedProxyLink:
     params = _query(parts.query)
     if "flow" in params or "encryption" in params:
         raise ValueError("VLESS-only parameters cannot be used in a Trojan link")
-    password = _bounded(unquote(parts.username), "Trojan password")
+    password = _bounded(_strict_unquote(parts.username, "Trojan password"), "Trojan password")
     server = _bounded(parts.hostname or "", "Server host", 253)
     _validate_endpoint_host(server)
     port = _port(parts.port)
@@ -241,9 +257,9 @@ def _parse_shadowsocks(link: str, parts) -> ParsedProxyLink:
             server = endpoint_parts.hostname or ""
             port = _port(endpoint_parts.port)
         else:
-            userinfo = unquote(parts.username)
+            userinfo = _strict_unquote(parts.username, "Shadowsocks credentials")
             if parts.password is not None:
-                userinfo += ":" + unquote(parts.password)
+                userinfo += ":" + _strict_unquote(parts.password, "Shadowsocks credentials")
             if ":" not in userinfo:
                 userinfo = _decode_b64(userinfo, "Shadowsocks credentials").decode("utf-8")
             if ":" not in userinfo:
@@ -334,6 +350,7 @@ def parse_proxy_link(link: str) -> ParsedProxyLink:
         raise ValueError("Share link is empty or exceeds the 16 KiB limit")
     if any(category(ch) == "Cc" for ch in link):
         raise ValueError("Share link contains control characters")
+    _validate_percent_encoding(link)
     scheme = link.split(":", 1)[0].lower() if ":" in link else ""
     if scheme == "vmess":
         return _parse_vmess(link)
