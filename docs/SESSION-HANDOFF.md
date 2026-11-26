@@ -171,3 +171,11 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - Added regression coverage for custom ID bounds, both Vision flow variants, TLS and REALITY combinations, and invalid flow/transport combinations.
 - Commits: `d46948de0beac1e24cb4d27dc80feba3cd919273`, `d1efb084820bc8adfbb46504dab67d5dbd2baec3`, `6408a07b838f0d4bd1d378bd1adbcccd0db433ec`.
 - Previous full-suite run `45797619263` passed 900 tests on the earlier head `5510736`; these latest parser changes still require a fresh CI run. Windows packaging remains gated off.
+
+
+### VLESS hardening CI result — 2026-11-26
+
+- GitHub Actions run [45798144029](https://github.com/meicamghe/ApnaWin/actions/runs/45798144029) completed successfully on PR #8 head `6db562a7d0363551868c5053abc4f7358ae2c434`.
+- Full Windows-hosted pytest suite: **907 passed, 1 skipped, 1 warning**. The `build-windows` job was skipped by the reverse-engineering gate.
+- This run validates the VLESS custom-ID bounds and Vision-flow compatibility changes. It does not validate live proxy connectivity or UI integration.
+- APK extraction remains manual-only with no fresh artifact; GoReSym symbol recovery remains unverified.
