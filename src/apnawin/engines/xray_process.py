@@ -11,6 +11,7 @@ import ipaddress
 import json
 import math
 import os
+import re
 import socket
 import subprocess
 import time
@@ -18,6 +19,12 @@ from dataclasses import dataclass
 
 
 MAX_XRAY_CONFIG_BYTES = 16 * 1024 * 1024
+
+_REMOTE_PROXY_PROTOCOLS = frozenset({
+    "vless", "vmess", "trojan", "shadowsocks", "socks", "http",
+    "wireguard", "hysteria", "masque",
+})
+_LOCAL_NONLEAKING_PROTOCOLS = frozenset({"blackhole"})
 from pathlib import Path
 
 from apnawin.domain.profile import ConnectionProfile, Transport
@@ -49,6 +56,27 @@ class LocalSocksInbound:
 
     host: str
     port: int
+
+
+def parse_xray_config_bytes(raw_config: bytes) -> dict:
+    """Parse bounded UTF-8 Xray JSON, rejecting duplicate keys and non-finite constants."""
+    if not isinstance(raw_config, bytes):
+        raise TypeError("Xray config must be supplied as bytes")
+    if len(raw_config) > MAX_XRAY_CONFIG_BYTES:
+        raise ValueError("Xray config exceeds the maximum supported size")
+    try:
+        config = json.loads(
+            raw_config.decode("utf-8"),
+            object_pairs_hook=_unique_json_object,
+            parse_constant=_reject_json_constant,
+        )
+    except (UnicodeError, ValueError) as exc:
+        raise ValueError(
+            "Xray config must be valid UTF-8 JSON without duplicate keys or non-finite values"
+        ) from exc
+    if not isinstance(config, dict):
+        raise ValueError("Xray config root must be a JSON object")
+    return config
 
 
 def inspect_local_socks_inbound(config: dict) -> LocalSocksInbound:
@@ -117,8 +145,11 @@ def inspect_tun_inbound(config: dict) -> XrayTunInbound:
     name = settings.get("name")
     if not isinstance(name, str) or not name.strip() or len(name) > 128:
         raise ValueError("Xray TUN name must contain 1 to 128 characters")
-    if name != name.strip() or any(ord(ch) < 32 or 127 <= ord(ch) <= 159 for ch in name):
-        raise ValueError("Xray TUN name must be trimmed printable text")
+    if (
+        name != name.strip()
+        or not re.fullmatch(r"[A-Za-z0-9 _.-]+", name)
+    ):
+        raise ValueError("Xray TUN name must use safe Windows adapter alias characters")
     desc = settings.get("desc", "Wintun")
     if not isinstance(desc, str) or not desc.strip() or len(desc) > 128:
         raise ValueError("Xray TUN desc must contain 1 to 128 characters")
@@ -216,6 +247,20 @@ def inspect_tun_inbound(config: dict) -> XrayTunInbound:
     outbounds = config.get("outbounds")
     if not isinstance(outbounds, list) or not outbounds:
         raise ValueError("Xray TUN config must contain at least one outbound")
+    outbound_protocols: list[str] = []
+    for outbound in outbounds:
+        if not isinstance(outbound, dict) or not isinstance(outbound.get("protocol"), str):
+            raise ValueError("Xray TUN outbounds must be protocol objects")
+        protocol = outbound["protocol"]
+        if protocol not in _REMOTE_PROXY_PROTOCOLS | _LOCAL_NONLEAKING_PROTOCOLS:
+            raise ValueError(
+                "Xray TUN config must not contain direct or unsupported outbound protocols"
+            )
+        outbound_protocols.append(protocol)
+    if outbound_protocols[0] not in _REMOTE_PROXY_PROTOCOLS:
+        raise ValueError(
+            "The first Xray TUN outbound must be a remote proxy, not direct, DNS or blackhole"
+        )
 
     return XrayTunInbound(
         name=name,
@@ -292,18 +337,21 @@ class XrayProcessRunner:
         try:
             with self.config_path.open("rb") as stream:
                 raw_config = stream.read(MAX_XRAY_CONFIG_BYTES + 1)
-            if len(raw_config) > MAX_XRAY_CONFIG_BYTES:
-                raise ValueError("Xray config exceeds the maximum supported size")
-            config = json.loads(
-                raw_config.decode("utf-8"),
-                object_pairs_hook=_unique_json_object,
-                parse_constant=_reject_json_constant,
-            )
-        except (OSError, UnicodeError, ValueError) as exc:
-            raise ValueError("Xray config must be readable UTF-8 JSON within the size limit") from exc
-        if not isinstance(config, dict):
-            raise ValueError("Xray config root must be a JSON object")
-        return config
+        except (OSError, TypeError, UnicodeError) as exc:
+            raise ValueError(
+                "Xray config must be readable UTF-8 JSON within the size limit"
+            ) from exc
+
+        try:
+            return parse_xray_config_bytes(raw_config)
+        except ValueError as exc:
+            # Keep the structural root-type error specific; normalize malformed
+            # JSON, duplicate keys, non-finite constants and size errors.
+            if "root must be a JSON object" in str(exc):
+                raise
+            raise ValueError(
+                "Xray config must be readable UTF-8 JSON within the size limit"
+            ) from exc
 
     def _validate_inputs(self, profile: ConnectionProfile) -> None:
         if not isinstance(profile, ConnectionProfile):

@@ -28,6 +28,8 @@ from apnawin.engines.xray_process import (
 )
 from apnawin.services.windows_tunnel_diagnostics import WindowsTunnelDiagnostics
 from apnawin.storage.xray_config_store import XrayConfigStore
+from apnawin.services.vpn_runtime import verify_vpn_runtime
+from apnawin.services.windows_tunnel_egress import TunnelEgressError, probe_tun_egress
 
 
 _SEE_MASK_NOCLOSEPROCESS = 0x00000040
@@ -349,6 +351,24 @@ def _open_helper_install_root() -> Path:
     return executable.parent
 
 
+def _ensure_tun_adapter_available(inbound, *, diagnostics_factory=WindowsTunnelDiagnostics):
+    """Refuse to let Xray reuse a pre-existing adapter not owned by this session."""
+    snapshot = diagnostics_factory(adapter_name=inbound.name).snapshot()
+    if snapshot.adapter_present:
+        raise ElevatedXrayError(
+            "A Windows adapter already uses the requested TUN name; refusing to reuse it"
+        )
+    return snapshot
+
+
+def _tun_snapshot_matches(snapshot, inbound) -> bool:
+    """Check adapter, dual-stack route and every configured DNS server."""
+    return (
+        snapshot.routing_ready
+        and set(inbound.dns).issubset(set(snapshot.dns_servers))
+    )
+
+
 def _wait_for_tun_network_ready(
     runner,
     inbound,
@@ -377,11 +397,7 @@ def _wait_for_tun_network_ready(
         ):
             raise ValueError(f"{name} must be a positive finite number")
 
-    diagnostics = diagnostics_factory(
-        adapter_name=inbound.name,
-        timeout=min(5.0, float(timeout)),
-    )
-    expected_dns = set(inbound.dns)
+    diagnostics = None
     deadline = monotonic() + float(timeout)
     ready_since = None
     last_error = None
@@ -396,9 +412,16 @@ def _wait_for_tun_network_ready(
                 "Xray exited before its TUN adapter, routes and DNS became ready"
             )
         try:
+            # Defer Windows diagnostics construction until after cancellation,
+            # parent-liveness and Xray-process checks. This avoids touching
+            # network state after the desktop has already exited.
+            if diagnostics is None:
+                diagnostics = diagnostics_factory(
+                    adapter_name=inbound.name,
+                    timeout=min(5.0, float(timeout)),
+                )
             snapshot = diagnostics.snapshot()
-            dns_matches = expected_dns.issubset(set(snapshot.dns_servers))
-            if snapshot.routing_ready and dns_matches:
+            if _tun_snapshot_matches(snapshot, inbound):
                 now = monotonic()
                 if ready_since is None:
                     ready_since = now
@@ -420,6 +443,16 @@ def _wait_for_tun_network_ready(
                 raise error from last_error
             raise error
         sleep(min(float(poll_interval), deadline - now))
+
+
+
+def _tun_egress_is_healthy(probe=probe_tun_egress) -> bool:
+    """Return false when independent TLS egress through the TUN is unavailable."""
+    try:
+        probe()
+    except TunnelEgressError:
+        return False
+    return True
 
 
 def _cleanup_stale_configs(runtime_dir: Path) -> None:
@@ -452,6 +485,7 @@ def elevated_helper_main(argv: list[str] | None = None) -> int:
     temp_config = None
     try:
         install_root = _open_helper_install_root()
+        verify_vpn_runtime(install_root / "engine")
         if not is_windows_elevated():
             return 3
         if not _READY_EVENT_RE.fullmatch(args.ready_event) or not _STOP_EVENT_RE.fullmatch(args.stop_event):
@@ -504,6 +538,7 @@ def elevated_helper_main(argv: list[str] | None = None) -> int:
         )
         # Reject SOCKS-only or incomplete configs on the privileged TUN path.
         tun_inbound = inspect_tun_inbound(runner._read_config())
+        _ensure_tun_adapter_available(tun_inbound)
         runner.start(profile)
         if not runner.is_running:
             return 10
@@ -514,11 +549,19 @@ def elevated_helper_main(argv: list[str] | None = None) -> int:
             parent_handle=parent_handle,
             api=api,
         )
+        # A verified TLS handshake to an independent public endpoint must
+        # traverse the new TUN default route before the helper reports ready.
+        probe_tun_egress()
         if not runner.is_running:
             return 14
         if not api.kernel32.SetEvent(event_handle):
             return 11
 
+        health_diagnostics = WindowsTunnelDiagnostics(adapter_name=tun_inbound.name)
+        next_health_check = time.monotonic() + 2.0
+        next_egress_check = time.monotonic() + 15.0
+        unhealthy_checks = 0
+        unhealthy_egress_checks = 0
         while True:
             stop_result = api.kernel32.WaitForSingleObject(stop_handle, 100)
             if stop_result == _WAIT_OBJECT_0:
@@ -534,6 +577,33 @@ def elevated_helper_main(argv: list[str] | None = None) -> int:
                 exit_code = getattr(process, "returncode", 1)
                 runner.stop()
                 return int(exit_code if exit_code is not None else 1)
+
+            # Keep the session fail-closed if Windows removes/replaces the
+            # adapter, either default route, or any configured DNS server.
+            if time.monotonic() >= next_health_check:
+                next_health_check = time.monotonic() + 2.0
+                try:
+                    healthy = _tun_snapshot_matches(
+                        health_diagnostics.snapshot(), tun_inbound
+                    )
+                except (OSError, RuntimeError, ValueError):
+                    healthy = False
+                unhealthy_checks = 0 if healthy else unhealthy_checks + 1
+                if unhealthy_checks >= 3:
+                    runner.stop()
+                    return 15
+
+            # Route presence alone does not prove that the tunnel still reaches
+            # the public network. Recheck independent TLS egress periodically.
+            if time.monotonic() >= next_egress_check:
+                next_egress_check = time.monotonic() + 15.0
+                egress_healthy = _tun_egress_is_healthy()
+                unhealthy_egress_checks = (
+                    0 if egress_healthy else unhealthy_egress_checks + 1
+                )
+                if unhealthy_egress_checks >= 3:
+                    runner.stop()
+                    return 16
     except (OSError, ValueError, PermissionError, RuntimeError, subprocess.SubprocessError):
         return 20
     finally:

@@ -1,77 +1,56 @@
-# Windows TUN and network-state transaction design
+# Windows TUN and network-state architecture
 
-## Decision status
+## Decision
 
-Wintun is the leading TUN adapter candidate for the Windows 10/11 client, subject to a pinned-binary review, architecture checks, redistribution-license review, clean-machine installation tests and an authorized end-to-end Xray configuration. This document records the implementation boundary; it does not claim that an adapter, route or DNS integration exists today.
+ApnaWin uses Xray-core's native Windows `tun` inbound with the pinned Wintun DLL. It does **not** implement a second Python Wintun packet engine or a separate route/DNS mutation stack. Xray owns packet I/O, adapter configuration, IPv4/IPv6 routes, DNS assignment, physical-interface binding for its own remote-proxy sockets, and WFP leak filters.
 
-The upstream Wintun project describes a Layer-3 TUN driver for Windows 7 through 11. Its documented API creates or opens an adapter, obtains its interface LUID, starts a packet-ring session, and transfers IPv4/IPv6 packets. The upstream site currently lists Wintun 0.14.1 and a SHA-256 for its downloadable archive. The project source is GPL-2.0, while the prebuilt signed DLL archive has a separate, more permissive license included with that archive. ApnaWin must review and retain the exact binary archive license and hash before redistribution; it must not build or redistribute the GPL driver source as if it were covered by the binary license.
+The older `wintun_session.py`, `windows_network_plan.py`, `windows_network_journal.py` and `windows_network_transaction.py` modules are experimental building blocks; they are not in the production connection path. Do not add a second packet forwarder or duplicate route manager unless clean-machine testing proves a specific Xray behavior cannot meet a requirement.
 
-## Proposed ownership boundaries
+## Packaged runtime and privilege boundary
 
-1. **Unprivileged desktop process**: profile selection, status presentation, diagnostics and user consent. It must not directly mutate system routes or DNS.
-2. **Privileged networking helper/service**: narrowly scoped operations for adapter creation/configuration, interface addresses, routes and DNS. It accepts a versioned, strictly validated request and returns structured results. It must not accept arbitrary shell commands or arbitrary executable paths from the UI.
-3. **Tunnel engine process**: owns the Xray process tree using the existing Windows Job Object launcher. It must be ready before traffic is redirected into the TUN interface.
-4. **Transaction journal**: records the exact pre-change state and each successfully applied operation, with bounded, redacted metadata. Secrets and full profile credentials must not be written to the journal.
+- Xray-core v26.11.9 and Wintun 0.14.1 are downloaded from pinned release archives.
+- The build verifies archive SHA-256, PE AMD64 architecture, Xray version and Wintun Authenticode signer, and retains both license notices.
+- A generated runtime manifest records archive and binary hashes. The elevated helper verifies the installed `xray.exe` and `wintun.dll` hashes before launch.
+- The desktop remains medium-integrity. A fixed helper installed under Program Files is launched through UAC `runas`, decrypts only the selected current-user DPAPI config, and supervises Xray in a kill-on-close Job Object.
+- The installer requires the runtime manifest and applies protected Program Files ACLs.
 
-## Connect transaction (fail closed)
+## Strict full-tunnel configuration
 
-1. Validate profile and a fully generated Xray configuration; run Xray's config test.
-2. Verify required privilege/helper availability and the pinned Wintun DLL architecture/hash before changing networking.
-3. Snapshot relevant interface addresses, metrics, routes and DNS settings. Record only the exact state required to restore what this transaction changes.
-4. Create/open the uniquely named Wintun adapter; obtain its LUID; configure addresses and MTU; start the packet session.
-5. Start the Xray process under the existing Job Object and verify its local SOCKS protocol readiness. Local SOCKS readiness alone is not tunnel readiness.
-6. Start the packet-forwarding/data-plane integration and verify bounded, authorized end-to-end traffic through the intended tunnel.
-7. Only after the data plane is confirmed, apply the planned route and DNS changes. Preserve an explicit route to the VPN server through the original physical interface to avoid recursive tunneling.
-8. Verify route selection and DNS behavior using controlled probes. Publish CONNECTED only after all required checks succeed.
+The import path accepts one Xray TUN inbound with:
+- usable IPv4 and IPv6 gateway prefixes and both default routes;
+- one to eight unique DNS server addresses;
+- `autoOutboundsInterface: "auto"`;
+- exactly the required `allexceptlan` and `dns` WFP leak filters;
+- a primary remote-proxy outbound supported by Xray;
+- no direct `freedom`, `loopback`, unsupported or unverified DNS outbound path.
 
-Every operation must be idempotent or have a compensating action. If any step fails, unwind in reverse order using the transaction journal. A failed rollback is a hard ERROR with retained ownership/diagnostics; it must never be reported as DISCONNECTED or CONNECTED until state is reconciled.
+The first outbound is Xray's primary outbound. Rejecting direct outbounds prevents a config from presenting a full-tunnel UI while sending traffic straight to the physical network. Xray's own `run -test -c` is executed again by the elevated helper before startup.
 
-## Disconnect and crash recovery
+## Startup readiness gate
 
-1. Stop admitting new packet work and stop forwarding.
-2. Restore DNS and routes from the transaction's captured pre-change values, not guessed defaults.
-3. Confirm route and DNS restoration before removing the adapter.
-4. End the Wintun session, close the adapter handle and remove only the adapter created/owned by this transaction.
-5. Stop the Xray process tree and confirm Job Object active-process count is zero.
-6. Mark DISCONNECTED only after all owned resources are confirmed released. On partial failure, retain the journal and helper/service ownership so cleanup can be retried.
+1. Verify the helper's protected install path and runtime hashes.
+2. Decrypt and validate the selected Xray config; run Xray's config test.
+3. Refuse to reuse a pre-existing adapter with the requested TUN alias.
+4. Start Xray and wait for the named adapter to become Up.
+5. Verify the best effective IPv4 and IPv6 default routes (combined route and interface metrics) select only the TUN interface; a tie with another interface fails closed.
+6. Verify every DNS server declared by the TUN config is assigned to the TUN interface, and require those conditions to remain stable.
+7. Require a certificate-validated TLS handshake to at least one independent public endpoint by fixed IP, initiated by the helper so the connection exercises the system TUN route and WFP policy.
+8. Only then signal helper readiness. While active, recheck adapter, effective routes and DNS every two seconds; three consecutive unhealthy samples trigger graceful Xray shutdown.
 
-A service restart or desktop crash must not erase an active transaction record. Startup recovery must reconcile recorded adapter, route and DNS state before allowing another connection attempt. Never delete unrelated user routes or pre-existing adapters.
+The TLS probe is a basic IPv4 data-plane smoke test. It does not prove APNA-specific traffic, IPv6 egress, or every possible leak path.
 
-## Wintun API lifecycle requirements
+## Disconnect and recovery
 
-- Resolve the documented DLL exports dynamically and reject missing/unknown exports before system changes.
-- Verify the DLL's PE machine type matches the packaged process architecture and verify its pinned SHA-256.
-- Use a unique, stable vendor pool/name policy; do not use generic names that collide with other VPN clients.
-- Keep adapter/session handles owned by one lifecycle object; close them in reverse acquisition order.
-- For received packets, always release each packet buffer after processing, including exceptions.
-- Treat ring exhaustion as backpressure/drop telemetry, not as a reason to allocate unbounded memory.
-- Wait on the Wintun read event when no packet is available; use cancellable waits so shutdown is bounded.
-- Do not call the API from UI callbacks or block the GUI thread on packet I/O.
+A normal disconnect signals the helper, which asks Xray to stop gracefully so Xray's own TUN cleanup can restore interface, route, DNS and WFP state. If the helper misses its readiness deadline, the parent requests the same graceful stop and uses forced termination only as a bounded fallback. The Job Object kills Xray if the helper process exits.
 
-## Windows route and DNS requirements
+Forced termination bypasses Xray's Go cleanup path. Route/address/DNS and adapter state after helper crash, forced process termination, desktop crash or reboot are not assumed to be clean; they require native Windows acceptance tests. Do not claim successful recovery until the before/after network snapshots prove it.
 
-- Prefer documented Windows IP Helper APIs for route/interface inspection and mutation over parsing localized command output.
-- Capture route keys and metrics precisely enough to restore only entries changed by ApnaWin.
-- Keep the VPN server endpoint reachable through the physical interface; prevent default-route recursion.
-- Treat IPv4 and IPv6 separately. Do not claim IPv6 leak protection unless IPv6 routes and DNS are covered and tested.
-- DNS changes must be interface-scoped, reversible and verified with both positive and negative resolution tests. If the chosen supported Windows API cannot preserve the prior state exactly, do not apply the change.
-- Use explicit privilege boundaries and least privilege. The helper must validate all addresses, prefixes, interface identifiers, route metrics and operation counts.
+## Remaining release gates
 
-## Test gates before enabling Connect
+- The desktop Connect/Disconnect UI is already wired to `XrayTunnelSupervisor`; Connect is enabled only when the protected helper and an encrypted imported XRAY TUN profile are available. This is a local-readiness gate, not APNA-provider or leak-safety acceptance.
+- Test on clean Windows 10 and Windows 11 x64 systems with the actual packaged Wintun runtime.
+- Verify DNS query behavior and DNS leak paths, IPv4/IPv6 leak behavior, WFP policy under route changes, and provider-specific application traffic.
+- Verify graceful disconnect, helper crash, desktop crash, forced Xray termination, sleep/resume and reboot recovery; no stale routes, DNS settings or ApnaWin-owned adapters may remain.
+- Obtain and validate an authorized APNA configuration/catalog/authentication source. No APNA endpoint, credentials or API schema is inferred by this project.
 
-- Unit tests for every transaction transition, compensation action and failure point.
-- Windows integration tests on clean Windows 10 and Windows 11 x64 VMs.
-- Tests for pre-existing routes/DNS, multiple adapters, IPv4-only, dual-stack, sleep/resume, interface changes, helper crash and desktop crash.
-- Confirm no route/DNS residue after normal disconnect, failed connect, forced process termination and reboot recovery.
-- Verify traffic to the authorized test server, DNS behavior, endpoint route pinning and absence of unintended cleartext fallback.
-- Confirm exact Wintun binary version, hash, signature and included redistribution license in the release manifest.
-
-## Current limitations
-
-The repository does not yet contain the Wintun DLL, privileged helper/service, packet-forwarding integration, route/DNS transaction manager or an authorized APNA-compatible Xray configuration. The existing Xray runner and SOCKS probes are building blocks only. Connect remains disabled.
-
-## References
-
-- Wintun official project and usage/API documentation: https://www.wintun.net/
-- Wintun upstream API reference mirror: https://github.com/WireGuard/wintun
-- Microsoft Windows IP Helper API overview: https://learn.microsoft.com/windows/win32/iphlp/ip-helper-start-page
+**Connection readiness is implemented, but release acceptance is incomplete.** The Windows UI can start the helper when its installation and encrypted XRAY TUN profile prerequisites are met. A successful readiness event verifies local adapter/routes/DNS plus an IPv4 TLS egress smoke test; it does not prove APNA-specific traffic, IPv6 egress, DNS/IPv4/IPv6 leak resistance, or forced-termination/reboot recovery. Do not label the build leak-free or APNA-compatible until those native Windows acceptance tests pass.
