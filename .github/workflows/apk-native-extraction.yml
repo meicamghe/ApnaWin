@@ -112,7 +112,7 @@ jobs:
           emit("ELF64 little-endian structural inspection")
           emit(f"File size: {len(data):#x} ({len(data)} bytes)")
           emit(f"SHA256: {hashlib.sha256(data).hexdigest()}")
-          if data[:4] != b"\\x7fELF" or data[4] != 2 or data[5] != 1:
+          if data[:4] != b"\x7fELF" or data[4] != 2 or data[5] != 1:
               raise SystemExit("Expected ELF64 little-endian input")
           eh = struct.unpack_from("<HHIQQQIHHHHHH", data, 16)
           e_type, e_machine, _, e_entry, e_phoff, e_shoff, _, e_ehsize, e_phentsize, e_phnum, e_shentsize, e_shnum, e_shstrndx = eh
@@ -155,7 +155,7 @@ jobs:
                       emit(f"  [{i}] entryoff={entryoff:#x} funcoff={funcoff:#x}")
           else:
               emit("Candidate pclntab header is not fully file-backed.")
-          pathlib.Path("analysis/elf-structural-report.txt").write_text("\\n".join(out) + "\\n")
+          pathlib.Path("analysis/elf-structural-report.txt").write_text("\n".join(out) + "\n")
           PY
 
           strings -a -n 8 "analysis/$LIBRARY_NAME" > analysis/strings.txt
