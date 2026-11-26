@@ -45,9 +45,10 @@ jobs:
           matches=()
           for apk in "${apks[@]}"; do
             while IFS= read -r entry; do
-              [[ -n "$entry" ]] && matches+=("$apk|$entry")
-            done < <(unzip -Z1 "$apk" | grep -E "(^|/)${LIBRARY_NAME//./\.}$" || true)
-          done
+              if [[ "${entry##*/}" == "$LIBRARY_NAME" ]]; then
+                matches+=("$apk|$entry")
+              fi
+            done < <(unzip -Z1 "$apk")
 
           if (( ${#matches[@]} == 0 )); then
             echo "Library $LIBRARY_NAME was not found in the committed APK files." >&2
