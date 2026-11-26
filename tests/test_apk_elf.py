@@ -65,6 +65,85 @@ def _elf32_with_jni_exports():
     return header + dynstr + dynsym + shstr + bytes(section_offset - shstr_offset - len(shstr)) + b"".join(sections)
 
 
+def _elf_with_interpreter(payload, elf_class, *, entry_point=0x1000, interpreter=b"/system/bin/linker\\x00"):
+    data = bytearray(payload)
+    if elf_class == 64:
+        phoff = (len(data) + 7) & ~7
+        data.extend(bytes(phoff - len(data)))
+        interp_offset = phoff + 56
+        data.extend(struct.pack(
+            "<IIQQQQQQ", 3, 4, interp_offset, 0, 0,
+            len(interpreter), len(interpreter), 1,
+        ))
+        struct.pack_into("<Q", data, 24, entry_point)
+        struct.pack_into("<Q", data, 32, phoff)
+        struct.pack_into("<H", data, 54, 56)
+        struct.pack_into("<H", data, 56, 1)
+    else:
+        phoff = (len(data) + 3) & ~3
+        data.extend(bytes(phoff - len(data)))
+        interp_offset = phoff + 32
+        data.extend(struct.pack(
+            "<IIIIIIII", 3, interp_offset, 0, 0,
+            len(interpreter), len(interpreter), 4, 1,
+        ))
+        struct.pack_into("<I", data, 24, entry_point)
+        struct.pack_into("<I", data, 28, phoff)
+        struct.pack_into("<H", data, 42, 32)
+        struct.pack_into("<H", data, 44, 1)
+    data.extend(interpreter)
+    return bytes(data)
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_classifies_pie_executable_candidate(payload, elf_class):
+    result = inspect_elf_bytes(_elf_with_interpreter(payload, elf_class))
+    assert result["entry_point"] == 0x1000
+    assert result["interpreter_present"] is True
+    assert result["execution_model"] == "pie_executable_candidate"
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_classifies_shared_object_candidate_without_entrypoint(payload, elf_class):
+    result = inspect_elf_bytes(payload)
+    assert result["entry_point"] == 0
+    assert result["interpreter_present"] is False
+    assert result["execution_model"] == "shared_object_candidate"
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_rejects_malformed_interpreter_path(payload, elf_class):
+    data = bytearray(_elf_with_interpreter(payload, elf_class))
+    data[-1] = ord("X")
+    with pytest.raises(ValueError, match="interpreter path is malformed"):
+        inspect_elf_bytes(bytes(data))
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_rejects_multiple_interpreter_segments(payload, elf_class):
+    data = bytearray(_elf_with_interpreter(payload, elf_class))
+    if elf_class == 64:
+        phoff = struct.unpack_from("<Q", data, 32)[0]
+        struct.pack_into("<I", data, phoff + 56, 3)
+    else:
+        phoff = struct.unpack_from("<I", data, 28)[0]
+        struct.pack_into("<I", data, phoff + 32, 3)
+    with pytest.raises(ValueError, match="multiple interpreter segments"):
+        inspect_elf_bytes(bytes(data))
+
+
 @pytest.mark.parametrize(
     ("payload", "elf_class", "section_offset_field", "section_entry_size", "size_field", "entry_size"),
     [
