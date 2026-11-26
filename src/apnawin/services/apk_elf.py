@@ -535,7 +535,7 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             interpreter = data[file_offset:file_offset + file_size]
             if (
                 interpreter[-1] != 0
-                or b"\\x00" in interpreter[:-1]
+                or b"\x00" in interpreter[:-1]
                 or not interpreter[:-1].startswith(b"/")
             ):
                 raise ValueError("ELF interpreter path is malformed")
