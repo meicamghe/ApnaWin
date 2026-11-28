@@ -92,17 +92,20 @@
 
 ## CLI، نقطه‌های ورود و بارگذاری پیکربندی
 
-نام توابع بازیابی‌شده از pclntab مسیرهای مشخص زیر را آشکار می‌کند:
+نام توابع بازیابی‌شده از pclntab مسیرهای مشخص زیر را آشکار می‌کند. چون `textStart` در این PIE صفر است، ستون «PC offset» مقدار خام جدول Go و ستون «VA» آدرس واقعی پس از افزودن Go text base معتبر `0x386120` است:
 
-- `main.main` در VA `0xb325d0`
-- `main.executeRun` در VA `0xb32c40`
-- `main.getConfigFilePath` در VA `0xb33300`
-- `main.startXray` در VA `0xb33910`
-- `main.executeVersion` در VA `0xb33b50`
-- `main.readConfDir` در VA `0xb33060`
-- `main.dumpConfig` در VA `0xb32ec0`
-- `main/confloader.LoadConfig` در VA `0x2d1820`
-- `common/platform.GetConfigurationPath` و `GetConfDirPath`
+| تابع | PC offset | VA |
+|---|---:|---:|
+| `main.main` | `0xb325d0` | `0xeb86f0` |
+| `main.executeRun` | `0xb32c40` | `0xeb8d60` |
+| `main.dumpConfig` | `0xb32ec0` | `0xeb8fe0` |
+| `main.readConfDir` | `0xb33060` | `0xeb9180` |
+| `main.getConfigFilePath` | `0xb33300` | `0xeb9420` |
+| `main.startXray` | `0xb33910` | `0xeb9a30` |
+| `main.executeVersion` | `0xb33b50` | `0xeb9c70` |
+| `main/confloader.LoadConfig` | `0x2d1820` | `0x657940` |
+| `common/platform.GetConfigurationPath` | `0x294f00` | `0x61b020` |
+| `common/platform.GetConfDirPath` | `0x294f90` | `0x61b0b0` |
 
 رشته‌های CLI در باینری این موارد را ثبت می‌کنند:
 - `run [-c config.json] [-confdir dir]`
@@ -120,11 +123,12 @@
 
 بخش `.gopclntab` در این فایل حفظ شده است. header شامل 39,856 تابع و 2,574 فایل است. بررسی آفلاین با قواعد فرمت Go 1.18+ توانست **39,856 رکورد تابع** را بازیابی کند.
 
-این بررسی روی باینری واقعی دو فرض نادرست parser قبلی را آشکار کرد:
+این بررسی روی باینری واقعی سه الزام parser را آشکار کرد:
 1. `funcOff` در functab نسبت به ابتدای `pcln` table است، نه ابتدای فایل ELF یا ابتدای pclntab.
-2. در این PIE مقدار header field مربوط به `textStart` صفر است؛ برای اعتبارسنجی entry PC باید base متن از یک `.text` اجرایی یکتا در section table حل شود.
+2. در این PIE مقدار header field مربوط به `textStart` صفر است. ابتدای ELF section به نام `.text` برابر `0x3860a0` است، اما این بخش شامل stub بومی `_start` است؛ Go text از `0x386120` آغاز می‌شود.
+3. برای جلوگیری از جابه‌جایی PCها، مبنای متن در حالت صفر بودن `textStart` باید از یک نماد تابع ELF با نام و اندازهٔ منطبق با رکورد pclntab استخراج شود. در این فایل نماد `main.main` در `0xeb86f0` با اندازه 416 بایت این anchor را فراهم می‌کند. در نبود anchor یکتا، parser باید fail-closed کند و از ابتدای `.text` حدس نزند.
 
-ابزار `tools/recover_go_pclntab.py` و fixtureهای تست در همین branch برای این دو حالت اصلاح شده‌اند. یک استخراج‌گر مستقل آفلاین با همین قواعد روی فایل واقعی 39,856 رکورد را با نام تابع بازیابی کرد؛ خود CLI ابزار branch و مجموعه pytest پس از اصلاحات هنوز اجرا نشده‌اند و نباید pass اعلام شوند.
+ابزار `tools/recover_go_pclntab.py` اکنون این anchor را از `SHT_SYMTAB/SHT_DYNSYM` می‌خواند؛ fixtureها نیز حالت وجود و نبود anchor را پوشش می‌دهند. یک استخراج‌گر مستقل آفلاین روی فایل واقعی 39,856 رکورد را بازیابی کرد؛ نسخه جدید parser و مجموعه pytest هنوز اجرا نشده‌اند و نباید pass اعلام شوند.
 
 ## نتیجه برای مهندسی معکوس ApnaWin
 
