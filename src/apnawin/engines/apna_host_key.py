@@ -9,12 +9,16 @@ import paramiko
 
 from apnawin.engines.apna_ssh_diagnostics import ApnaDiagnosticTransport, cipher_diagnostic_suffix
 
-from apnawin.engines.apna_payload_socket import ApnaPayloadSocketConnector
+from apnawin.engines.apna_payload_socket import ApnaPayloadSocketConnector, PayloadTransportError
 from apnawin.engines.apna_tunnel_session import ApnaTunnelSessionConfig
 
 
 class ApnaHostKeyProbeError(RuntimeError):
-    """The selected APNA endpoint did not complete an SSH key exchange."""
+    """A host-key probe failed; ``stage`` identifies transport vs SSH failure."""
+
+    def __init__(self, message: str, *, stage: str = "ssh_key_exchange") -> None:
+        super().__init__(message)
+        self.stage = stage
 
 
 def scan_apna_ssh_host_key(
@@ -44,8 +48,17 @@ def scan_apna_ssh_host_key(
         fingerprint = base64.b64encode(digest).decode("ascii").rstrip("=")
         return f"SHA256:{fingerprint}"
     except Exception as exc:
-        detail = " ".join(str(exc).split())[:240]
-        if isinstance(exc, paramiko.SSHException) and "no acceptable ciphers" in detail.lower():
+        raw_detail = " ".join(str(exc).split())
+        # PayloadTransportError already contains bounded, redacted diagnostics
+        # (HTTP status, safe response headers, request route, Host and SNI).
+        # Preserve enough of it for CloudFront/DNS/TLS triage; other exception
+        # text remains tightly capped because it may contain provider data.
+        detail = raw_detail[:1600] if isinstance(exc, PayloadTransportError) else raw_detail[:240]
+        stage = "ssh_key_exchange"
+        if isinstance(exc, PayloadTransportError):
+            stage = "payload_transport"
+            message = f"Payload transport failed before SSH key exchange: {detail}"
+        elif isinstance(exc, paramiko.SSHException) and "no acceptable ciphers" in detail.lower():
             message = (
                 "SSH key exchange found no mutually supported encryption cipher. "
                 "The endpoint sent SSH negotiation data, but its offered ciphers do not "
@@ -56,7 +69,7 @@ def scan_apna_ssh_host_key(
             )
         else:
             message = f"SSH host-key exchange failed: {type(exc).__name__}: {detail}"
-        raise ApnaHostKeyProbeError(message) from exc
+        raise ApnaHostKeyProbeError(message, stage=stage) from exc
     finally:
         try:
             if transport is not None:
