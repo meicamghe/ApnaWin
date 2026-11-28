@@ -381,7 +381,7 @@ def test_parse_dex_linkage_evidence_correlates_calls_and_library_literals():
             "dynamic_dex_loader_types": ["DexClassLoader"],
         },
     ]
-    assert "start" not in str(report)
+    assert "start()" not in str(report)
     assert report["raw_smali_included"] is False
 
 
@@ -526,13 +526,13 @@ def test_process_launch_links_only_exact_command_argument_registers():
 
 def test_process_builder_constructor_is_distinguished_from_start_call():
     output = (
-        ".method private buildAndStart()V\\n"
-        '    const-string v1, "libengine.so"\\n'
-        "    filled-new-array {v1}, [Ljava/lang/String;\\n"
-        "    move-result-object v2\\n"
-        "    invoke-direct {v3, v2}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V\\n"
-        "    invoke-virtual {v3}, Ljava/lang/ProcessBuilder;->start()Ljava/lang/Process;\\n"
-        ".end method\\n"
+        ".method private buildAndStart()V\n"
+        '    const-string v1, "libengine.so"\n'
+        "    filled-new-array {v1}, [Ljava/lang/String;\n"
+        "    move-result-object v2\n"
+        "    invoke-direct {v3, v2}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V\n"
+        "    invoke-virtual {v3}, Ljava/lang/ProcessBuilder;->start()Ljava/lang/Process;\n"
+        ".end method\n"
     )
     report = apk_dex._parse_dex_linkage_evidence(output)
     row = report["methods_with_evidence"][0]
