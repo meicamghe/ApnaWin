@@ -525,7 +525,14 @@ to the same CLI invocation. The tool aggregates service/class and native
 loader/process-launch references across the split set:
 
 ```powershell
-py -3 tools/inspect_apk_dex.py .\APNA-APKs\base.apk .\APNA-APKs\split_config.arm64_v8a.apk .\APNA-APKs\split_config.xxhdpi.apk --output .\analysis\dex-linkage.json
+py -3 tools/inspect_apk_dex.py `
+  .\APNA-APKs\base.apk `
+  .\APNA-APKs\split_config.arm64_v8a.apk `
+  .\APNA-APKs\split_config.de.apk `
+  .\APNA-APKs\split_config.en.apk `
+  .\APNA-APKs\split_config.fa.apk `
+  .\APNA-APKs\split_config.xxhdpi.apk `
+  --output .\analysis\dex-linkage.json
 ```
 
 Use the actual APK filenames present in the sample; do not omit feature or
