@@ -56,7 +56,7 @@ def _fixture_with_zero_text_start(*, include_symbol: bool = True) -> bytes:
         "<IIQQQQIIQQ", data, 0x1600 + 64,
         1, 1, 0x6, 0x3000, 0x1200, 0x400, 0, 0, 16, 0,
     )
-    shstr = b"\\0.text\\0.shstrtab\\0.dynsym\\0.dynstr\\0"
+    shstr = b"\0.text\0.shstrtab\0.dynsym\0.dynstr\0"
     data[0x1740:0x1740 + len(shstr)] = shstr
     struct.pack_into(
         "<IIQQQQIIQQ", data, 0x1600 + 128,
@@ -68,11 +68,11 @@ def _fixture_with_zero_text_start(*, include_symbol: bool = True) -> bytes:
     )
     struct.pack_into(
         "<IIQQQQIIQQ", data, 0x1600 + 256,
-        25, 3, 0, 0, 0x1798, 10, 0, 0, 1, 0,
+        25, 3, 0, 0, 0x1798, 11, 0, 0, 1, 0,
     )
     # One null symbol followed by global FUNC main.main at VA 0x3010, size 16.
     struct.pack_into("<IBBHQQ", data, 0x1780, 1, 0x12, 0, 1, 0x3010, 16)
-    data[0x1798:0x17A2] = b"\\0main.main\\0"
+    data[0x1798:0x1798 + 11] = b"\0main.main\0"
     return bytes(data)
 
 
