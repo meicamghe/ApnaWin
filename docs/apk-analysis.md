@@ -542,3 +542,17 @@ Use the actual APK filenames present in the sample; do not omit feature or
 ABI splits. With one APK the CLI emits the single-APK DEX report; with multiple
 inputs it emits the cross-split report. This command still requires local
 `apkanalyzer` and performs no Android-device or product-build operation.
+
+
+## Dynamic secondary-DEX loader callsites
+
+The bounded DEX linkage scan also counts constructor callsites for
+`DexClassLoader`, `PathClassLoader`, and `InMemoryDexClassLoader`.
+For the first two, when the first String path argument is a direct literal
+in the exact constructor argument register, the report retains only its
+allowlisted file extension (`.dex`, `.apk`, or `.jar`); it never emits
+the path or arbitrary string. `InMemoryDexClassLoader` is counted but its
+ByteBuffer contents are not inspected. Register ranges, aliases, computed
+paths, reflection, encrypted/protected DEX, and dynamically generated
+buffers remain unresolved. A loader callsite or extension is not proof that
+the secondary code is decrypted, loaded successfully, or executed.
