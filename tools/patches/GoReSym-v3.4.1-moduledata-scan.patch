@@ -67,7 +67,7 @@ diff --git a/objfile/elf_moduledata_scan_test.go b/objfile/elf_moduledata_scan_t
 new file mode 100644
 --- /dev/null
 +++ b/objfile/elf_moduledata_scan_test.go
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,44 @@
 +package objfile
 +
 +import "testing"
@@ -110,4 +110,5 @@ new file mode 100644
 +	if got != -1 {
 +		t.Fatalf("got offset %d, want -1", got)
 +	}
++}
 +
