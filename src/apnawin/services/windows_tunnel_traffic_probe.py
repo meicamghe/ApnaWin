@@ -99,7 +99,11 @@ class WindowsTunnelTrafficProbe:
 
         failures = []
         for address in addresses:
-            route_index = self._route_interface(address)
+            try:
+                route_index = self._route_interface(address)
+            except RuntimeError as exc:
+                failures.append(f"{address}: {type(exc).__name__}")
+                continue
             if route_index != snapshot.interface_index:
                 failures.append(f"{address} selects interface {route_index}, not ApnaWin")
                 continue
@@ -107,7 +111,10 @@ class WindowsTunnelTrafficProbe:
                 raw = self._connector((address, 443), timeout=self.timeout)
                 with raw:
                     context = ssl.create_default_context()
+                    context.set_alpn_protocols(["http/1.1"])
                     with context.wrap_socket(raw, server_hostname=self.host) as secure:
+                        if secure.selected_alpn_protocol() not in (None, "http/1.1"):
+                            raise RuntimeError("Traffic probe negotiated an unsupported HTTP protocol")
                         request = (
                             f"GET {self.path} HTTP/1.1\r\n"
                             f"Host: {self.host}\r\n"
