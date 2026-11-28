@@ -52,7 +52,7 @@ def _fixture_with_zero_text_start() -> bytes:
         "<IIQQQQIIQQ", data, 0x1600 + 64,
         1, 1, 0x6, 0x3000, 0x1200, 0x400, 0, 0, 16, 0,
     )
-    shstr = b"\\0.text\\0.shstrtab\\0"
+    shstr = b"\0.text\0.shstrtab\0"
     data[0x1700:0x1700 + len(shstr)] = shstr
     struct.pack_into(
         "<IIQQQQIIQQ", data, 0x1600 + 128,
