@@ -397,7 +397,7 @@ def _select_linkage_scan_targets(
     })
     protector_targets = sorted({
         name for name in candidates
-        if re.search(r"(?:^|\\.)liapp(?:\\.|$)", name, re.IGNORECASE)
+        if re.search(r"(?:^|\.)liapp(?:\.|$)", name, re.IGNORECASE)
     })
     candidate_targets = sorted(
         set(candidates) - set(service_targets) - set(protector_targets)
