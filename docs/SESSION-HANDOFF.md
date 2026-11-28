@@ -248,3 +248,11 @@ The static binary usage text confirms that `libtun2socks.so` accepts `--tunfd`/`
 - This does not prove that the separate embedded filename libliapp.so is loaded; it is not a DT_NEEDED dependency in libbxdtcxfzx.so.
 - assets/.bxdtcxfzx.dex contains only one malformed/obfuscated Activity subclass and a one-instruction return-void method; it is a stub/placeholder, not evidence of a full second LIAPP implementation.
 - Detailed exact offsets and caveats added to docs/reverse-engineering/base-apk-library-analysis-2026-11-28.md.
+
+### DEX literal-table cross-check — 2026-11-28
+
+- Scanned string-ID tables in all four DEX containers embedded in the Library-backed base APK. No literal `janur.json`/`janur` reference was found; the asset consumer is still unknown. It may be accessed through constructed paths or generic asset enumeration, so do not conclude it is unused.
+- DEX string/type tables contain descriptors for `SalamanderService`, `XRayDNSService`, and `TunnelVpnService`, but their class definitions remain absent from the primary DEX.
+- No DEX string-ID contains `libudpqtwo`, `libsalamander`, or `libxray`; no base-APK DEX linkage to those library names is proven.
+- LIAPP asset/ZIP/ClassLoader callsite mapping and a validated disassembly of `com.liapp.k` remain active. The current lightweight decoder cannot support a precise decoder-algorithm claim.
+- The required ABI split and `libudpqtwo.so`/`libsalamander.so` are still not present as materialized Library files; native service mapping remains blocked. No CI, Windows build, SSH changes, or merge.
