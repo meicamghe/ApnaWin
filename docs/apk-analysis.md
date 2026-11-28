@@ -459,12 +459,21 @@ service. Common transport words such as UDP/TCP/TLS are deliberately weaker
 evidence than protocol-specific fingerprints.
 
 
-The split-set DEX report also builds two explicit native-linkage indexes:
-`native_library_literal_references` records exact `lib*.so` literals
-found in a method together with its class, APK split, method ordinal and
-process/loader call kinds. `system_load_library_references` records the
-exact string register passed to `System.loadLibrary`; its conventional
-`lib{name}.so` mapping is labeled as an API naming convention, not as a
-separately observed filename. These indexes make it possible to compare DEX
-references with the all-ABI native inventory without conflating process
-launches, JNI loading and mere string presence.
+The split-set DEX report builds explicit native-linkage indexes:
+`native_library_literal_references` records safe `lib*.so` literals found
+within a method, while `system_load_library_references` records the exact
+string register passed to `System.loadLibrary`. Its conventional
+`lib{name}.so` mapping is labeled as an Android API naming convention, not
+as a separately observed filename.
+
+The report also distinguishes exact argument-register correlations:
+`system_load_path_references` links a basename to the path argument of
+`System.load`; `runtime_exec_library_references` links a basename to the
+command argument of `Runtime.exec`; and
+`process_builder_library_references` links a basename to the first command
+argument of a `ProcessBuilder` constructor. Receiver registers are excluded
+for instance calls. These indexes are emitted only when a bounded direct
+string-register argument is observed; constructed arrays, aliases, values
+loaded from files, reflection, and obfuscated/protected code may remain
+unresolved. A callsite proves static argument linkage only, not that the
+method runs, the child starts, the library loads, or traffic uses it.
