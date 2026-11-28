@@ -190,7 +190,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
         r'\{([^}]*)\},\s*Ljava/lang/ProcessBuilder;-><init>\(([^)]*)\)'
     )
     string_array_registers = re.compile(
-        r'filled-new-array(?:/range)?\s+\{([^}]*)\},\s*\[Ljava/lang/String;'
+        r'filled-new-array\s+\{([^}]*)\},\s*\[Ljava/lang/String;'
     )
     move_result_object = re.compile(r'move-result-object\s+(v[0-9]+|p[0-9]+)')
     destination_register = re.compile(r'^\s+[a-z][a-z0-9/-]*\s+(v[0-9]+|p[0-9]+)\s*,')
