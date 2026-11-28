@@ -8,6 +8,7 @@ from typing import Callable
 
 from apnawin.domain.profile import ConnectionProfile, Transport
 from apnawin.domain.state import ConnectionState
+from apnawin.engines.apna_payload_socket import PayloadTransportError
 from apnawin.engines.apna_tunnel_session import (
     ApnaTunnelSession,
     ApnaTunnelSessionConfig,
@@ -228,6 +229,8 @@ class ApnaTunnelEngine:
             self.last_error = f"{type(exc).__name__}: {exc}"
             if self._state is ConnectionState.DISCONNECTED:
                 self._profile = None
+            if isinstance(exc, PayloadTransportError) and not cleanup_errors:
+                raise
             if cleanup_errors:
                 raise ApnaTunnelEngineError(
                     f"APNA tunnel startup failed: {exc}; cleanup also failed: "
