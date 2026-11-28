@@ -22,7 +22,13 @@ from apnawin.engines.websocket_stream import WebSocketStreamSocket
 
 
 class PayloadTransportError(ConnectionError):
-    """The payload transport could not establish a usable SSH byte stream."""
+    """The lower transport failed; stage identifies DNS, TCP, TLS or HTTP."""
+
+    def __init__(self, message: str, *, stage: str = "http_proxy") -> None:
+        super().__init__(message)
+        if stage not in {"dns", "tcp", "tls", "http_proxy", "websocket", "transport"}:
+            raise ValueError("invalid payload transport failure stage")
+        self.stage = stage
 
 
 def _redacted_request_summary(config: "PayloadSocketConfig", chunks: tuple) -> str:
@@ -490,7 +496,8 @@ class ApnaPayloadSocketConnector:
                     except (OSError, ssl.SSLError) as exc:
                         raise PayloadTransportError(
                             "Configured provider CA bundle could not be loaded; verify that "
-                            "the file exists, is readable, and was obtained from a trusted provider source"
+                            "the file exists, is readable, and was obtained from a trusted provider source",
+                            stage="tls",
                         ) from exc
                 active_socket = tls_context.wrap_socket(
                     raw_socket,
@@ -553,14 +560,18 @@ class ApnaPayloadSocketConnector:
                 if config.mode is PayloadSocketMode.TLS_HTTP_PROXY
                 else config.target_host
             )
+            failure_stage = "transport"
             if isinstance(exc, socket.gaierror):
+                failure_stage = "dns"
                 diagnosis = (
                     "DNS resolution failed before TCP connection; check the system resolver "
                     "and whether this endpoint hostname is currently resolvable"
                 )
             elif isinstance(exc, ssl.SSLCertVerificationError):
+                failure_stage = "tls"
                 diagnosis = _tls_certificate_diagnosis(exc)
             elif isinstance(exc, ssl.SSLError):
+                failure_stage = "tls"
                 tls_reason = str(exc).lower()
                 if "hostname mismatch" in tls_reason or "hostname" in tls_reason:
                     diagnosis = "TLS certificate hostname/SNI mismatch"
@@ -569,8 +580,10 @@ class ApnaPayloadSocketConnector:
                 else:
                     diagnosis = "TLS handshake failed"
             elif isinstance(exc, (ConnectionRefusedError, TimeoutError, socket.timeout)):
+                failure_stage = "tcp"
                 diagnosis = "TCP connection failed (refused or timed out)"
             elif isinstance(exc, OSError):
+                failure_stage = "tcp"
                 diagnosis = "TCP socket or network connection failed"
             elif isinstance(exc, (ValueError, TypeError)):
                 raise
@@ -583,5 +596,6 @@ class ApnaPayloadSocketConnector:
             )
             raise PayloadTransportError(
                 f"{diagnosis}: {config.mode.value} endpoint={endpoint}{sni_detail}; "
-                f"{type(exc).__name__}: {exc}"
+                f"{type(exc).__name__}: {exc}",
+                stage=failure_stage,
             ) from exc
