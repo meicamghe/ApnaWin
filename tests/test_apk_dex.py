@@ -458,6 +458,35 @@ def test_move_result_object_invalidates_stale_string_register():
     assert row["system_load_path_basenames"] == []
     assert row["native_library_literals"] == ["libdecoy.so"]
 
+
+def test_move_object_alias_preserves_exact_string_load_linkage():
+    output = (
+        ".method private loadAliasedNative()V\n"
+        '    const-string v0, "/data/app/lib/libudpqtwo.so"\n'
+        "    move-object v1, v0\n"
+        "    invoke-static {v1}, Ljava/lang/System;->load(Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["system_load_path_basenames"] == ["libudpqtwo.so"]
+
+
+def test_move_object_overwrite_does_not_preserve_stale_string_alias():
+    output = (
+        ".method private loadOverwrittenAlias()V\n"
+        '    const-string v0, "/tmp/libdecoy.so"\n'
+        '    const-string v2, "not-a-path"\n'
+        "    move-object/from16 v1, v0\n"
+        "    move-object/16 v1, v2\n"
+        "    invoke-static {v1}, Ljava/lang/System;->load(Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["system_load_path_basenames"] == []
+    assert row["native_library_literals"] == ["libdecoy.so"]
+
 def test_system_load_correlates_only_the_exact_path_argument_register():
     output = (
         ".method private loadNative()V\n"
