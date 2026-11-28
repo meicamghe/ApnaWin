@@ -23,11 +23,23 @@ def inventory_native_libraries(apk_paths: list[str | Path]) -> dict[str, Any]:
     """Hash and inspect embedded .so members without writing or executing them."""
     if not apk_paths or len(apk_paths) > _MAX_APKS:
         raise ValueError("APK input count is outside the allowed range")
+    input_paths = [Path(p) for p in apk_paths]
+    resolved_inputs: set[Path] = set()
+    basenames: set[str] = set()
+    for path in input_paths:
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("every APK input must be an existing non-symlink regular file")
+        resolved = path.resolve(strict=True)
+        if resolved in resolved_inputs:
+            raise ValueError("APK inputs must not contain the same file more than once")
+        if path.name in basenames:
+            raise ValueError("APK inputs must have unique basenames")
+        resolved_inputs.add(resolved)
+        basenames.add(path.name)
+
     rows: list[dict[str, Any]] = []
     total_bytes = 0
-    for raw_path in sorted((Path(p) for p in apk_paths), key=lambda p: p.as_posix()):
-        if not raw_path.is_file():
-            raise ValueError("every APK input must be an existing regular file")
+    for raw_path in sorted(input_paths, key=lambda p: p.as_posix()):
         with zipfile.ZipFile(raw_path) as archive:
             entries = archive.infolist()
             if len(entries) > _MAX_ENTRIES_PER_APK:
@@ -97,7 +109,19 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if args.output:
-        args.output.write_text(rendered, encoding="utf-8")
+        output_path = args.output
+        if output_path.is_symlink():
+            print("native inventory failed: output path must not be a symlink", file=sys.stderr)
+            return 2
+        resolved_output = output_path.resolve()
+        try:
+            if any(resolved_output == Path(apk).resolve(strict=True) for apk in args.apks):
+                print("native inventory failed: output path must not overwrite an APK input", file=sys.stderr)
+                return 2
+        except OSError as exc:
+            print(f"native inventory failed: {exc}", file=sys.stderr)
+            return 2
+        output_path.write_text(rendered, encoding="utf-8")
     else:
         print(rendered, end="")
     return 0
