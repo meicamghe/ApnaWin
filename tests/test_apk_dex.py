@@ -339,16 +339,16 @@ def test_missing_service_class_has_no_native_method_claim(tmp_path, monkeypatch)
 
 def test_parse_dex_linkage_evidence_correlates_calls_and_library_literals():
     output = (
-        ".class public Lcom/example/Launcher;\\n"
-        ".method public start()V\\n"
-        '    const-string v0, "libudpqtwo.so"\\n'
-        "    invoke-virtual {v1, v0}, Ljava/lang/Runtime;->exec([Ljava/lang/String;)Ljava/lang/Process;\\n"
-        ".end method\\n"
-        ".method private load()V\\n"
-        '    const-string v0, "libpdnsd.so"\\n'
-        "    invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\\n"
-        "    invoke-direct {v1, v2}, Ldalvik/system/DexClassLoader;-><init>(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V\\n"
-        ".end method\\n"
+        ".class public Lcom/example/Launcher;\n"
+        ".method public start()V\n"
+        '    const-string v0, "libudpqtwo.so"\n'
+        "    invoke-virtual {v1, v0}, Ljava/lang/Runtime;->exec([Ljava/lang/String;)Ljava/lang/Process;\n"
+        ".end method\n"
+        ".method private load()V\n"
+        '    const-string v0, "libpdnsd.so"\n'
+        "    invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        "    invoke-direct {v1, v2}, Ldalvik/system/DexClassLoader;-><init>(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V\n"
+        ".end method\n"
     )
     report = apk_dex._parse_dex_linkage_evidence(output)
     assert report["runtime_exec_calls"] == 1
@@ -372,11 +372,11 @@ def test_parse_dex_linkage_evidence_correlates_calls_and_library_literals():
 
 def test_parse_dex_linkage_evidence_ignores_unrelated_strings_and_calls():
     output = (
-        ".method public run()V\\n"
-        '    const-string v0, "not a native library"\\n'
-        '    const-string v1, "password=do-not-report"\\n'
-        "    invoke-virtual {v0}, Ljava/lang/String;->length()I\\n"
-        ".end method\\n"
+        ".method public run()V\n"
+        '    const-string v0, "not a native library"\n'
+        '    const-string v1, "password=do-not-report"\n'
+        "    invoke-virtual {v0}, Ljava/lang/String;->length()I\n"
+        ".end method\n"
     )
     report = apk_dex._parse_dex_linkage_evidence(output)
     assert report["methods_with_evidence"] == []
