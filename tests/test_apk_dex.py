@@ -528,3 +528,27 @@ def test_filled_string_array_is_not_linked_after_intervening_instruction():
     row = report["methods_with_evidence"][0]
     assert row["process_builder_library_basenames"] == []
     assert row["native_library_literals"] == ["libdecoy.so"]
+
+
+@pytest.mark.parametrize(
+    ("loader", "descriptor", "path", "expected"),
+    [
+        ("DexClassLoader", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V", "/data/user/0/app/secondary.dex", ["dex"]),
+        ("PathClassLoader", "(Ljava/lang/String;Ljava/lang/ClassLoader;)V", "/data/app/base.apk", ["apk"]),
+        ("DexClassLoader", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V", "/data/user/0/app/cache.jar", ["jar"]),
+        ("DexClassLoader", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V", "/data/user/0/app/secondary.bin", []),
+    ],
+)
+def test_dynamic_dex_loader_links_only_exact_path_argument_and_reports_extension(
+    loader, descriptor, path, expected
+):
+    output = (
+        ".method private loadSecondary()V\\n"
+        f'    const-string v1, "{path}"\\n'
+        f"    invoke-direct {{v0, v1, v2, v3, v4}}, Ldalvik/system/{loader};-><init>{descriptor}\\n"
+        ".end method\\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["dynamic_dex_loader_path_extensions"] == expected
+    assert path not in str(report)
