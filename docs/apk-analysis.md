@@ -557,6 +557,12 @@ distinct constructor type; its ByteBuffer contents are not inspected and it
 has no file-path argument. If a file-backed loader is seen but no allowlisted
 literal extension is resolved, the report states that limitation explicitly.
 Register ranges, aliases, computed paths, reflection, encrypted/protected
-DEX, and dynamically generated buffers remain unresolved. A loader callsite
+DEX, and dynamically generated buffers remain unresolved. The bounded smali parser also tracks a direct `new-array` allocation of
+`[Ljava/lang/String;` followed by `aput-object` writes into the same exact
+register. It records only literal native-library basenames and caps tracked
+writes at 256; overwriting the array register invalidates the evidence.
+Array aliases, `move-object`, index/value computation, non-string arrays and
+other array construction patterns are not followed.
+A loader callsite
 or extension is not proof that the secondary code is decrypted, loaded
 successfully, or executed.
