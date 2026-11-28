@@ -384,22 +384,23 @@ def _validate_websocket_upgrade(
     request_version = _single_header(request_headers, "sec-websocket-version", "request")
     if not _has_header_token(request_upgrade, "websocket") or not _has_header_token(request_connection, "upgrade"):
         raise PayloadTransportError(
-            "HTTP 101 request is missing Upgrade: websocket or Connection: Upgrade"
+            "HTTP 101 request is missing Upgrade: websocket or Connection: Upgrade",
+            stage="websocket",
         )
     if request_version != "13":
-        raise PayloadTransportError("HTTP 101 WebSocket request must use Sec-WebSocket-Version: 13")
+        raise PayloadTransportError("HTTP 101 WebSocket request must use Sec-WebSocket-Version: 13", stage="websocket")
     try:
         decoded_key = base64.b64decode(request_key, validate=True)
     except (ValueError, UnicodeError) as exc:
-        raise PayloadTransportError("HTTP 101 request has an invalid Sec-WebSocket-Key") from exc
+        raise PayloadTransportError("HTTP 101 request has an invalid Sec-WebSocket-Key", stage="websocket") from exc
     if len(decoded_key) != 16:
-        raise PayloadTransportError("HTTP 101 Sec-WebSocket-Key must decode to exactly 16 bytes")
+        raise PayloadTransportError("HTTP 101 Sec-WebSocket-Key must decode to exactly 16 bytes", stage="websocket")
 
     response_upgrade = _single_header(response_headers, "upgrade", "response")
     response_connection = _single_header(response_headers, "connection", "response")
     response_accept = _single_header(response_headers, "sec-websocket-accept", "response")
     if not _has_header_token(response_upgrade, "websocket") or not _has_header_token(response_connection, "upgrade"):
-        raise PayloadTransportError("HTTP 101 response is not a valid WebSocket protocol upgrade")
+        raise PayloadTransportError("HTTP 101 response is not a valid WebSocket protocol upgrade", stage="websocket")
     expected_accept = base64.b64encode(
         hashlib.sha1(
             (request_key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii"),
@@ -407,7 +408,7 @@ def _validate_websocket_upgrade(
         ).digest()
     ).decode("ascii")
     if not hmac.compare_digest(response_accept, expected_accept):
-        raise PayloadTransportError("HTTP 101 Sec-WebSocket-Accept does not match the request key")
+        raise PayloadTransportError("HTTP 101 Sec-WebSocket-Accept does not match the request key", stage="websocket")
 
 
 def _tls_certificate_diagnosis(exc: ssl.SSLCertVerificationError) -> str:
