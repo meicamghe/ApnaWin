@@ -37,6 +37,9 @@ def _dex(service, defined):
                 "invocation_counts": {"runtime_exec": 1, "system_load_library": 1},
                 "native_library_literals": ["libtun2socks.so"],
                 "system_load_library_names": ["pdnsd"],
+                "system_load_path_basenames": ["libudpqtwo.so"],
+                "runtime_exec_library_basenames": ["libtun2socks.so"],
+                "process_builder_library_basenames": ["libpdnsd.so"],
             }],
         }] if defined else [],
         "linkage_scan_classes_inspected": 1,
@@ -87,6 +90,27 @@ def test_split_set_finds_service_class_defined_in_non_base_split(tmp_path, monke
         "library_literal": "libtun2socks.so",
         "invocation_kinds": ["runtime_exec", "system_load_library"],
         "invocation_counts": {"runtime_exec": 1, "system_load_library": 1},
+    }]
+    assert report["system_load_path_references"] == [{
+        "apk": "split_feature.apk",
+        "class_name": "com.example.vpn.TunnelService",
+        "method_ordinal": 4,
+        "library_basename": "libudpqtwo.so",
+        "loading_basis": "exact System.load path argument register",
+    }]
+    assert report["runtime_exec_library_references"] == [{
+        "apk": "split_feature.apk",
+        "class_name": "com.example.vpn.TunnelService",
+        "method_ordinal": 4,
+        "library_basename": "libtun2socks.so",
+        "launch_basis": "exact Runtime.exec command argument register",
+    }]
+    assert report["process_builder_library_references"] == [{
+        "apk": "split_feature.apk",
+        "class_name": "com.example.vpn.TunnelService",
+        "method_ordinal": 4,
+        "library_basename": "libpdnsd.so",
+        "launch_basis": "exact ProcessBuilder constructor argument register",
     }]
     assert report["system_load_library_references"] == [{
         "apk": "split_feature.apk",
