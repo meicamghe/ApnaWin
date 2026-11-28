@@ -190,6 +190,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
                 "method_ordinal": current["method_ordinal"],
                 "invocation_kinds": sorted(current["invocation_kinds"]),
                 "native_library_literals": sorted(current["native_library_literals"]),
+                "system_load_library_names": sorted(current["system_load_library_names"]),
             })
 
     for line in output.splitlines():
@@ -202,6 +203,8 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
                 "method_ordinal": method_ordinal,
                 "invocation_kinds": set(),
                 "native_library_literals": set(),
+                "system_load_library_names": set(),
+                "string_registers": {},
             }
             continue
         if line == ".end method":
@@ -216,6 +219,12 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             current["invocation_kinds"].add("process_builder")
         if "Ljava/lang/System;->loadLibrary(" in line:
             current["invocation_kinds"].add("system_load_library")
+            register_match = load_library_registers.search(line)
+            if register_match:
+                for register in re.findall(r"\\b(?:v|p)[0-9]+\\b", register_match.group(1)):
+                    literal = current["string_registers"].get(register)
+                    if literal and safe_library_name.fullmatch(literal):
+                        current["system_load_library_names"].add(literal)
         if "Ljava/lang/System;->load(" in line:
             current["invocation_kinds"].add("system_load")
         if any(token in line for token in (
@@ -224,8 +233,13 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             "Ldalvik/system/InMemoryDexClassLoader;-><init>(",
         )):
             current["invocation_kinds"].add("dynamic_dex_loader")
-        for match in library_literal.finditer(line):
-            current["native_library_literals"].add(match.group(1))
+        register_match = string_register.search(line)
+        if register_match:
+            register, literal = register_match.groups()
+            current["string_registers"][register] = literal
+            basename = re.search(r"(lib[A-Za-z0-9_.+-]{1,120}\\.so)$", literal)
+            if basename:
+                current["native_library_literals"].add(basename.group(1))
     finish()
 
     totals = {
