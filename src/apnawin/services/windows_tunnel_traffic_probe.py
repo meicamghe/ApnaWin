@@ -50,7 +50,6 @@ class WindowsTunnelTrafficProbe:
 
     def _route_interface(self, address: str) -> int:
         ip = ipaddress.ip_address(address)
-        prefix = f"{ip}/32" if ip.version == 4 else f"{ip}/128"
         script = (
             "$ErrorActionPreference='Stop'; "
             f"$r=Find-NetRoute -RemoteIPAddress '{ip}' | Select-Object -First 1; "
