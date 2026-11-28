@@ -240,3 +240,11 @@ The static binary usage text confirms that `libtun2socks.so` accepts `--tunfd`/`
 
 - Rechecked the full recursive Library listing. /ApnaWin contains base.apk and Apna server list.txt but no exact-title ABI split or libudpqtwo.so/libsalamander.so. A 405,128-byte opaque Library item exists under a hash-like title but raw-byte materialization is denied; its format/content are unknown.
 - Apna server list.txt is 32,750 Base64 characters and decodes to 24,561 bytes. Decoded Shannon entropy is 7.9928 bits/byte; printable ratio 0.3824; initial bytes 14a2cec160e8805b1a781d6ede7f07ed. Treat as opaque high-entropy data (cipher/compression/custom envelope unresolved); do not claim encryption or store the payload in Git.
+
+
+### Exact LIAPP bootstrap native linkage — 2026-11-28
+
+- Confirmed exact DEX-to-native mapping: in manifest Application class com.liapp.x, method ۲۬٬֭ة(Context) loads string "bxdtcxfzx" at code-unit offset 0x316 and immediately calls System.loadLibrary at 0x318. attachBaseContext calls this initializer before Application.attachBaseContext. This directly links the app startup path to libbxdtcxfzx.so by Android naming convention; its JNI_OnLoad export is consistent with this.
+- This does not prove that the separate embedded filename libliapp.so is loaded; it is not a DT_NEEDED dependency in libbxdtcxfzx.so.
+- assets/.bxdtcxfzx.dex contains only one malformed/obfuscated Activity subclass and a one-instruction return-void method; it is a stub/placeholder, not evidence of a full second LIAPP implementation.
+- Detailed exact offsets and caveats added to docs/reverse-engineering/base-apk-library-analysis-2026-11-28.md.
