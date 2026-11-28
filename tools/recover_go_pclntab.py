@@ -44,6 +44,20 @@ class _ElfImage:
         if not self.loads:
             raise ValueError("ELF has no file-backed PT_LOAD segment")
 
+    def read_c_string(self, address: int, maximum: int = 4096) -> bytes:
+        if address < 0 or maximum <= 0:
+            raise ValueError("invalid ELF string address or limit")
+        for va, file_size, offset in self.loads:
+            if va <= address < va + file_size:
+                available = min(maximum, file_size - (address - va))
+                start = offset + address - va
+                raw = self.data[start:start + available]
+                terminator = raw.find(bytes([0]))
+                if terminator <= 0:
+                    raise ValueError("Go function name is empty or not NUL-terminated within the limit")
+                return raw[:terminator]
+        raise ValueError("Go function name is outside file-backed PT_LOAD ranges")
+
     def read_va(self, address: int, size: int) -> bytes:
         if address < 0 or size < 0:
             raise ValueError("negative ELF address or size")
@@ -89,30 +103,8 @@ def recover_go_pclntab(data: bytes, pclntab_va: int, allow_stomped_magic: bool =
         name_va = pclntab_va + funcname_off + name_off
         if name_off < 0 or name_va < pclntab_va + funcname_off:
             raise ValueError("Go function name offset is invalid")
-        # Bound each string to 4096 bytes and require a NUL terminator.
-        name_bytes = image.read_va(name_va, 4096)
-        terminator = name_bytes.find(b"\x00")
-        if terminator < 0:
-            # A valid final name may end at a segment boundary; retry the
-            # largest file-backed prefix available by reading one byte at a time.
-            chars = bytearray()
-            for offset in range(4096):
-                try:
-                    char = image.read_va(name_va + offset, 1)
-                except ValueError:
-                    break
-                if char == b"\x00":
-                    break
-                chars.extend(char)
-            else:
-                raise ValueError("Go function name is not NUL-terminated within the limit")
-            if not chars:
-                raise ValueError("Go function name is empty or unreadable")
-            name = chars.decode("utf-8", errors="replace")
-        else:
-            if terminator == 0:
-                raise ValueError("Go function name is empty")
-            name = name_bytes[:terminator].decode("utf-8", errors="replace")
+        name_bytes = image.read_c_string(name_va)
+        name = name_bytes.decode("utf-8", errors="replace")
         if any(ord(char) < 0x20 for char in name):
             raise ValueError("Go function name contains control characters")
         records.append({"index": index, "entry_offset": entry_off, "function_offset": func_off, "name": name})
