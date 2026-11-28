@@ -252,6 +252,20 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
     }
 
 
+def _select_linkage_scan_targets(
+    candidates: list[str],
+    service_matches: list[dict[str, Any]],
+) -> tuple[list[str], bool]:
+    """Prioritize exact manifest-service classes before heuristic class names."""
+    service_targets = sorted({
+        item["resolved_class_name"] for item in service_matches
+        if item["resolved_class_name"] and item["defined_in_dex"]
+    })
+    candidate_targets = sorted(set(candidates) - set(service_targets))
+    ordered = service_targets + candidate_targets
+    return ordered[:_MAX_LINKAGE_CLASSES], len(ordered) > _MAX_LINKAGE_CLASSES
+
+
 def parse_reference_counts(output: str) -> dict[str, int]:
     if len(output.encode("utf-8")) > _MAX_OUTPUT_BYTES:
         raise ValueError("DEX reference listing exceeds the allowed size")
@@ -351,12 +365,9 @@ def inspect_apk_dex(
     # Scan a bounded set of network/service candidate classes for process-launch,
     # native-loader and secondary-DEX-loader callsites. This is static evidence,
     # not proof that any callsite executes at runtime.
-    scan_targets = sorted(set(candidates) | {
-        item["resolved_class_name"] for item in service_matches
-        if item["resolved_class_name"] and item["defined_in_dex"]
-    })
-    linkage_scan_truncated = len(scan_targets) > _MAX_LINKAGE_CLASSES
-    scan_targets = scan_targets[:_MAX_LINKAGE_CLASSES]
+    scan_targets, linkage_scan_truncated = _select_linkage_scan_targets(
+        candidates, service_matches
+    )
     for class_name in scan_targets:
         if class_name in linkage_by_class:
             continue
