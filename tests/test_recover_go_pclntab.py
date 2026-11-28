@@ -65,3 +65,13 @@ def test_rejects_ambiguous_overlapping_va_mappings():
     struct.pack_into("<Q", data, 120 + 16, 0x1000)
     with pytest.raises(ValueError, match="ambiguous"):
         recover_go_pclntab(bytes(data), 0x1000, allow_stomped_magic=True)
+
+
+def test_rejects_function_name_crossing_partial_segment_overlap():
+    data = bytearray(_fixture())
+    # A second PT_LOAD overlaps only the tail of the function-name table.
+    struct.pack_into("<Q", data, 120 + 16, 0x1068)
+    struct.pack_into("<Q", data, 120 + 32, 0x10)
+    struct.pack_into("<Q", data, 120 + 40, 0x10)
+    with pytest.raises(ValueError, match="ambiguous"):
+        recover_go_pclntab(bytes(data), 0x1000, allow_stomped_magic=True)
