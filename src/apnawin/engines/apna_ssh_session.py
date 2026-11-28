@@ -25,6 +25,7 @@ from apnawin.engines.apna_ssh_diagnostics import ApnaDiagnosticTransport, cipher
 from apnawin.engines.apna_payload_socket import (
     ApnaPayloadSocketConnector,
     PayloadSocketConfig,
+    PayloadTransportError,
 )
 
 
@@ -420,7 +421,7 @@ class ApnaSshSession:
             self._closed = not any(
                 (self._server, self._ssh_client, self._payload_socket)
             )
-            if isinstance(exc, (ApnaSshError, ValueError, TypeError)):
+            if isinstance(exc, (ApnaSshError, PayloadTransportError, ValueError, TypeError)):
                 raise
             if isinstance(exc, paramiko.BadHostKeyException):
                 raise ApnaSshError(
