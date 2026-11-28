@@ -510,3 +510,16 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
   no GoReSym sample execution, Go symbol recovery, APNA provider handshake,
   or live traffic is claimed. PR #8 remains open/unmerged; product builds and
   connection activation remain gated off.
+
+
+## Native fingerprint input hardening — 2026-11-28
+
+- Hardened the extracted-native fingerprint reader against oversized or malformed
+  manifests, non-object JSON roots, traversal-like ABI/library path components,
+  symlink escapes and paths resolving outside the extraction root.
+- Manifest size is capped at 4 MiB before JSON parsing. ABI directory names and
+  native library basenames are now validated against distinct allowlists.
+- Added regression cases for dot/dot-dot components, non-library filenames,
+  malformed/non-object JSON and manifest size limits.
+- These changes improve the offline analysis boundary only; they do not produce
+  a new APK extraction artifact or add protocol/runtime evidence.
