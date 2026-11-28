@@ -23,7 +23,8 @@ def _fixture(*, magic: int = 0x12345678) -> bytes:
     h[4:8] = bytes([0, 0, 1, 8])
     struct.pack_into("<8Q", h, 8, 2, 1, 0x3000, 0x60, 0x80, 0x90, 0xA0, 0xC0)
     data[p:p + 72] = h
-    data[p + 0x60:p + 0x60 + 32] = b"main.main\0runtime.goexit\0\0\0"
+    names = b"main.main\0runtime.goexit\0\0\0"
+    data[p + 0x60:p + 0x60 + len(names)] = names
     # functab at 0x10c0; func offsets are relative to pclnOffset (0xC0).
     # The two _func records follow the 20-byte functab.
     struct.pack_into("<IIIII", data, p + 0xC0, 0, 0x14, 0x10, 0x24, 0x20)
