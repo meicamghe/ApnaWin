@@ -473,10 +473,13 @@ command argument of `Runtime.exec`; and
 `process_builder_library_references` links a basename to the first command
 argument of a `ProcessBuilder` constructor. Receiver registers are excluded
 for instance calls. These indexes are emitted only when a bounded direct
-string-register argument is observed; constructed arrays, aliases, values
-loaded from files, reflection, and obfuscated/protected code may remain
-unresolved. A callsite proves static argument linkage only, not that the
-method runs, the child starts, the library loads, or traffic uses it.
+string-register argument or a fully enumerated `filled-new-array` String[]
+argument is observed. The array is associated with its destination only when
+the immediately following instruction is `move-result-object`. Arrays built
+with `new-array` plus `aput-object`, aliases, values loaded from files,
+reflection, and obfuscated/protected code may remain unresolved. A callsite
+proves static argument linkage only, not that the method runs, the child
+starts, the library loads, or traffic uses it.
 
 ## Exact DEX native-loader and process-launch linkage
 
