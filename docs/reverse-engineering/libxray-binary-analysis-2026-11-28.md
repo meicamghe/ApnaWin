@@ -69,14 +69,31 @@
 
 این شواهد وجود کد و وابستگی‌ها را ثابت می‌کنند، نه فعال بودن همه قابلیت‌ها در UI یا موفقیت اتصال زنده. برای Hysteria نیز از این تحلیل به‌تنهایی نباید نسخه یا سازگاری Hysteria2 نتیجه گرفت.
 
-## CLI و نحوه میزبانی
+## CLI، نقطه‌های ورود و بارگذاری پیکربندی
 
-رشته‌ها و نمادهای اجرایی وجود CLI را تأیید می‌کنند:
-- متن help: «Run Xray with config, the default command.»
-- گزینه‌های `-config/-c`، `-confdir`، `-format`، `-test` و `-dump`
-- تابع `main.main` و command framework در `main/commands/base`
+نام توابع بازیابی‌شده از pclntab مسیرهای مشخص زیر را آشکار می‌کند:
 
-این یافته همراه با `-buildmode=exe` فرضیه اجرای process جداگانه را تقویت می‌کند. هنوز مشخص نیست فایل دقیقاً با چه نام/مسیر و چه آرگومان‌هایی از APK اجرا می‌شود، config چگونه ساخته می‌شود، یا TUN file descriptor چگونه به آن می‌رسد.
+- `main.main` در VA `0xb325d0`
+- `main.executeRun` در VA `0xb32c40`
+- `main.getConfigFilePath` در VA `0xb33300`
+- `main.startXray` در VA `0xb33910`
+- `main.executeVersion` در VA `0xb33b50`
+- `main.readConfDir` در VA `0xb33060`
+- `main.dumpConfig` در VA `0xb32ec0`
+- `main/confloader.LoadConfig` در VA `0x2d1820`
+- `common/platform.GetConfigurationPath` و `GetConfDirPath`
+
+رشته‌های CLI در باینری این موارد را ثبت می‌کنند:
+- `run [-c config.json] [-confdir dir]`
+- `-config=file` و alias آن `-c=file`
+- `-confdir=dir`، `-format=json`، `-test` و `-dump`
+- منبع config می‌تواند آرگومان، environment یا STDIN باشد؛ confdir نیز از آرگومان یا environment خوانده می‌شود.
+
+این شواهد وجود یک CLI قابل اجرا و مسیرهای بارگذاری config را تأیید می‌کنند. هنوز هیچ مدرک DEX برای اینکه اپ دقیقاً چگونه این پردازه را اجرا می‌کند یا کدام منبع config را انتخاب می‌کند به این باینری متصل نشده است.
+
+در رشته‌ها literal برابر `xray.tun.fd` نیز وجود دارد. آن را فعلاً فقط یک نام/شناسهٔ داخلی مرتبط با TUN در metadata کد ثبت می‌کنیم؛ به‌تنهایی اثبات نمی‌کند که FD اندروید از VPNService به پردازه منتقل می‌شود.
+
+تابع‌های `proxy/tun.(*AndroidTun).Start/Close`، `proxy/tun.NewTun` و stack مبتنی بر gVisor نیز بازیابی شده‌اند. این‌ها وجود مسیر TUN در کد Xray را ثابت می‌کنند، نه اتصال عملی آن به سرویس VPN اپ.
 
 ## بازیابی Go pclntab و اصلاح parser
 
@@ -98,9 +115,9 @@
 
 ## کارهای بعدی
 
-- جست‌وجوی APK-wide در DEX برای نام فایل `libxray.so`، مسیر استخراج، chmod، `execve`/ProcessBuilder و آرگومان‌های `-config`.
+- اجرای ابزار split-set DEX روی base.apk و همه splitها برای یافتن callsiteهای `Runtime.exec`، `ProcessBuilder`، `System.load` و نام دقیق `libxray.so`. اسکن فعلی bounded به حداکثر 64 کلاس کاندید در هر APK است و exhaustive نیست.
 - ردیابی تولید/انتقال config و schema واقعی مورد استفاده اپ؛ مقایسه با schema همین build.
-- ردیابی Android VPNService و تحویل TUN FD به Xray.
+- ردیابی Android VPNService و تحویل TUN FD به Xray؛ وجود رشته `xray.tun.fd` به‌تنهایی این انتقال را اثبات نمی‌کند.
 - اجرای pytest برای parser اصلاح‌شده و سپس استفاده از آن روی `libudpqtwo.so` پس از دریافت باینری واقعی.
 - حفظ hash و ABI provenance؛ باینری خام در Git commit نشود.
 
