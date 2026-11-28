@@ -33,8 +33,8 @@ def _dex(service, defined):
             "class_name": "com.example.vpn.TunnelService",
             "methods_with_evidence": [{
                 "method_ordinal": 4,
-                "invocation_kinds": ["runtime_exec", "system_load_library"],
-                "invocation_counts": {"runtime_exec": 1, "system_load_library": 1},
+                "invocation_kinds": ["dynamic_dex_loader", "runtime_exec", "system_load_library"],
+                "invocation_counts": {"dynamic_dex_loader": 1, "runtime_exec": 1, "system_load_library": 1},
                 "native_library_literals": ["libtun2socks.so"],
                 "system_load_library_names": ["pdnsd"],
                 "system_load_path_basenames": ["libudpqtwo.so"],
