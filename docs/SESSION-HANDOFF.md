@@ -294,3 +294,15 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - Wired the all-library extraction into the manual APK native-analysis workflow. This makes every ABI/split binary available for subsequent static strings, imports, relocations, Go metadata and protocol-family analysis after the manual workflow is run.
 - CI run [46110374404](https://github.com/meicamghe/ApnaWin/actions/runs/46110374404) passed on head 41779d545a70ca5f9885b03dc546e64e27fcceea: **951 passed, 1 skipped, 1 warning**. Windows packaging remained skipped.
 - The workflow remains manual-only and has not yet generated a fresh artifact; no new APNA binary findings are claimed from this tool change.
+
+
+## Cross-split DEX and manifest correlation — 2026-11-28
+
+- Added apk_dex_set.py and inspect_apk_dex_set.py to inspect every APK in a base/split package set with the local Android SDK apkanalyzer.
+- The analyzer verifies consistent package names, unions manifest-declared VPN services, scans each split's readable DEX, and reports the APK(s) that actually define each service class.
+- Method-level process/native-loader evidence is retained per APK. Aggregate class counts are explicitly totals across splits, not deduplicated unique-class counts.
+- This is offline static analysis only; it does not install or execute the APK and does not require an Android device.
+- Added cross-split regression tests, including the case where the manifest service class is absent from base.apk but defined in a feature split.
+- GitHub Actions run [46110514246](https://github.com/meicamghe/ApnaWin/actions/runs/46110514246) passed on head 36a671dded230f2b960ba987c3c1777ea0afc14c: **955 passed, 1 skipped, 1 warning**. Windows packaging remained skipped.
+- Added /analysis/ to .gitignore so local extraction reports and native binaries are not accidentally committed.
+- Rechecked GoReSym v3.4.1 and current upstream master: the moduledata scanner's ignored-first-match behavior remains unfixed upstream. Exact failure mode and regression cases are documented in libudpqtwo-stomped-pclntab.md.
