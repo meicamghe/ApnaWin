@@ -210,6 +210,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             or current["system_load_path_basenames"]
             or current["runtime_exec_library_basenames"]
             or current["process_builder_library_basenames"]
+            or current["dynamic_dex_loader_path_extensions"]
         ):
             if len(rows) >= _MAX_LINKAGE_EVIDENCE_ROWS:
                 raise ValueError("DEX linkage evidence contains too many methods")
@@ -222,6 +223,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
                 "system_load_path_basenames": sorted(current["system_load_path_basenames"]),
                 "runtime_exec_library_basenames": sorted(current["runtime_exec_library_basenames"]),
                 "process_builder_library_basenames": sorted(current["process_builder_library_basenames"]),
+                "dynamic_dex_loader_path_extensions": sorted(current["dynamic_dex_loader_path_extensions"]),
             })
 
     for line in output.splitlines():
@@ -242,6 +244,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
                 "string_registers": {},
                 "string_array_registers": {},
                 "pending_string_array": None,
+                "dynamic_dex_loader_path_extensions": set(),
             }
             continue
         if line == ".end method":
@@ -313,6 +316,20 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
         )):
             current["invocation_kinds"].add("dynamic_dex_loader")
             current["invocation_counts"]["dynamic_dex_loader"] = current["invocation_counts"].get("dynamic_dex_loader", 0) + 1
+            # DexClassLoader and PathClassLoader take a String path as their
+            # first constructor argument (register 1 after the receiver).
+            # Record only a bounded file extension, never the path itself.
+            path_match = path_dex_loader_registers.search(line)
+            if path_match:
+                registers = _explicit_invocation_registers(path_match.group(1))
+                descriptor = path_match.group(2)
+                if len(registers) > 1 and descriptor.startswith("Ljava/lang/String;"):
+                    path_literal = current["string_registers"].get(registers[1], "")
+                    suffix = dex_archive_suffix.search(path_literal)
+                    if suffix:
+                        current["dynamic_dex_loader_path_extensions"].add(
+                            suffix.group(1).lower()
+                        )
 
         array_match = string_array_registers.search(line)
         if array_match:
