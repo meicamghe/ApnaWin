@@ -6,7 +6,11 @@ import hashlib
 import paramiko
 import pytest
 
-from apnawin.engines.apna_host_key import ApnaHostKeyProbeError, scan_apna_ssh_host_key
+from apnawin.engines.apna_host_key import (
+    ApnaHostKeyProbeError,
+    ApnaPayloadTransportProbeError,
+    scan_apna_ssh_host_key,
+)
 from apnawin.engines.apna_payload_socket import (
     PayloadSocketConfig,
     PayloadSocketMode,
@@ -153,6 +157,7 @@ def test_probe_keeps_payload_transport_failures_out_of_ssh_key_exchange_stage(
     with pytest.raises(ApnaHostKeyProbeError) as error:
         scan_apna_ssh_host_key(_config(), connector=FailingConnector())
 
+    assert isinstance(error.value, ApnaPayloadTransportProbeError)
     assert error.value.stage == "payload_transport"
     assert str(error.value).startswith("Payload transport failed before SSH key exchange:")
     assert "SSH host-key exchange failed" not in str(error.value)
