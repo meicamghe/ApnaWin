@@ -42,6 +42,23 @@ catalog's `sslws` flag. The selected payload host/port and SNI are retained
 in the mapped configuration; explicit catalog SNI data takes precedence over
 the mode default.
 
+### Current payload token and SNI sources
+
+The renderer currently substitutes `[host]`, `[port]`, `[host_port]` and
+`[ssh]` from the selected SSH target. It substitutes `[cf]` from the
+configuration's `cf_host`; the current catalog mapper supplies the selected
+payload endpoint (`connect_host`) for that value. Therefore the actual HTTP
+`Host` header depends on the token present in the imported payload template:
+`Host: [cf]` and `Host: [host]` intentionally resolve to different names.
+The mapper does not overwrite a provider template's Host header.
+
+For TLS modes, an explicit catalog `sausage` value is used as SNI when
+present. Otherwise TLS Direct uses the selected SSH server host, while TLS
+HTTP Proxy uses the selected payload endpoint. SNI is the TLS ClientHello
+server name; it is not the HTTP Host header and is not interchangeable with
+it. These are the current code mappings, not a claim that an arbitrary
+provider payload or edge policy accepts them.
+
 ## Failure classification
 
 - `socket.gaierror`: stage `dns`; resolution failed before TCP. No HTTP
