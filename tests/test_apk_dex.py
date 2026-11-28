@@ -362,6 +362,7 @@ def test_parse_dex_linkage_evidence_correlates_calls_and_library_literals():
             "invocation_counts": {"runtime_exec": 1},
             "native_library_literals": ["libudpqtwo.so"],
             "system_load_library_names": [],
+            "system_load_path_basenames": [],
         },
         {
             "method_ordinal": 2,
@@ -369,6 +370,7 @@ def test_parse_dex_linkage_evidence_correlates_calls_and_library_literals():
             "invocation_counts": {"dynamic_dex_loader": 1, "system_load_library": 1},
             "native_library_literals": ["libpdnsd.so"],
             "system_load_library_names": ["pdnsd"],
+            "system_load_path_basenames": [],
         },
     ]
     assert "start" not in str(report)
@@ -430,3 +432,18 @@ def test_dex_linkage_counts_each_invocation_not_just_methods():
         "runtime_exec": 2,
         "system_load_library": 1,
     }
+
+
+def test_system_load_correlates_only_the_exact_path_argument_register():
+    output = (
+        ".method private loadNative()V\\n"
+        '    const-string v0, "/data/user/0/com.example/lib/libudpqtwo.so"\\n'
+        '    const-string v1, "/data/user/0/com.example/lib/libdecoy.so"\\n'
+        "    invoke-static {v0}, Ljava/lang/System;->load(Ljava/lang/String;)V\\n"
+        ".end method\\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["system_load_path_basenames"] == ["libudpqtwo.so"]
+    assert "com.example" not in str(report)
+    assert "libdecoy.so" in row["native_library_literals"]
