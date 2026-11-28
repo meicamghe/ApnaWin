@@ -71,6 +71,12 @@ The Xray share-link parser is a generic Xray import path. It is not evidence tha
 - Fixed a bytearray slice-length bug in `tests/test_recover_go_pclntab.py` that otherwise shifted the synthetic ELF fixture by five bytes. The pytest suite remains unexecuted.
 - Android's official APK Analyzer CLI reference confirms `dex code --class` requires a class name and `dex references` only reports method-reference counts. The exhaustive, class-independent callsite index therefore needs a DEX instruction parser/disassembler, not just the current apkanalyzer command set.
 
+
+
+## Go PIE text-base correction
+
+A comparison of pclntab function PCs with ELF dynamic symbols exposed a parser defect: ELF `.text` begins at `0x3860a0`, but contains the native `_start` stub before Go text. The Go text base is `0x386120`; `main.main`'s pclntab PC offset `0xb325d0` plus that base equals its ELF dynamic symbol VA `0xeb86f0`, and its 416-byte symbol size matches the pclntab range. The parser now uses a unique matching defined ELF function-symbol anchor for zero-`textStart` images and fails closed when no anchor exists. Synthetic tests were updated but remain unexecuted.
+
 ## Status summary
 
 | Area | Evidence status | Gate before claiming completion |
