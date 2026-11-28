@@ -218,3 +218,9 @@ The static binary usage text confirms that `libtun2socks.so` accepts `--tunfd`/`
 - Pdnsd.run creates its config/cache and invokes libpdnsd.so. TunnelVpnManager.onStartCommand reads VPN settings, SOCKS endpoint and DNS resolver values; runTunnel invokes Tunnel.startTunneling.
 - Library root inventory has base.apk but no exact-title ABI/density split or large native Go libraries. Native split inspection remains blocked on those missing Library entries; no user re-upload requested yet.
 - Detailed report updated at docs/reverse-engineering/base-apk-library-analysis-2026-11-28.md.
+
+
+### Base APK source identity verified
+
+- Computed the Git blob SHA-1 locally over the Library-materialized base.apk bytes: 329a7f7482c54d008e31cc9b7a4858d68d4a719c.
+- GitHub reports the same blob SHA-1 for main:APNA-APKs/base.apk. The Library APK analyzed in this pass is byte-for-byte identical to the repository's committed base.apk.
