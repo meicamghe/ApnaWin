@@ -511,6 +511,37 @@ def test_new_string_array_tracks_direct_aput_object_native_arguments():
     assert row["native_library_literals"] == ["libdecoy.so", "libudpqtwo.so"]
 
 
+
+def test_new_string_array_allocation_invalidates_stale_string_fact():
+    output = (
+        ".method private launchOverwrittenRegister()V\\n"
+        '    const-string v2, "libstale.so"\\n'
+        "    const/4 v0, 0x1\\n"
+        "    new-array v2, v0, [Ljava/lang/String;\\n"
+        "    invoke-virtual {v3, v2}, Ljava/lang/Runtime;->exec(Ljava/lang/String;)Ljava/lang/Process;\\n"
+        ".end method\\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["runtime_exec_library_basenames"] == []
+    assert row["native_library_literals"] == ["libstale.so"]
+
+
+def test_filled_string_array_result_invalidates_stale_string_fact():
+    output = (
+        ".method private launchOverwrittenResult()V\\n"
+        '    const-string v2, "libstale.so"\\n'
+        '    const-string v1, "not-a-library"\\n'
+        "    filled-new-array {v1}, [Ljava/lang/String;\\n"
+        "    move-result-object v2\\n"
+        "    invoke-virtual {v3, v2}, Ljava/lang/Runtime;->exec(Ljava/lang/String;)Ljava/lang/Process;\\n"
+        ".end method\\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["runtime_exec_library_basenames"] == []
+    assert row["native_library_literals"] == ["libstale.so"]
+
 def test_new_string_array_register_overwrite_invalidates_array_evidence():
     output = (
         ".method private launchNative()V\n"
