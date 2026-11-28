@@ -389,3 +389,9 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - CI run [46118622215](https://github.com/meicamghe/ApnaWin/actions/runs/46118622215)
   passed on head `efaab7db6869c13293eae94a4416cdb76a6d77b4`:
   **965 passed, 1 skipped, 1 warning**. Windows packaging remained skipped.
+
+- The DEX candidate filter now includes the known `com.liapp.*` protector
+  namespace and prioritizes those classes after exact manifest VPN services.
+  This lets the bounded scan record readable LIAPP loader callsites without
+  attempting to decrypt or bypass protected DEX. A regression test covers
+  both candidate inclusion and priority under the 64-class scan cap.
