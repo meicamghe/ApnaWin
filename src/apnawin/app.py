@@ -31,6 +31,10 @@ from PySide6.QtWidgets import (
 from apnawin.domain.profile import ConnectionProfile, Transport
 from apnawin.engines.xray_process import MAX_XRAY_CONFIG_BYTES
 from apnawin.storage.profile_store import load_profiles, save_profiles
+from apnawin.services.proxy_profile_import import (
+    ProxyProfileImportError,
+    import_proxy_profiles,
+)
 from apnawin.storage.xray_config_store import XrayConfigStore
 
 
@@ -134,6 +138,8 @@ class MainWindow(QMainWindow):
         self.remove_button.clicked.connect(self._remove_profile)
         self.import_button = QPushButton("Import…")
         self.import_button.clicked.connect(self._import_profiles)
+        self.import_share_links_button = QPushButton("Import server links…")
+        self.import_share_links_button.clicked.connect(self._import_share_links)
         self.export_button = QPushButton("Export…")
         self.export_button.clicked.connect(self._export_profiles)
         self.import_xray_config_button = QPushButton("Import Xray config…")
@@ -147,6 +153,7 @@ class MainWindow(QMainWindow):
         profile_actions.addWidget(self.edit_button)
         profile_actions.addWidget(self.remove_button)
         profile_actions.addWidget(self.import_button)
+        profile_actions.addWidget(self.import_share_links_button)
         profile_actions.addWidget(self.export_button)
         profile_actions.addWidget(self.import_xray_config_button)
         profile_actions.addStretch(1)
@@ -182,6 +189,7 @@ class MainWindow(QMainWindow):
             self.profile_storage_writable = False
             self.add_button.setEnabled(False)
             self.import_button.setEnabled(False)
+            self.import_share_links_button.setEnabled(False)
             self.import_xray_config_button.setEnabled(False)
             self.status_label.setText(
                 "Profile storage is unavailable — editing is disabled to protect existing data."
@@ -356,6 +364,63 @@ class MainWindow(QMainWindow):
         if self._save_profiles(updated):
             self._refresh_profiles(len(updated) - 1)
             self.status_label.setText(f"Imported {len(imported)} profile(s).")
+
+    def _import_share_links(self) -> None:
+        """Import standard Xray share links and persist their TUN configs with DPAPI."""
+        if not self.profile_storage_writable:
+            return
+        filename, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Import server links",
+            "",
+            "Server link lists (*.txt *.conf *.links);;Text files (*.txt);;All files (*)",
+        )
+        if not filename:
+            return
+        try:
+            with Path(filename).open("rb") as stream:
+                document = stream.read(1024 * 1024 + 1)
+            if len(document) > 1024 * 1024:
+                raise ValueError("Server-link document exceeds the 1 MiB limit")
+            imported = import_proxy_profiles(
+                document,
+                self.profiles,
+                self.xray_config_store,
+                lambda profiles: save_profiles(self.profiles_path, profiles),
+            )
+        except ProxyProfileImportError as exc:
+            if exc.cleanup_errors:
+                self.status_label.setText(
+                    "Share-link import failed; encrypted-config cleanup is incomplete. "
+                    "Do not retry until the local config store is inspected."
+                )
+                QMessageBox.critical(
+                    self,
+                    "Import cleanup incomplete",
+                    "The import failed and one or more encrypted records could not be removed. "
+                    "The affected records are retained; no credentials are shown.",
+                )
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Server-link import failed",
+                    "No profile batch was committed. Check the file and available disk space.",
+                )
+            return
+        except (OSError, TypeError, ValueError) as exc:
+            QMessageBox.warning(
+                self,
+                "Server-link import failed",
+                f"No profiles were imported. ({type(exc).__name__})",
+            )
+            return
+
+        self.profiles = [*self.profiles, *imported]
+        self._refresh_profiles(len(self.profiles) - 1)
+        self.status_label.setText(
+            f"Imported {len(imported)} server profile(s); Xray configs are encrypted for this Windows user. "
+            "Server compatibility has not yet been tested."
+        )
 
     def _import_xray_config(self) -> None:
         """Import a full-tunnel Xray JSON config and encrypt it with current-user DPAPI."""
