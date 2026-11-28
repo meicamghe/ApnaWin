@@ -36,37 +36,58 @@ def _fixture(*, magic: int = 0x12345678) -> bytes:
 
 def test_recovers_names_and_checks_executable_entries():
     report = recover_go_pclntab(_fixture(), 0x1000, allow_stomped_magic=True)
-    assert report["format"].endswith("v2")
+    assert report["format"].endswith("v3")
     assert report["nfunc"] == 2
     assert [f["name"] for f in report["functions"]] == ["main.main", "runtime.goexit"]
     assert report["binary_executed"] is False
 
 
 
-def _fixture_with_zero_text_start() -> bytes:
+def _fixture_with_zero_text_start(*, include_symbol: bool = True) -> bytes:
     data = bytearray(_fixture(magic=0xFFFFFFF1))
-    # PIE Go binaries can store textStart=0; resolve the base from ELF .text.
+    # The ELF .text section may begin with a native entry stub. Anchor Go text
+    # from a defined function symbol whose size matches its pclntab PC range.
     struct.pack_into("<Q", data, 0x218, 0)
+    if not include_symbol:
+        return bytes(data)
     struct.pack_into("<Q", data, 40, 0x1600)  # e_shoff
-    struct.pack_into("<HHH", data, 58, 64, 3, 2)  # e_shentsize, e_shnum, e_shstrndx
+    struct.pack_into("<HHH", data, 58, 64, 5, 2)  # e_shentsize, e_shnum, e_shstrndx
     struct.pack_into(
         "<IIQQQQIIQQ", data, 0x1600 + 64,
         1, 1, 0x6, 0x3000, 0x1200, 0x400, 0, 0, 16, 0,
     )
-    shstr = b"\0.text\0.shstrtab\0"
-    data[0x1700:0x1700 + len(shstr)] = shstr
+    shstr = b"\\0.text\\0.shstrtab\\0.dynsym\\0.dynstr\\0"
+    data[0x1740:0x1740 + len(shstr)] = shstr
     struct.pack_into(
         "<IIQQQQIIQQ", data, 0x1600 + 128,
-        7, 3, 0, 0, 0x1700, len(shstr), 0, 0, 1, 0,
+        7, 3, 0, 0, 0x1740, len(shstr), 0, 0, 1, 0,
     )
+    struct.pack_into(
+        "<IIQQQQIIQQ", data, 0x1600 + 192,
+        17, 11, 2, 0, 0x1768, 48, 4, 1, 8, 24,
+    )
+    struct.pack_into(
+        "<IIQQQQIIQQ", data, 0x1600 + 256,
+        25, 3, 0, 0, 0x1798, 10, 0, 0, 1, 0,
+    )
+    # One null symbol followed by global FUNC main.main at VA 0x3010, size 16.
+    struct.pack_into("<IBBHQQ", data, 0x1780, 1, 0x12, 0, 1, 0x3010, 16)
+    data[0x1798:0x17A2] = b"\\0main.main\\0"
     return bytes(data)
 
 
-def test_zero_text_start_uses_unique_executable_text_section():
+def test_zero_text_start_uses_matching_elf_function_symbol_anchor():
     report = recover_go_pclntab(_fixture_with_zero_text_start(), 0x1000)
     assert report["text_start"] == "0x0"
-    assert report["resolved_text_start"] == "0x3000"
+    assert report["resolved_text_start"] == "0x3010"
+    assert report["text_start_resolution"] == "elf-function-symbol-anchor"
     assert [f["name"] for f in report["functions"]] == ["main.main", "runtime.goexit"]
+
+
+def test_zero_text_start_without_symbol_anchor_fails_closed():
+    with pytest.raises(ValueError, match="unique matching function-symbol anchor"):
+        recover_go_pclntab(_fixture_with_zero_text_start(include_symbol=False), 0x1000)
+
 
 def test_stomped_magic_requires_opt_in():
     with pytest.raises(ValueError, match="stomped-magic"):
