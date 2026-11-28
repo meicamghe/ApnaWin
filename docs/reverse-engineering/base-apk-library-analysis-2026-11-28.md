@@ -161,3 +161,14 @@ Therefore the app's startup path explicitly loads the library named `bxdtcxfzx`,
 - It has one instance method with a one-instruction code item containing only `return-void`.
 - Its string/type/method tables contain only the Activity/class/method metadata.
 This looks like a placeholder/stub DEX in this artifact. It does not explain the LIAPP native loader or service behavior.
+
+## DEX-wide literal asset/service-name cross-check — 2026-11-28
+
+A direct scan of the string-ID tables across all four DEX containers physically present in the Library-backed base APK (classes.dex, assets/.bxdtcxfzx.dex, and both Audience Network DEX files) produced these bounded results:
+
+- No DEX string-ID contains the literal asset name `janur.json` or the substring `janur`. The asset exists in the ZIP, but its consuming code has not been identified. Its name may be constructed dynamically or consumed through a generic asset enumeration/path; absence of a literal is not proof that it is unused.
+- The primary DEX string/type tables do contain the manifest service descriptors `SalamanderService`, `XRayDNSService`, and `TunnelVpnService`, but the primary DEX class-def table still has no definitions for those service classes. This reinforces the distinction between a referenced descriptor and an implementation.
+- No DEX string-ID contains `libudpqtwo`, `libsalamander`, or `libxray`. No direct DEX-to-those-library-name linkage is established from the base APK.
+- This was a literal string-table check, not a full data-flow proof. Dynamically assembled names, encrypted strings, reflection and native-side asset access remain possible.
+
+The next useful static pass is to map LIAPP's asset/ZIP/ClassLoader callsites and decode the `com.liapp.k` string helper with a validated DEX disassembler. The current lightweight decoder is not sufficient to claim the helper's exact transform. The required ABI split and the two native libraries remain unavailable in the materialized Library inventory, so service implementation/native mapping is blocked pending those binaries.
