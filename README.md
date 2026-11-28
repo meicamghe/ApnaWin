@@ -83,3 +83,17 @@ The UI, application orchestration, transport-neutral domain model, engine adapte
 ## Session continuity
 
 For the current project decisions, implementation boundaries, and next-session checklist, see [docs/SESSION-HANDOFF.md](docs/SESSION-HANDOFF.md).
+
+
+## APNA SSH integration status
+
+The APNA SSH transport implementation is being integrated on the separate branch
+`feature/apna-ssh-backend-port`. It includes Paramiko SSH with explicit host-key
+verification, payload transports, local SOCKS5 TCP forwarding, UDPGW relay and
+Xray/Wintun tunnel composition. APNA catalog import and DPAPI-protected profile
+settings are included in that branch.
+
+This branch has not yet passed its own full CI run or live provider acceptance.
+A successful SSH login alone is not a full-tunnel acceptance: verify routed TCP,
+non-DNS UDP, DNS, IPv4/IPv6 egress, disconnect cleanup and crash recovery with an
+authorized APNA account before treating the feature as production-ready.
