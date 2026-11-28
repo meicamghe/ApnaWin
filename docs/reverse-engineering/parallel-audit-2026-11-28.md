@@ -99,7 +99,7 @@ The following source/documentation changes were added on this research branch af
 - Replaced the stale Xray milestone text with an accurate source-level description of share-link import and guarded worker lifecycle integration, while retaining the distinction between source integration and live VPN validation.
 - Ported bounded DEX process/native-loader linkage scanning, split-set aggregation, a CLI and mocked regression tests from the divergent research branch as selective files only. The 64-class cap remains; the exhaustive class-name-independent DEX reference index is still unimplemented. Updated the design note to distinguish implemented bounded scanning from the remaining exhaustive index.
 
-At the initial audit checkpoint the branch was six commits ahead; subsequent selective implementation and documentation updates brought it to 24 commits ahead of `main` with zero commits behind (latest comparison at this handoff). No Windows build, CI run, SSH work, PR merge or native-binary execution was performed.
+At the initial audit checkpoint the branch was six commits ahead; subsequent selective implementation and documentation updates brought it to 28 commits ahead of `main` with zero commits behind (latest comparison at this handoff). No Windows build, CI run, SSH work, PR merge or native-binary execution was performed.
 
 
 ## Uploaded Xray binary follow-up
