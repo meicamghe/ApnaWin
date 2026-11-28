@@ -456,3 +456,27 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - GitHub Actions run [46125299993](https://github.com/meicamghe/ApnaWin/actions/runs/46125299993) passed: **982 passed, 1 skipped, 1 warning**. The Windows build job was skipped by the explicit reverse-engineering gate.
 - This run includes the bounded String[] DEX tracker tests and the GoReSym patch-artifact integrity tests (unified-diff hunk counts, five embedded test functions, and balanced braces).
 - No APNA APK extraction artifact was generated. The GoReSym patch remains prepared only, and no Go symbol recovery or provider handshake is claimed.
+
+## DEX linkage hardening follow-up — 2026-11-28
+
+- Extended regression coverage to `Runtime.exec(String[])` for both direct
+  `new-array`/`aput-object` construction and `filled-new-array` captured by
+  the immediately following `move-result-object`.
+- Static parser review found stale-register false-linkage cases: a destination
+  register overwritten by `move-result-object`, `new-array`, or a captured
+  `filled-new-array` could retain an earlier string literal. Destination
+  invalidation now clears those stale string facts before later callsite
+  correlation. This is conservative register-local invalidation, not general
+  DEX data-flow analysis.
+- Added regression tests for each stale-fact case and for `Runtime.exec`
+  String[] linkage. The documentation now reflects the implemented
+  `new-array` support and no longer lists it as unsupported.
+- Latest source/test commits: `37643e6`, `c963daf`, `d1a8502`, `654fa2f`;
+  preceding test/docs commits: `07b0a76`, `ff92fc5`.
+- CI for the final head must be checked before treating these changes as
+  validated. Earlier successful CI run `46125411246` applies only to head
+  `24cd91d8f3882bd41dff611ba5a5bf41df26dea9`, before these new regressions.
+- No fresh APK extraction, native fingerprint artifact, GoReSym execution
+  against the sample, Go symbol recovery, provider handshake, or live traffic
+  validation is claimed. PR #8 remains open and unmerged; all product builds
+  and connection activation remain gated off.
