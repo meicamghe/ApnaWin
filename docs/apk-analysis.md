@@ -437,3 +437,23 @@ services, inspects each split's DEX files, and reports which APK actually
 defines each service class. Candidate process/native-loader callsites are
 reported per APK. A service-class definition or method reference is static
 evidence only; it does not establish runtime invocation or successful loading.
+
+
+## All-library native protocol fingerprinting
+
+After extracting all native libraries with `tools/extract_apk_native.py`, run
+the allowlisted fingerprint analyzer:
+
+```sh
+python3 tools/analyze_native_fingerprints.py analysis/native-libs \
+  --output analysis/native-fingerprints.json
+```
+
+The analyzer first verifies every extracted library's relative path, size and
+SHA-256 against `native-libs/manifest.json`. It then counts only predefined
+protocol-family, Go-runtime and known-engine markers across every ABI and
+split. It does not emit arbitrary strings, credentials, raw binary data or
+code, and never loads or executes a native library. Marker hits are leads for
+manual correlation, not proof that a protocol is active or used by a specific
+service. Common transport words such as UDP/TCP/TLS are deliberately weaker
+evidence than protocol-specific fingerprints.
