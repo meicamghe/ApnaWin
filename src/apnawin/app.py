@@ -4,6 +4,7 @@ Tunnel connection remains disabled until the privileged lifecycle, route/DNS
 rollback, leak protection and end-to-end Windows acceptance tests pass.
 """
 
+import os
 import sys
 from html import escape
 from pathlib import Path
@@ -36,6 +37,7 @@ from apnawin.services.proxy_profile_import import (
     import_proxy_profiles,
 )
 from apnawin.storage.xray_config_store import XrayConfigStore
+from apnawin.services.xray_connection_worker import XrayConnectionWorker
 
 
 def profile_file_path() -> Path:
@@ -158,11 +160,14 @@ class MainWindow(QMainWindow):
         profile_actions.addWidget(self.import_xray_config_button)
         profile_actions.addStretch(1)
 
+        self._connection_worker: XrayConnectionWorker | None = None
+        self._connection_state = "disconnected"
         self.connect_button = QPushButton("Connect")
         self.connect_button.setEnabled(False)
         self.connect_button.setToolTip(
-            "Connection remains disabled until the UAC supervisor is wired into the UI and route/DNS, leak-protection and end-to-end VPN tests pass."
+            "Select an Xray profile with an encrypted TUN config and install ApnaWin under Program Files first."
         )
+        self.connect_button.clicked.connect(self._toggle_connection)
 
         layout = QVBoxLayout()
         layout.addWidget(heading)
@@ -250,6 +255,13 @@ class MainWindow(QMainWindow):
             self.profile_storage_writable
             and config_store_ok
             and profile.transport == Transport.XRAY
+        )
+        self.connect_button.setEnabled(
+            self._connection_worker is None
+            and config_store_ok
+            and profile.transport == Transport.XRAY
+            and self.xray_config_store.has_config(profile.name)
+            and self._installed_helper_path() is not None
         )
         details = (
             f"{profile.transport.value.upper()}  •  "
@@ -421,6 +433,118 @@ class MainWindow(QMainWindow):
             f"Imported {len(imported)} server profile(s); Xray configs are encrypted for this Windows user. "
             "Server compatibility has not yet been tested."
         )
+
+    @staticmethod
+    def _installed_helper_path() -> Path | None:
+        """Return only the protected Program Files helper installation path."""
+        program_files = os.environ.get("ProgramFiles")
+        if not program_files:
+            return None
+        helper = Path(program_files) / "ApnaWin" / "ApnaWinElevator.exe"
+        return helper if helper.is_file() and not helper.is_symlink() else None
+
+    def _set_connection_controls(self, active: bool) -> None:
+        self.profile_list.setEnabled(not active)
+        for button in (
+            self.add_button, self.edit_button, self.remove_button,
+            self.import_button, self.import_share_links_button,
+            self.export_button, self.import_xray_config_button,
+        ):
+            button.setEnabled(not active and button.isEnabled() if not active else False)
+
+    def _toggle_connection(self) -> None:
+        worker = self._connection_worker
+        if worker is not None and worker.isRunning():
+            worker.request_stop()
+            self._connection_state = "stopping"
+            self.connect_button.setText("Stopping…")
+            self.connect_button.setEnabled(False)
+            self.status_label.setText("Disconnect requested — restoring network state…")
+            return
+
+        row = self.profile_list.currentRow()
+        if not 0 <= row < len(self.profiles):
+            return
+        profile = self.profiles[row]
+        if profile.transport != Transport.XRAY:
+            QMessageBox.warning(self, "Connect", "Only Xray profiles can use the Windows TUN engine.")
+            return
+        helper = self._installed_helper_path()
+        if helper is None:
+            QMessageBox.warning(
+                self, "ApnaWin helper not installed",
+                "Install ApnaWin from its extracted application folder using Install-ApnaWin.ps1 "
+                "as Administrator, then launch the installed ApnaWin.exe.",
+            )
+            return
+        if not self.xray_config_store.has_config(profile.name):
+            QMessageBox.warning(self, "Missing Xray config", "Import server links or an Xray TUN config first.")
+            return
+
+        worker = XrayConnectionWorker(
+            profile,
+            helper,
+            self.xray_config_store,
+            parent=self,
+        )
+        worker.connected.connect(self._on_connection_connected)
+        worker.failed.connect(self._on_connection_failed)
+        worker.disconnected.connect(self._on_connection_disconnected)
+        worker.lost.connect(self._on_connection_lost)
+        worker.finished.connect(self._on_connection_worker_finished)
+        self._connection_worker = worker
+        self._connection_state = "starting"
+        self._set_connection_controls(True)
+        self.connect_button.setText("Cancel")
+        self.connect_button.setEnabled(True)
+        self.status_label.setText("Starting elevated Xray helper and waiting for tunnel traffic verification…")
+        worker.start()
+
+    def _on_connection_connected(self, pid: int) -> None:
+        self._connection_state = "connected"
+        self.connect_button.setText("Disconnect")
+        self.connect_button.setEnabled(True)
+        self.status_label.setText(
+            f"Connected — HTTPS traffic verified through the ApnaWin tunnel (helper PID {pid})."
+        )
+
+    def _on_connection_failed(self, message: str) -> None:
+        self._connection_state = "failed"
+        self.connect_button.setText("Connect")
+        self.connect_button.setEnabled(False)
+        self.status_label.setText(f"Connection failed — {message}")
+
+    def _on_connection_disconnected(self) -> None:
+        self._connection_state = "disconnected"
+        self.status_label.setText("Disconnected — helper confirmed tunnel shutdown.")
+
+    def _on_connection_lost(self, exit_code: int) -> None:
+        self._connection_state = "lost"
+        self.status_label.setText(
+            f"Connection lost — elevated helper exited unexpectedly (code {exit_code})."
+        )
+
+    def _on_connection_worker_finished(self) -> None:
+        worker = self._connection_worker
+        self._connection_worker = None
+        if worker is not None:
+            worker.deleteLater()
+        self._set_connection_controls(False)
+        self.connect_button.setText("Connect")
+        self.connect_button.setEnabled(False)
+        self._refresh_profiles(self.profile_list.currentRow())
+
+    def closeEvent(self, event) -> None:
+        worker = self._connection_worker
+        if worker is not None and worker.isRunning():
+            worker.request_stop()
+            if not worker.wait(20000):
+                self.status_label.setText(
+                    "The tunnel helper is still stopping. Keep ApnaWin open until cleanup completes."
+                )
+                event.ignore()
+                return
+        event.accept()
 
     def _import_xray_config(self) -> None:
         """Import a full-tunnel Xray JSON config and encrypt it with current-user DPAPI."""
