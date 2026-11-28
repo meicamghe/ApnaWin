@@ -21,7 +21,7 @@ def _synthetic_go_elf(*, magic: int = 0x12345678) -> bytes:
     header = bytearray(72)
     struct.pack_into("<I", header, 0, magic)
     header[4:8] = bytes([0, 0, 1, 8])
-    struct.pack_into("<8Q", header, 8, 2, 1, 0x2000, 0x60, 0x80, 0x90, 0xA0, 0xC0)
+    struct.pack_into("<8Q", header, 8, 2, 1, 0x1800, 0x60, 0x80, 0x90, 0xA0, 0xC0)
     data[pclntab_offset:pclntab_offset + len(header)] = header
     data[pclntab_offset + 0x60:pclntab_offset + 0x60 + 24] = b"main.main\0runtime.goexit\0"
     struct.pack_into("<IIIII", data, pclntab_offset + 0xC0, 0, 0xE0, 0x10, 0xF0, 0x20)
@@ -67,4 +67,32 @@ def test_rejects_non_monotonic_function_entries():
     struct.pack_into("<I", data, 0x2C0, 0x10)
     struct.pack_into("<I", data, 0x2C8, 0)
     with pytest.raises(ValueError, match="non-decreasing"):
+        recover_go_pclntab(bytes(data), 0x1100, allow_stomped_magic=True)
+
+
+
+def test_rejects_function_name_offset_outside_funcnametab():
+    data = bytearray(_synthetic_go_elf())
+    # First _func.nameOff is signed and must remain inside [funcnameOff, cuOff).
+    struct.pack_into("<i", data, 0x2C4, 0x80)
+    with pytest.raises(ValueError, match="funcnametab"):
+        recover_go_pclntab(bytes(data), 0x1100, allow_stomped_magic=True)
+
+
+def test_rejects_function_entry_outside_executable_segment():
+    data = bytearray(_synthetic_go_elf())
+    # Second function entry is relative to textStart and must map to PF_X memory.
+    struct.pack_into("<I", data, 0x2C8, 0x900)
+    with pytest.raises(ValueError, match="executable"):
+        recover_go_pclntab(bytes(data), 0x1100, allow_stomped_magic=True)
+
+
+def test_rejects_ambiguous_overlapping_load_mapping():
+    data = bytearray(_synthetic_go_elf())
+    # Add a second overlapping PT_LOAD header; the table must not be read from
+    # an arbitrary first matching segment.
+    struct.pack_into("<IIQQQQQQ", data, 64 + 56, 1, 5, 0x100, 0x1000, 0, 0x1000, 0x1000, 0x1000)
+    struct.pack_into("<H", data, 64 + 40, 56)
+    struct.pack_into("<H", data, 64 + 44, 2)
+    with pytest.raises(ValueError, match="unique file-backed"):
         recover_go_pclntab(bytes(data), 0x1100, allow_stomped_magic=True)
