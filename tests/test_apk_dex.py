@@ -442,6 +442,22 @@ def test_dex_linkage_counts_each_invocation_not_just_methods():
     }
 
 
+
+def test_move_result_object_invalidates_stale_string_register():
+    output = (
+        ".method private loadDynamicPath()V\\n"
+        '    const-string v0, "/tmp/libdecoy.so"\\n'
+        "    invoke-static {}, Lcom/example/PathFactory;->make()Ljava/lang/String;\\n"
+        "    move-result-object v0\\n"
+        "    invoke-static {v0}, Ljava/lang/System;->load(Ljava/lang/String;)V\\n"
+        ".end method\\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["invocation_counts"] == {"system_load": 1}
+    assert row["system_load_path_basenames"] == []
+    assert row["native_library_literals"] == ["libdecoy.so"]
+
 def test_system_load_correlates_only_the_exact_path_argument_register():
     output = (
         ".method private loadNative()V\n"
