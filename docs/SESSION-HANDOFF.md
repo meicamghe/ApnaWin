@@ -340,3 +340,37 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - The new checks cover verified allowlisted native fingerprint scanning, exact System.loadLibrary register correlation, accurate per-invocation DEX counts, cross-split DEX/native linkage aggregation and the prepared GoReSym patch artifact's repository-side integrity.
 - The build-windows job was skipped by the reverse-engineering gate.
 - PR #8 remains open and unmerged. The manual APK extraction workflow has not been dispatched, so there is still no fresh native inventory artifact or new binary-level discovery.
+
+## APK reverse-engineering handoff — 2026-11-28
+
+- Active branch: `re/apk-native-extract`; PR #8 remains open and must not be
+  merged without explicit user approval.
+- Latest DEX linkage changes passed CI run
+  [46117207738](https://github.com/meicamghe/ApnaWin/actions/runs/46117207738):
+  **964 passed, 1 skipped, 1 warning**. The warning is the intentional
+  duplicate-ZIP-entry fixture. The Windows packaging job was skipped by its
+  explicit gate; no product build was performed.
+- DEX callsite analysis now correlates exact argument registers for
+  `System.loadLibrary`, `System.load`, `Runtime.exec(String/String[])`,
+  and `ProcessBuilder(String[])`. Fully enumerated `filled-new-array`
+  string arrays followed by `move-result-object` are supported. The
+  cross-split report retains APK, class, method ordinal, basename and evidence
+  basis. See [apk-analysis.md](apk-analysis.md) for the exact scope and
+  unsupported data-flow cases.
+- This remains bounded static analysis. `filled-new-array/range`,
+  `new-array`/`aput-object`, general register aliases/moves, reflection,
+  interprocedural values and protected/obfuscated DEX remain unresolved.
+- The manual native extraction workflow now inventories every native member
+  and computes allowlisted native fingerprints, including StarUDP/QUIC,
+  Go-runtime, config-key and transport-dependency markers. **It has not yet
+  been dispatched against the committed APK set in this handoff**, so no
+  fresh artifact-level fingerprint result is claimed.
+- GoReSym v3.4.1 scanner patch remains prepared but not built or validated
+  against APNA's `libudpqtwo.so`. The unreadable moduledata `ftab` pointer
+  remains unresolved; no Go symbol recovery is claimed.
+- The APNA `libudpqtwo.so` candidate remains a high-confidence
+  StarUDP/Hysteria-v1-derived QUIC family lead, not proof of APNA's exact
+  server handshake, ALPN, credentials, configuration or successful
+  provider connection.
+- SSH remains on hold. Do not add connection activation, TUN/DNS routing,
+  Android builds, Windows builds or Linux builds. Keep Connect disabled.
