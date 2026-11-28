@@ -64,6 +64,29 @@ def inspect_apk_dex_set(
             "dex": dex,
         })
 
+    native_library_literal_references: list[dict[str, Any]] = []
+    system_load_library_references: list[dict[str, Any]] = []
+    for apk in per_apk:
+        for class_row in apk["dex"]["native_linkage_evidence"]:
+            for method in class_row["methods_with_evidence"]:
+                for library in method["native_library_literals"]:
+                    native_library_literal_references.append({
+                        "apk": apk["apk"],
+                        "class_name": class_row["class_name"],
+                        "method_ordinal": method["method_ordinal"],
+                        "library_literal": library,
+                        "invocation_kinds": method["invocation_kinds"],
+                    })
+                for library_name in method["system_load_library_names"]:
+                    system_load_library_references.append({
+                        "apk": apk["apk"],
+                        "class_name": class_row["class_name"],
+                        "method_ordinal": method["method_ordinal"],
+                        "library_name_argument": library_name,
+                        "mapped_library_basename": f"lib{library_name}.so",
+                        "mapping_basis": "Android System.loadLibrary naming convention",
+                    })
+
     service_locations = []
     for service in services:
         resolved_names = {
@@ -106,6 +129,8 @@ def inspect_apk_dex_set(
             apk["dex"]["defined_class_count"] for apk in per_apk
         ),
         "service_class_locations": service_locations,
+        "native_library_literal_references": native_library_literal_references,
+        "system_load_library_references": system_load_library_references,
         "per_apk": per_apk,
         "static_analysis_only": True,
         "android_device_required": False,
