@@ -14,11 +14,18 @@ from apnawin.engines.apna_tunnel_session import ApnaTunnelSessionConfig
 
 
 class ApnaHostKeyProbeError(RuntimeError):
-    """A host-key probe failed; ``stage`` identifies transport vs SSH failure."""
+    """An SSH host-key probe failed during its SSH negotiation stage."""
 
     def __init__(self, message: str, *, stage: str = "ssh_key_exchange") -> None:
         super().__init__(message)
         self.stage = stage
+
+
+class ApnaPayloadTransportProbeError(ApnaHostKeyProbeError):
+    """DNS, TCP, TLS, HTTP proxy or WebSocket setup failed before SSH began."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, stage="payload_transport")
 
 
 def scan_apna_ssh_host_key(
@@ -54,9 +61,7 @@ def scan_apna_ssh_host_key(
         # Preserve enough of it for CloudFront/DNS/TLS triage; other exception
         # text remains tightly capped because it may contain provider data.
         detail = raw_detail[:1600] if isinstance(exc, PayloadTransportError) else raw_detail[:240]
-        stage = "ssh_key_exchange"
         if isinstance(exc, PayloadTransportError):
-            stage = "payload_transport"
             message = f"Payload transport failed before SSH key exchange: {detail}"
         elif isinstance(exc, paramiko.SSHException) and "no acceptable ciphers" in detail.lower():
             message = (
@@ -69,7 +74,12 @@ def scan_apna_ssh_host_key(
             )
         else:
             message = f"SSH host-key exchange failed: {type(exc).__name__}: {detail}"
-        raise ApnaHostKeyProbeError(message, stage=stage) from exc
+        error_type = (
+            ApnaPayloadTransportProbeError
+            if isinstance(exc, PayloadTransportError)
+            else ApnaHostKeyProbeError
+        )
+        raise error_type(message) from exc
     finally:
         try:
             if transport is not None:
