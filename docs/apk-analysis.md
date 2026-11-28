@@ -506,7 +506,9 @@ The report does not expose arbitrary strings, method names, command arguments,
 paths, raw smali, or bytecode.
 
 This is intentionally a conservative partial data-flow analysis, not a full
-DEX interpreter. It does **not** currently resolve `filled-new-array/range`,
+DEX interpreter. Invoke instructions using the compressed `invoke-*/range`
+register form are counted but deliberately excluded from argument correlation;
+expanding their register ranges is not yet implemented. It does **not** currently resolve `filled-new-array/range`,
 `new-array` plus `aput-object`, register aliases or general move chains,
 reflection, dynamically generated commands, interprocedural values, or
 obfuscated/protected DEX. A missing reference therefore means “not established
