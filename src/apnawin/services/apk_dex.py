@@ -26,7 +26,7 @@ _CLASS_NAME = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*
 _PACKAGE_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)*\Z")
 _SIGNAL = re.compile(
     r"(?:vpn|tunnel|tun2socks|tun|socks|xray|openvpn|wireguard|"
-    r"dns|proxy|shadowsocks|v2ray|trojan|service|connectivity)",
+    r"dns|proxy|shadowsocks|v2ray|trojan|service|connectivity|liapp)",
     re.IGNORECASE,
 )
 
