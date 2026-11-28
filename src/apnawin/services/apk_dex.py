@@ -169,13 +169,19 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
     """Extract allowlisted process/native-loader call evidence from smali.
 
     Method names, descriptors, arbitrary strings and bytecode never leave this
-    parser. Library literals are restricted to syntactically valid .so basenames.
+    parser. Library literals are restricted to safe basenames and are linked
+    to System.loadLibrary only through the exact argument register.
     """
     if len(output.encode("utf-8")) > _MAX_OUTPUT_BYTES:
         raise ValueError("DEX class code exceeds the allowed size")
-    library_literal = re.compile(
-        r'\bconst-string(?:/jumbo)?\s+\w+,\s+"(lib[A-Za-z0-9_.+-]{1,120}\.so)"'
+    string_register = re.compile(
+        r'\bconst-string(?:/jumbo)?\s+(v[0-9]+|p[0-9]+),\s+"([^"]{1,512})"'
     )
+    load_library_registers = re.compile(
+        r'\{([^}]*)\},\s*Ljava/lang/System;->loadLibrary\('
+    )
+    safe_library_name = re.compile(r"^[A-Za-z0-9_]{1,120}$")
+    native_basename = re.compile(r"(lib[A-Za-z0-9_.+-]{1,120}\.so)$")
     rows: list[dict[str, Any]] = []
     current: dict[str, Any] | None = None
     method_ordinal = 0
@@ -183,7 +189,11 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
     def finish() -> None:
         if current is None:
             return
-        if current["invocation_kinds"] or current["native_library_literals"]:
+        if (
+            current["invocation_kinds"]
+            or current["native_library_literals"]
+            or current["system_load_library_names"]
+        ):
             if len(rows) >= _MAX_LINKAGE_EVIDENCE_ROWS:
                 raise ValueError("DEX linkage evidence contains too many methods")
             rows.append({
@@ -213,6 +223,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             continue
         if current is None:
             continue
+
         if "Ljava/lang/Runtime;->exec(" in line:
             current["invocation_kinds"].add("runtime_exec")
         if "Ljava/lang/ProcessBuilder;-><init>(" in line:
@@ -221,7 +232,8 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             current["invocation_kinds"].add("system_load_library")
             register_match = load_library_registers.search(line)
             if register_match:
-                for register in re.findall(r"\\b(?:v|p)[0-9]+\\b", register_match.group(1)):
+                registers = re.findall(r"\b(?:v|p)[0-9]+\b", register_match.group(1))
+                for register in registers:
                     literal = current["string_registers"].get(register)
                     if literal and safe_library_name.fullmatch(literal):
                         current["system_load_library_names"].add(literal)
@@ -233,15 +245,16 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             "Ldalvik/system/InMemoryDexClassLoader;-><init>(",
         )):
             current["invocation_kinds"].add("dynamic_dex_loader")
+
         register_match = string_register.search(line)
         if register_match:
             register, literal = register_match.groups()
             current["string_registers"][register] = literal
-            basename = re.search(r"(lib[A-Za-z0-9_.+-]{1,120}\\.so)$", literal)
+            basename = native_basename.search(literal)
             if basename:
                 current["native_library_literals"].add(basename.group(1))
-    finish()
 
+    finish()
     totals = {
         "runtime_exec_calls": 0,
         "process_builder_calls": 0,
