@@ -1,5 +1,6 @@
 diff --git a/objfile/elf.go b/objfile/elf.go
-index 0000000..1111111 100644
+--- a/objfile/elf.go
++++ b/objfile/elf.go
 --- a/objfile/elf.go
 +++ b/objfile/elf.go
 @@ -298,3 +298,37 @@
@@ -66,7 +67,8 @@ index 0000000..1111111 100644
  		}
 diff --git a/objfile/elf_moduledata_scan_test.go b/objfile/elf_moduledata_scan_test.go
 new file mode 100644
-index 0000000..2222222
+--- /dev/null
++++ b/objfile/elf_moduledata_scan_test.go
 --- /dev/null
 +++ b/objfile/elf_moduledata_scan_test.go
 @@ -0,0 +1,43 @@
@@ -112,5 +114,4 @@ index 0000000..2222222
 +	if got != -1 {
 +		t.Fatalf("got offset %d, want -1", got)
 +	}
-NaN
 +
