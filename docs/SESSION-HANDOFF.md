@@ -104,3 +104,50 @@ Added XrayTunnelSupervisor as the desktop-side lifecycle abstraction: XRAY-only,
 ## Latest verified Windows build (2026-11-15)
 
 CI run 43724914682 completed successfully: 848 tests passed, one skipped, and the Windows build, elevated helper build, pinned Xray/Wintun runtime installation, packaged-app smoke test and artifact upload all succeeded. Artifact ApnaWin-Windows-x64: ID 14165469958, 75,925,661 bytes, not expired. Commit 6410a2cf5b0b651dd48519bcdca299f246e64143 includes the desktop-side XrayTunnelSupervisor wrapper. The latest commit adds read-only adapter/route/DNS diagnostics. Connect remains disabled; no APNA endpoint/auth format has been established, and live route/DNS/WFP/e2e acceptance is still pending.
+
+
+## Reverse-engineering handoff — 2026-11-28 (current)
+
+### Active research branch
+
+- Branch: `research/parallel-re-audit-20261128`
+- Based on `main`; currently 24 commits ahead, 0 behind.
+- Research-only. Do not merge wholesale from `re/apk-native-extract`; only selectively ported DEX files were added.
+- No new Windows build, CI dispatch, SSH work, or PR merge.
+
+### Uploaded `libxray.so`
+
+- SHA-256: `e796e24eece84ab28ab9e20710a8581fbcb1044c6720db5f9c79fecc839f68b5`
+- 32,740,552 bytes; Android ARM64; Go 1.26.2; `-buildmode=exe`; ELF ET_DYN with Android interpreter and entry point.
+- 39,856 Go function names recovered offline from `.gopclntab`.
+- CLI entry points recovered: `main.main`, `main.executeRun`, `main.getConfigFilePath`, `main.startXray`, `main.readConfDir`, `main/confloader.LoadConfig`.
+- CLI help includes `run [-c config.json] [-confdir dir]`; config may come from flags, environment or STDIN.
+- Xray code includes VLESS, VMess, Trojan, Shadowsocks, Hysteria, WireGuard and Android TUN paths. Compiled code is not proof of UI activation or live connectivity.
+- No JNI exports were found in the dynamic symbol table. DEX-to-process launch/config handoff and Android VPNService TUN-FD transfer remain unproven.
+- The uploaded file is not yet hash-matched to a specific member path inside `base.apk` or a split. Do not claim exact APK provenance until matched.
+
+### DEX inspection implementation
+
+- Ported `src/apnawin/services/apk_dex.py` with bounded process/native-loader callsite scanning.
+- Added `src/apnawin/services/apk_dex_set.py` and `tools/inspect_apk_dex_set.py` to inspect a supplied base/split APK set, aggregate evidence, and join manifest VPN services to the APK where the class is defined.
+- Tests added/ported: `tests/test_apk_dex.py`, `tests/test_apk_dex_set.py`. They have not been executed.
+- The scanner remains bounded to 64 selected classes per APK. It is not an exhaustive class-name-independent DEX index.
+- Example on a machine with Android SDK tools installed:
+  `python tools/inspect_apk_dex_set.py APNA-APKs/base.apk APNA-APKs/split_config.arm64_v8a.apk APNA-APKs/split_config.de.apk APNA-APKs/split_config.en.apk APNA-APKs/split_config.fa.apk APNA-APKs/split_config.xxhdpi.apk`
+
+### Go pclntab parser
+
+- `tools/recover_go_pclntab.py` was corrected for Go functab offsets relative to `pcln` and PIE images whose `textStart=0`.
+- The parser recovered all 39,856 function names from the uploaded Xray binary using an independent offline extraction pass.
+- Synthetic regression tests were expanded but not run. No CI was dispatched.
+- Do not assume parser compatibility with `libudpqtwo.so` until tested against that exact binary.
+
+### Remaining priority order
+
+1. Run the new Go parser and DEX split-set tests locally (no CI dispatch unless explicitly requested).
+2. Obtain `base.apk` and all relevant split APKs in a locally accessible form, then run the DEX split-set inspector and trace `libxray.so` process/config/TUN handoff.
+3. Match uploaded `libxray.so` SHA-256 to its exact APK member path/ABI, or record that it is an external extracted artifact.
+4. Obtain direct copies of `libudpqtwo.so` and `libsalamander.so`; analyze each independently.
+5. Implement the class-name-independent DEX callsite index; current 64-class candidate scan is only triage.
+
+Keep static evidence, source integration, and runtime proof as separate statuses. Do not claim the VPN is operational from symbol recovery alone.
