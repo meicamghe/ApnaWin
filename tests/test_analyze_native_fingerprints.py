@@ -6,7 +6,7 @@ import pytest
 from tools.analyze_native_fingerprints import analyze_native_fingerprints
 
 
-def _fixture(root, payload=b"\\x7fELF" + b" quic quic runtime.main secret-token"):
+def _fixture(root, payload=b"\x7fELF" + b" quic quic runtime.main secret-token"):
     apk = "base.apk"
     abi = "arm64-v8a"
     library = "libengine.so"
