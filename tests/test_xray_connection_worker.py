@@ -35,6 +35,7 @@ def profile():
 def test_worker_emits_connected_only_after_traffic_probe_succeeds():
     events = []
     supervisor = FakeSupervisor()
+    supervisor.poll_result = 0
 
     worker = XrayConnectionWorker(
         profile(), "helper.exe", FakeStore(),
@@ -47,7 +48,7 @@ def test_worker_emits_connected_only_after_traffic_probe_succeeds():
     worker.start()
     assert worker.wait(2000)
 
-    assert events[:2] == ["probe", ("connected", 4242)]
+    assert events == ["probe", ("connected", 4242), ("lost", 0)]
     assert supervisor.started
     assert supervisor.stopped is False
 
