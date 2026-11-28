@@ -523,7 +523,9 @@ def test_new_string_array_ignores_non_string_array_and_unresolved_values():
         ".end method\n"
     )
     report = apk_dex._parse_dex_linkage_evidence(output)
-    assert report["methods_with_evidence"] == []
+    row = report["methods_with_evidence"][0]
+    assert row["invocation_counts"] == {"process_builder": 1}
+    assert row["process_builder_library_basenames"] == []
 
 
 def test_new_string_array_tracking_is_bounded_to_256_writes():
