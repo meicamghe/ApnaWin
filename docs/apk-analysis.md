@@ -473,11 +473,12 @@ command argument of `Runtime.exec`; and
 `process_builder_library_references` links a basename to the first command
 argument of a `ProcessBuilder` constructor. Receiver registers are excluded
 for instance calls. These indexes are emitted only when a bounded direct
-string-register argument or a fully enumerated `filled-new-array` String[]
-argument is observed. The array is associated with its destination only when
-the immediately following instruction is `move-result-object`. Arrays built
-with `new-array` plus `aput-object`, aliases, values loaded from files,
-reflection, and obfuscated/protected code may remain unresolved. A callsite
+string-register argument or a bounded String[] argument is observed. Arrays
+created by `filled-new-array` are associated with their destination only when
+the immediately following instruction is `move-result-object`; arrays created
+by `new-array` are tracked only through direct `aput-object` writes to the same
+register, with a 256-write cap. Aliases, values loaded from files, reflection,
+and obfuscated/protected code may remain unresolved. A callsite
 proves static argument linkage only, not that the method runs, the child
 starts, the library loads, or traffic uses it.
 
@@ -498,8 +499,10 @@ APIs:
 - `ProcessBuilder(String[])`: the first constructor argument is inspected,
   excluding the receiver register. A `String[]` created by a fully enumerated
   `filled-new-array {v...}` instruction and immediately captured by
-  `move-result-object` is supported; only safe library basenames from its
-  enumerated string registers are retained.
+  `move-result-object` is supported. A `new-array` String[] followed by direct
+  `aput-object` writes to the same register is also supported with a 256-write
+  cap. For either form, only safe library basenames from the exact array
+  argument are retained.
 
 For process-launch calls, the report keeps the library basename only when it
 is present in that exact argument value. An unrelated string elsewhere in the
