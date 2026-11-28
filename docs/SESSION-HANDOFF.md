@@ -224,3 +224,13 @@ The static binary usage text confirms that `libtun2socks.so` accepts `--tunfd`/`
 
 - Computed the Git blob SHA-1 locally over the Library-materialized base.apk bytes: 329a7f7482c54d008e31cc9b7a4858d68d4a719c.
 - GitHub reports the same blob SHA-1 for main:APNA-APKs/base.apk. The Library APK analyzed in this pass is byte-for-byte identical to the repository's committed base.apk.
+
+
+### DEX-wide loader/process callsite refinement — 2026-11-28
+
+- A separate primary-classes.dex pass found manifest Application class com.liapp.x; attachBaseContext invokes an obfuscated initializer before Application.attachBaseContext. The same LIAPP namespace contains reflection over ClassLoader internals, fields/methods, lists and ZIP files, supporting a custom loading/runtime-patching layer; exact payload and policy remain unresolved.
+- Five direct System.loadLibrary callsites exist in primary DEX: two explicitly load AndroidX datastore_shared_counter; three are inside obfuscated com.liapp.x methods and use the obfuscated com.liapp.k string helper. Two System.load callsites also occur in com.liapp.x. Native library names/paths are not plaintext and are not attributed yet.
+- Direct Runtime.exec paths are confirmed in Pdnsd.run and Tun2Socks.run; the latter launches libtun2socks.so, reads child stdout/stderr, sends the ParcelFileDescriptor over LocalSocket, then waits for the child. VpnUtils has separate process find/kill helpers.
+- Two ProcessBuilder.start callsites in obfuscated classes LU10 and Lz70 are not yet linked to any particular engine; do not attribute them to Xray or Salamander.
+- Manifest-referenced XRayDNSService, SalamanderService and TunnelVpnService class definitions are still absent from the base DEX class-def table. Required splits/dynamic DEX loading remain the next dependency.
+- Detailed appendix added to docs/reverse-engineering/base-apk-library-analysis-2026-11-28.md. Local lightweight DEX decoder is a targeted triage script, not yet committed or opcode-corpus validated; official scanner tests remain unexecuted.
