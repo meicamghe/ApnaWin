@@ -128,3 +128,29 @@ This final gate requires an ordinary APNA session on an Android test device and 
 - Do not enable Connect or route/DNS/TUN activation based on static fingerprints.
 - No Android application build or device-based testing is part of the ApnaWin deliverable.\n- Do not start a Windows or Linux product build until the user explicitly authorizes that phase.
 - PR #8 remains open and must not be merged without explicit user approval.
+
+
+## Native role classification: engine versus helper
+
+The word “engine” is reserved here for a component that implements or terminates a transport/protocol session. A helper may be required for packet plumbing or DNS without implementing the encrypted transport itself. A filename, `.so` suffix, dependency marker or mere co-presence in an APK is not enough to assign either role.
+
+| Component | Structural/process evidence | Role classification | Confidence and remaining gap |
+|---|---|---|---|
+| `libudpqtwo.so` | AArch64 ET_DYN with non-zero entry point and `/system/bin/linker64`; no JNI exports; Go runtime and StarUDP/Hysteria-v1-like protocol fingerprints | **Standalone native transport-engine candidate** (not a JNI library) | High confidence it is an executable Go transport component; exact DEX launcher, argv/config and runtime use remain unresolved |
+| `libtun2socks.so` | Primary DEX `Tun2Socks.run()` passes its path to `Runtime.exec`, plus `sock_path` and transparent-DNS UDPGW flags | **Packet-bridge helper** | Confirmed child-process launch path; it adapts TUN traffic to SOCKS/UDPGW and is not evidence of a separate encrypted protocol |
+| `libpdnsd.so` | Primary DEX `Pdnsd.run()` passes its path to `Runtime.exec` with pdnsd arguments | **DNS helper** | Confirmed child-process launch path; DNS forwarding/resolution helper, not a transport engine |
+| LIAPP loader/protection code | Readable DEX has obfuscated `System.load`/`System.loadLibrary` and dynamic-DEX-loader call sites | **Protection / loading layer** | Loader behavior is visible, but it is not proof that LIAPP itself owns or starts `libudpqtwo.so` |
+| `datastore_shared_counter` | Readable `System.loadLibrary` name | **Support library candidate** | Load-library reference is visible; binary identity and purpose are not yet tied to a transport |
+| `libudpq.so` | Seen in the separate UDP Thunder reference sample only | **Out-of-scope reference binary** | Not an APNA v51 inventory member based on current evidence; never merge it with `libudpqtwo.so` |
+
+### Classification rules for the remaining native inventory
+
+Every extracted `.so` must be assigned one of: `jni_library`, `standalone_pie_executable`, `packet_or_dns_helper`, `support_library`, or `unknown`. The decision must cite ELF class/machine/type, entry point, PT_INTERP, exports, DEX loader/process callsite, and protocol fingerprints independently. A component can have multiple observations, but it receives only one primary role; protocol-family identification is a separate field. Unresolved ownership remains `unknown`, not an inferred association.
+
+At this checkpoint, the three named APNA native components above are the only ones with enough evidence for the stated role labels. This is **not** a claim that the complete `.so` inventory is finished: the manual all-splits extraction workflow has no completed run/artifact in Actions yet. The inventory must be refreshed from the exact committed APK set before any “all engines discovered” claim.
+
+## DEX linkage scan expansion — 2026-11-28
+
+The bounded DEX candidate-name filter now also selects classes whose names contain `udp`, `quic`, `hysteria`, `starudp`, `native`, `loader` or `processbuilder`, in addition to the existing VPN, DNS, proxy and LIAPP indicators. This increases the chance of inspecting a non-obvious transport launcher while preserving the 64-class scan cap, service/LIAPP priority, per-class timeout and allowlisted output. A synthetic regression test covers the new candidate families.
+
+This change improves static candidate selection only. It does not reveal the protected secondary DEX, prove that a callsite executes, or establish the `libudpqtwo.so` owner. The exact owner remains unresolved until an ordinary readable DEX callsite or permitted process-parent evidence is available.
