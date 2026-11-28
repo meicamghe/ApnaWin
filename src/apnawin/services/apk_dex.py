@@ -255,6 +255,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
                 "string_registers": {},
                 "string_array_registers": {},
                 "pending_string_array": None,
+                "string_array_write_counts": {},
                 "dynamic_dex_loader_path_extensions": set(),
                 "dynamic_dex_loader_types": set(),
             }
@@ -272,7 +273,9 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
         if current["pending_string_array"] is not None:
             result_match = move_result_object.search(line)
             if result_match:
-                current["string_array_registers"][result_match.group(1)] = current["pending_string_array"]
+                array_register = result_match.group(1)
+                current["string_array_registers"][array_register] = current["pending_string_array"]
+                current["string_array_write_counts"][array_register] = 0
                 current["pending_string_array"] = None
                 continue
             if line.strip() and not line.lstrip().startswith("#"):
@@ -355,20 +358,24 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
         if allocated_array:
             array_register = allocated_array.group(1)
             current["string_array_registers"][array_register] = []
+            current["string_array_write_counts"][array_register] = 0
             continue
 
         array_put = string_array_put.search(line)
         if array_put:
             value_register, array_register, _index_register = array_put.groups()
             if array_register in current["string_array_registers"]:
-                values = current["string_array_registers"][array_register]
-                if len(values) < 256:
+                writes = current["string_array_write_counts"].get(array_register, 0) + 1
+                if writes > 256:
+                    current["string_array_registers"].pop(array_register, None)
+                    current["string_array_write_counts"].pop(array_register, None)
+                else:
+                    current["string_array_write_counts"][array_register] = writes
+                    values = current["string_array_registers"][array_register]
                     literal = current["string_registers"].get(value_register, "")
                     basename = native_basename.search(literal)
                     if basename and basename.group(1) not in values:
                         values.append(basename.group(1))
-                else:
-                    current["string_array_registers"].pop(array_register, None)
             continue
 
         array_match = string_array_registers.search(line)
@@ -396,6 +403,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             destination = destination_match.group(1)
             current["string_registers"].pop(destination, None)
             current["string_array_registers"].pop(destination, None)
+            current["string_array_write_counts"].pop(destination, None)
             current["pending_string_array"] = None
 
     finish()
