@@ -1,5 +1,7 @@
 import threading
 
+from PySide6.QtCore import Qt
+
 from apnawin.domain.profile import ConnectionProfile, Transport
 from apnawin.services.xray_connection_worker import XrayConnectionWorker
 
@@ -43,8 +45,8 @@ def test_worker_emits_connected_only_after_traffic_probe_succeeds():
         traffic_probe=lambda: events.append("probe"),
         poll_interval=0.01,
     )
-    worker.connected.connect(lambda pid: events.append(("connected", pid)))
-    worker.lost.connect(lambda code: events.append(("lost", code)))
+    worker.connected.connect(lambda pid: events.append(("connected", pid)), Qt.ConnectionType.DirectConnection)
+    worker.lost.connect(lambda code: events.append(("lost", code)), Qt.ConnectionType.DirectConnection)
     worker.start()
     assert worker.wait(2000)
 
@@ -63,7 +65,7 @@ def test_worker_stops_if_traffic_probe_fails_and_never_emits_connected():
         traffic_probe=lambda: (_ for _ in ()).throw(RuntimeError("route mismatch")),
     )
     worker.connected.connect(lambda _pid: events.append("connected"))
-    worker.failed.connect(events.append)
+    worker.failed.connect(events.append, Qt.ConnectionType.DirectConnection)
     worker.start()
     assert worker.wait(2000)
 
@@ -82,7 +84,7 @@ def test_worker_honors_stop_requested_during_helper_startup():
         supervisor_factory=lambda *_args, **_kwargs: supervisor,
         traffic_probe=lambda: events.append("probe"),
     )
-    worker.disconnected.connect(lambda: events.append("disconnected"))
+    worker.disconnected.connect(lambda: events.append("disconnected"), Qt.ConnectionType.DirectConnection)
     worker.start()
     worker.request_stop()
     gate.set()
