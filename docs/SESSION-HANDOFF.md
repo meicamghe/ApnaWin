@@ -208,3 +208,13 @@ The static binary usage text confirms that `libtun2socks.so` accepts `--tunfd`/`
 - Decoded manifest declares `SalamanderService`, `XRayDNSService`, `SocksDNSService`, `PInjectorService`, `TunnelVpnService` (with `BIND_VPN_SERVICE`), and tethering `ProxyService`. Several service implementation class definitions are absent from base DEX and must be sought in the required ABI/density splits.
 - `assets/janur.json` is 366,636 bytes of Base64 text; decoded payload is 274,976 bytes with ~7.9993 bits/byte entropy. It is not plaintext JSON; cipher/schema/purpose remain unknown.
 - Full findings and exact caveats: `docs/reverse-engineering/base-apk-library-analysis-2026-11-28.md`. No APK execution, CI, Windows build, SSH work, merge, or main-branch change.
+
+
+### Base APK DEX call-path refinement — 2026-11-28
+
+- A second local DEX instruction pass traced Tunnel.startVpn through VpnService.Builder.addRoute/setSession/setConfigureIntent/establish; the method obtains a ParcelFileDescriptor and has configure-intent references for XRayDNSService, SalamanderService, and SocksDNSService.
+- Tunnel.routeThroughTunnel starts Pdnsd and Tun2Socks workers. Tun2Socks.run constructs a libtun2socks.so command using the TUN FD, MTU/network arguments, a local socket path and --udpgw-transparent-dns, then executes it.
+- Tun2Socks.sendFd passes the ParcelFileDescriptor through Android LocalSocket.setFileDescriptorsForSend, writes a byte and closes the socket. This establishes the Java-side FD handoff mechanism statically; native receive-side semantics and runtime success remain unverified.
+- Pdnsd.run creates its config/cache and invokes libpdnsd.so. TunnelVpnManager.onStartCommand reads VPN settings, SOCKS endpoint and DNS resolver values; runTunnel invokes Tunnel.startTunneling.
+- Library root inventory has base.apk but no exact-title ABI/density split or large native Go libraries. Native split inspection remains blocked on those missing Library entries; no user re-upload requested yet.
+- Detailed report updated at docs/reverse-engineering/base-apk-library-analysis-2026-11-28.md.
