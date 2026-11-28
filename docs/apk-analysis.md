@@ -384,3 +384,28 @@ their separate 16 MiB byte-size ceiling. These limits bound parser CPU work
 for untrusted APK-native ELF metadata; exceeding a limit classifies the
 library as invalid for this analysis and does not imply anything about
 Android loader acceptance.
+
+
+## Static DEX process and native-loader linkage scan
+
+The DEX inspector also examines a bounded set of network/service candidate
+classes (up to 64 per APK) using `apkanalyzer dex code --class`. It processes
+smali only in memory and emits allowlisted evidence grouped by anonymous
+method ordinal:
+
+- `Runtime.exec` calls and `ProcessBuilder` construction;
+- `System.load` and `System.loadLibrary` calls;
+- `DexClassLoader`, `PathClassLoader`, and
+  `InMemoryDexClassLoader` construction;
+- literal native-library basenames matching `lib*.so`.
+
+Method names, descriptors, arbitrary strings, bytecode and raw smali are not
+included in the report. Native-library literals are correlated only to the
+method in which they appear; class-level co-presence is not promoted to a
+method-level link. The report marks whether the bounded candidate scan was
+truncated. A callsite is static evidence only: it does not prove execution,
+successful loading, process ownership, or traffic use. Protected/obfuscated
+DEX may remain unresolved without bypassing application protections.
+
+This is offline APK analysis. It does not require an Android device, install
+the APK, or create an Android version of ApnaWin.
