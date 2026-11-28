@@ -4,7 +4,11 @@ import socket
 
 import pytest
 
-from apnawin.engines.apna_payload_socket import PayloadSocketConfig, PayloadSocketMode
+from apnawin.engines.apna_payload_socket import (
+    PayloadSocketConfig,
+    PayloadSocketMode,
+    PayloadTransportError,
+)
 from apnawin.engines.apna_ssh_session import ApnaSshConfig
 from apnawin.engines.apna_tunnel_session import (
     ApnaTunnelSession,
@@ -310,3 +314,24 @@ def test_health_tracks_authenticated_ssh_and_gateway_listener():
 
     session.disconnect()
     assert not session.is_healthy
+
+
+def test_payload_transport_error_is_preserved_through_tunnel_session():
+    events = []
+
+    class FailingPayloadSshSession(_FakeSshSession):
+        def connect(self):
+            events.append("ssh-connect")
+            raise PayloadTransportError(
+                "DNS resolution failed before TCP connection; endpoint=proxy.example.test:80"
+            )
+
+    session = ApnaTunnelSession(
+        _config(udpgw_host=None, udpgw_port=None),
+        ssh_session_factory=lambda *args: FailingPayloadSshSession(*args, events=events),
+        gateway_factory=lambda config: pytest.fail("gateway must not start"),
+    )
+    with pytest.raises(PayloadTransportError, match="DNS resolution failed before TCP connection"):
+        session.connect()
+    assert events == ["ssh-connect", "ssh-close"]
+    assert not session.is_connected
