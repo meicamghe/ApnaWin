@@ -59,7 +59,7 @@ class _ElfImage:
                         name_off, _kind, flags, address, _offset, size = section[:6]
                         if not (flags & 0x4) or not size or name_off >= len(names):
                             continue
-                        end = names.find(b"\\0", name_off)
+                        end = names.find(b"\0", name_off)
                         if end < 0 or names[name_off:end] != b".text":
                             continue
                         matches = self._matches(address, size)
