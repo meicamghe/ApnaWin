@@ -445,12 +445,12 @@ def test_dex_linkage_counts_each_invocation_not_just_methods():
 
 def test_move_result_object_invalidates_stale_string_register():
     output = (
-        ".method private loadDynamicPath()V\\n"
-        '    const-string v0, "/tmp/libdecoy.so"\\n'
-        "    invoke-static {}, Lcom/example/PathFactory;->make()Ljava/lang/String;\\n"
-        "    move-result-object v0\\n"
-        "    invoke-static {v0}, Ljava/lang/System;->load(Ljava/lang/String;)V\\n"
-        ".end method\\n"
+        ".method private loadDynamicPath()V\n"
+        '    const-string v0, "/tmp/libdecoy.so"\n'
+        "    invoke-static {}, Lcom/example/PathFactory;->make()Ljava/lang/String;\n"
+        "    move-result-object v0\n"
+        "    invoke-static {v0}, Ljava/lang/System;->load(Ljava/lang/String;)V\n"
+        ".end method\n"
     )
     report = apk_dex._parse_dex_linkage_evidence(output)
     row = report["methods_with_evidence"][0]
@@ -514,12 +514,12 @@ def test_new_string_array_tracks_direct_aput_object_native_arguments():
 
 def test_new_string_array_allocation_invalidates_stale_string_fact():
     output = (
-        ".method private launchOverwrittenRegister()V\\n"
-        '    const-string v2, "libstale.so"\\n'
-        "    const/4 v0, 0x1\\n"
-        "    new-array v2, v0, [Ljava/lang/String;\\n"
-        "    invoke-virtual {v3, v2}, Ljava/lang/Runtime;->exec(Ljava/lang/String;)Ljava/lang/Process;\\n"
-        ".end method\\n"
+        ".method private launchOverwrittenRegister()V\n"
+        '    const-string v2, "libstale.so"\n'
+        "    const/4 v0, 0x1\n"
+        "    new-array v2, v0, [Ljava/lang/String;\n"
+        "    invoke-virtual {v3, v2}, Ljava/lang/Runtime;->exec(Ljava/lang/String;)Ljava/lang/Process;\n"
+        ".end method\n"
     )
     report = apk_dex._parse_dex_linkage_evidence(output)
     row = report["methods_with_evidence"][0]
@@ -529,13 +529,13 @@ def test_new_string_array_allocation_invalidates_stale_string_fact():
 
 def test_filled_string_array_result_invalidates_stale_string_fact():
     output = (
-        ".method private launchOverwrittenResult()V\\n"
-        '    const-string v2, "libstale.so"\\n'
-        '    const-string v1, "not-a-library"\\n'
-        "    filled-new-array {v1}, [Ljava/lang/String;\\n"
-        "    move-result-object v2\\n"
-        "    invoke-virtual {v3, v2}, Ljava/lang/Runtime;->exec(Ljava/lang/String;)Ljava/lang/Process;\\n"
-        ".end method\\n"
+        ".method private launchOverwrittenResult()V\n"
+        '    const-string v2, "libstale.so"\n'
+        '    const-string v1, "not-a-library"\n'
+        "    filled-new-array {v1}, [Ljava/lang/String;\n"
+        "    move-result-object v2\n"
+        "    invoke-virtual {v3, v2}, Ljava/lang/Runtime;->exec(Ljava/lang/String;)Ljava/lang/Process;\n"
+        ".end method\n"
     )
     report = apk_dex._parse_dex_linkage_evidence(output)
     row = report["methods_with_evidence"][0]
@@ -617,17 +617,17 @@ def test_new_string_array_tracking_is_bounded_to_256_writes():
 
 def test_runtime_exec_string_array_links_new_array_and_filled_array_arguments():
     output = (
-        ".method private launchRuntimeArrays()V\\n"
-        "    const/4 v0, 0x1\\n"
-        "    new-array v2, v0, [Ljava/lang/String;\\n"
-        '    const-string v1, "libudpqtwo.so"\\n'
-        "    aput-object v1, v2, v0\\n"
-        "    invoke-virtual {v3, v2}, Ljava/lang/Runtime;->exec([Ljava/lang/String;)Ljava/lang/Process;\\n"
-        '    const-string v4, "libdecoy.so"\\n'
-        "    filled-new-array {v4}, [Ljava/lang/String;\\n"
-        "    move-result-object v5\\n"
-        "    invoke-virtual {v3, v5}, Ljava/lang/Runtime;->exec([Ljava/lang/String;)Ljava/lang/Process;\\n"
-        ".end method\\n"
+        ".method private launchRuntimeArrays()V\n"
+        "    const/4 v0, 0x1\n"
+        "    new-array v2, v0, [Ljava/lang/String;\n"
+        '    const-string v1, "libudpqtwo.so"\n'
+        "    aput-object v1, v2, v0\n"
+        "    invoke-virtual {v3, v2}, Ljava/lang/Runtime;->exec([Ljava/lang/String;)Ljava/lang/Process;\n"
+        '    const-string v4, "libdecoy.so"\n'
+        "    filled-new-array {v4}, [Ljava/lang/String;\n"
+        "    move-result-object v5\n"
+        "    invoke-virtual {v3, v5}, Ljava/lang/Runtime;->exec([Ljava/lang/String;)Ljava/lang/Process;\n"
+        ".end method\n"
     )
     report = apk_dex._parse_dex_linkage_evidence(output)
     row = report["methods_with_evidence"][0]
