@@ -67,6 +67,8 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
     if header[8] != expected_header:
         raise ValueError("ELF header size is invalid")
     section_offset, section_entry_size, section_count = header[6], header[11], header[12]
+    if not section_offset and (section_count != 0 or header[13] != 0):
+        raise ValueError("ELF section metadata references a missing section-header table")
     if section_count and section_count > _MAX_SECTION_HEADERS:
         raise ValueError("ELF has too many section headers")
     if section_offset:
@@ -504,6 +506,47 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
             raise ValueError("ELF program-header table is out of bounds")
     elif program_offset:
         raise ValueError("ELF program-header table offset exists without entries")
+    entry_point = header[4]
+    interpreter_present = False
+    if program_count:
+        for index in range(program_count):
+            record_offset = program_offset + index * program_entry_size
+            if elf_class == 2:
+                (
+                    segment_type, _flags, file_offset, _virtual_address,
+                    _physical_address, file_size, _memory_size, _alignment,
+                ) = struct.unpack_from(endian + "IIQQQQQQ", data, record_offset)
+            else:
+                (
+                    segment_type, file_offset, _virtual_address,
+                    _physical_address, file_size, _memory_size, _flags,
+                    _alignment,
+                ) = struct.unpack_from(endian + "IIIIIIII", data, record_offset)
+            if segment_type != 3:  # PT_INTERP
+                continue
+            if interpreter_present:
+                raise ValueError("ELF has multiple interpreter segments")
+            if (
+                file_size < 2 or file_size > 4096
+                or file_offset > len(data)
+                or file_size > len(data) - file_offset
+            ):
+                raise ValueError("ELF interpreter segment is out of bounds")
+            interpreter = data[file_offset:file_offset + file_size]
+            if (
+                interpreter[-1] != 0
+                or b"\x00" in interpreter[:-1]
+                or not interpreter[:-1].startswith(b"/")
+            ):
+                raise ValueError("ELF interpreter path is malformed")
+            interpreter_present = True
+    if elf_type == 3 and entry_point and interpreter_present:
+        execution_model = "pie_executable_candidate"
+    elif elf_type == 3 and not entry_point and not interpreter_present:
+        execution_model = "shared_object_candidate"
+    else:
+        execution_model = "other_or_ambiguous"
+
     dynamic_symbols = 0
     jni_symbols = 0
     jni_onload = False
@@ -615,6 +658,9 @@ def inspect_elf_bytes(data: bytes) -> dict[str, Any]:
         "machine": machine,
         "machine_name": _MACHINE_NAMES.get(machine, "unknown"),
         "file_type": elf_type,
+        "entry_point": entry_point,
+        "interpreter_present": interpreter_present,
+        "execution_model": execution_model,
         "dynamic_symbol_table_present": dynsym_found,
         "dynamic_symbol_count": dynamic_symbols if dynsym_found else None,
         "jni_exported_symbol_count": jni_symbols if dynsym_found else None,

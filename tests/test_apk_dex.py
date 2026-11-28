@@ -54,6 +54,8 @@ def test_inspector_invokes_documented_commands(tmp_path, monkeypatch):
             return b"classes.dex\nclasses2.dex\n"
         if args[:2] == ["dex", "packages"]:
             return b"C d 1 1 20 com.example.TunnelService\n"
+        if args[:2] == ["dex", "code"]:
+            return b".class public Lcom/example/TunnelService;\n"
         return b"classes.dex 100\nclasses2.dex 200\n"
 
     monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
@@ -66,6 +68,7 @@ def test_inspector_invokes_documented_commands(tmp_path, monkeypatch):
     assert commands == [
         ["dex", "list"],
         ["dex", "packages", "--defined-only"],
+        ["dex", "code", "--class", "com.example.TunnelService"],
         ["dex", "references"],
     ]
 
@@ -185,6 +188,7 @@ def test_manifest_service_join_without_package_reports_unresolved_class(tmp_path
     outputs = iter([
         b"classes.dex\n",
         b"C d 1 1 20 com.example.TunnelService\n",
+        b".class public Lcom/example/TunnelService;\n",
         b"classes.dex 10\n",
     ])
     monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
@@ -330,3 +334,520 @@ def test_missing_service_class_has_no_native_method_claim(tmp_path, monkeypatch)
     assert item["native_method_count"] is None
     assert item["native_method_inspection_completed"] is False
 
+
+
+
+def test_parse_dex_linkage_evidence_correlates_calls_and_library_literals():
+    output = (
+        ".class public Lcom/example/Launcher;\n"
+        ".method public start()V\n"
+        '    const-string v0, "libudpqtwo.so"\n'
+        "    invoke-virtual {v1, v0}, Ljava/lang/Runtime;->exec(Ljava/lang/String;)Ljava/lang/Process;\n"
+        ".end method\n"
+        ".method private load()V\n"
+        '    const-string v0, "libpdnsd.so"\n'
+        '    const-string v1, "pdnsd"\n'
+        "    invoke-static {v1}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        "    invoke-direct {v1, v2}, Ldalvik/system/DexClassLoader;-><init>(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    assert report["runtime_exec_calls"] == 1
+    assert report["system_load_library_calls"] == 1
+    assert report["dynamic_dex_loader_calls"] == 1
+    assert report["methods_with_evidence"] == [
+        {
+            "method_ordinal": 1,
+            "invocation_kinds": ["runtime_exec"],
+            "invocation_counts": {"runtime_exec": 1},
+            "native_library_literals": ["libudpqtwo.so"],
+            "system_load_library_names": [],
+            "system_load_path_basenames": [],
+            "runtime_exec_library_basenames": ["libudpqtwo.so"],
+            "process_builder_library_basenames": [],
+            "dynamic_dex_loader_path_extensions": [],
+            "dynamic_dex_loader_types": [],
+        },
+        {
+            "method_ordinal": 2,
+            "invocation_kinds": ["dynamic_dex_loader", "system_load_library"],
+            "invocation_counts": {"dynamic_dex_loader": 1, "system_load_library": 1},
+            "native_library_literals": ["libpdnsd.so"],
+            "system_load_library_names": ["pdnsd"],
+            "system_load_path_basenames": [],
+            "runtime_exec_library_basenames": [],
+            "process_builder_library_basenames": [],
+            "dynamic_dex_loader_path_extensions": [],
+            "dynamic_dex_loader_types": ["DexClassLoader"],
+        },
+    ]
+    assert "start()" not in str(report)
+    assert report["raw_smali_included"] is False
+
+
+def test_parse_dex_linkage_evidence_ignores_unrelated_strings_and_calls():
+    output = (
+        ".method public run()V\n"
+        '    const-string v0, "not a native library"\n'
+        '    const-string v1, "password=do-not-report"\n'
+        "    invoke-virtual {v0}, Ljava/lang/String;->length()I\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    assert report["methods_with_evidence"] == []
+    assert report["runtime_exec_calls"] == 0
+
+
+def test_linkage_scan_prioritizes_exact_manifest_service_classes():
+    candidates = [f"com.example.Candidate{i:03d}" for i in range(80)]
+    service = "org.example.vpn.TunnelService"
+    targets, truncated = apk_dex._select_linkage_scan_targets(
+        candidates,
+        [{
+            "resolved_class_name": service,
+            "defined_in_dex": True,
+        }],
+    )
+    assert targets[0] == service
+    assert len(targets) == apk_dex._MAX_LINKAGE_CLASSES
+    assert truncated is True
+
+
+def test_linkage_scan_ignores_unresolved_or_missing_manifest_classes():
+    targets, truncated = apk_dex._select_linkage_scan_targets(
+        ["com.example.TunnelService"],
+        [
+            {"resolved_class_name": None, "defined_in_dex": False},
+            {"resolved_class_name": "com.example.Missing", "defined_in_dex": False},
+        ],
+    )
+    assert targets == ["com.example.TunnelService"]
+    assert truncated is False
+
+
+def test_dex_linkage_counts_each_invocation_not_just_methods():
+    output = (
+        ".method public launch()V\n"
+        "    invoke-virtual {v0}, Ljava/lang/Runtime;->exec(Ljava/lang/String;)Ljava/lang/Process;\n"
+        "    invoke-virtual {v1}, Ljava/lang/Runtime;->exec(Ljava/lang/String;)Ljava/lang/Process;\n"
+        "    invoke-static {v2}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    assert report["runtime_exec_calls"] == 2
+    assert report["system_load_library_calls"] == 1
+    assert report["methods_with_evidence"][0]["invocation_counts"] == {
+        "runtime_exec": 2,
+        "system_load_library": 1,
+    }
+
+
+
+def test_move_result_object_invalidates_stale_string_register():
+    output = (
+        ".method private loadDynamicPath()V\n"
+        '    const-string v0, "/tmp/libdecoy.so"\n'
+        "    invoke-static {}, Lcom/example/PathFactory;->make()Ljava/lang/String;\n"
+        "    move-result-object v0\n"
+        "    invoke-static {v0}, Ljava/lang/System;->load(Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["invocation_counts"] == {"system_load": 1}
+    assert row["system_load_path_basenames"] == []
+    assert row["native_library_literals"] == ["libdecoy.so"]
+
+
+def test_move_object_alias_preserves_exact_string_load_linkage():
+    output = (
+        ".method private loadAliasedNative()V\n"
+        '    const-string v0, "/data/app/lib/libudpqtwo.so"\n'
+        "    move-object v1, v0\n"
+        "    invoke-static {v1}, Ljava/lang/System;->load(Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["system_load_path_basenames"] == ["libudpqtwo.so"]
+
+
+def test_move_object_overwrite_does_not_preserve_stale_string_alias():
+    output = (
+        ".method private loadOverwrittenAlias()V\n"
+        '    const-string v0, "/tmp/libdecoy.so"\n'
+        '    const-string v2, "not-a-path"\n'
+        "    move-object/from16 v1, v0\n"
+        "    move-object/16 v1, v2\n"
+        "    invoke-static {v1}, Ljava/lang/System;->load(Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["system_load_path_basenames"] == []
+    assert row["native_library_literals"] == ["libdecoy.so"]
+
+def test_system_load_correlates_only_the_exact_path_argument_register():
+    output = (
+        ".method private loadNative()V\n"
+        '    const-string v0, "/data/user/0/com.example/lib/libudpqtwo.so"\n'
+        '    const-string v1, "/data/user/0/com.example/lib/libdecoy.so"\n'
+        "    invoke-static {v0}, Ljava/lang/System;->load(Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["system_load_path_basenames"] == ["libudpqtwo.so"]
+    assert "com.example" not in str(report)
+    assert "libdecoy.so" in row["native_library_literals"]
+
+
+def test_process_launch_links_only_exact_command_argument_registers():
+    output = (
+        ".method private launchNative()V\n"
+        '    const-string v0, "libudpqtwo.so"\n'
+        '    const-string v1, "libdecoy.so"\n'
+        '    const-string v2, "libbuilder.so"\n'
+        "    invoke-virtual {v3, v0}, Ljava/lang/Runtime;->exec(Ljava/lang/String;)Ljava/lang/Process;\n"
+        "    filled-new-array {v2}, [Ljava/lang/String;\n"
+        "    move-result-object v5\n"
+        "    invoke-direct {v4, v5}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["runtime_exec_library_basenames"] == ["libudpqtwo.so"]
+    assert row["process_builder_library_basenames"] == ["libbuilder.so"]
+    assert row["native_library_literals"] == [
+        "libbuilder.so", "libdecoy.so", "libudpqtwo.so"
+    ]
+
+
+
+def test_process_builder_constructor_is_distinguished_from_start_call():
+    output = (
+        ".method private buildAndStart()V\n"
+        '    const-string v1, "libengine.so"\n'
+        "    filled-new-array {v1}, [Ljava/lang/String;\n"
+        "    move-result-object v2\n"
+        "    invoke-direct {v3, v2}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V\n"
+        "    invoke-virtual {v3}, Ljava/lang/ProcessBuilder;->start()Ljava/lang/Process;\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["invocation_counts"] == {
+        "process_builder": 1,
+        "process_builder_start": 1,
+    }
+    assert report["process_builder_calls"] == 1
+    assert report["process_builder_start_calls"] == 1
+    assert row["process_builder_library_basenames"] == ["libengine.so"]
+
+def test_new_string_array_tracks_direct_aput_object_native_arguments():
+    output = (
+        ".method private launchNative()V\n"
+        "    const/4 v0, 0x2\n"
+        "    new-array v2, v0, [Ljava/lang/String;\n"
+        '    const-string v1, "libudpqtwo.so"\n'
+        '    const-string v5, "libdecoy.so"\n'
+        "    aput-object v1, v2, v0\n"
+        "    invoke-direct {v3, v2}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["process_builder_library_basenames"] == ["libudpqtwo.so"]
+    assert row["native_library_literals"] == ["libdecoy.so", "libudpqtwo.so"]
+
+
+
+def test_new_string_array_allocation_invalidates_stale_string_fact():
+    output = (
+        ".method private launchOverwrittenRegister()V\n"
+        '    const-string v2, "libstale.so"\n'
+        "    const/4 v0, 0x1\n"
+        "    new-array v2, v0, [Ljava/lang/String;\n"
+        "    invoke-virtual {v3, v2}, Ljava/lang/Runtime;->exec(Ljava/lang/String;)Ljava/lang/Process;\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["runtime_exec_library_basenames"] == []
+    assert row["native_library_literals"] == ["libstale.so"]
+
+
+def test_filled_string_array_result_invalidates_stale_string_fact():
+    output = (
+        ".method private launchOverwrittenResult()V\n"
+        '    const-string v2, "libstale.so"\n'
+        '    const-string v1, "not-a-library"\n'
+        "    filled-new-array {v1}, [Ljava/lang/String;\n"
+        "    move-result-object v2\n"
+        "    invoke-virtual {v3, v2}, Ljava/lang/Runtime;->exec(Ljava/lang/String;)Ljava/lang/Process;\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["runtime_exec_library_basenames"] == []
+    assert row["native_library_literals"] == ["libstale.so"]
+
+
+def test_move_object_alias_preserves_string_array_launch_linkage():
+    output = (
+        ".method private launchAliasedArray()V\n"
+        "    const/4 v0, 0x1\n"
+        "    new-array v2, v0, [Ljava/lang/String;\n"
+        '    const-string v1, "libudpqtwo.so"\n'
+        "    aput-object v1, v2, v0\n"
+        "    move-object v5, v2\n"
+        "    invoke-direct {v3, v5}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["process_builder_library_basenames"] == ["libudpqtwo.so"]
+
+
+def test_string_array_aliases_share_write_limit_and_invalidate_together():
+    lines = [
+        ".method private launchAliasedArrayLimit()V",
+        "    const/4 v0, 0x1",
+        "    new-array v2, v0, [Ljava/lang/String;",
+        "    move-object v5, v2",
+        '    const-string v1, "libnative.so"',
+    ]
+    lines.extend("    aput-object v1, v2, v0" for _ in range(128))
+    lines.extend("    aput-object v1, v5, v0" for _ in range(129))
+    lines.extend([
+        "    invoke-direct {v3, v2}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V",
+        "    invoke-direct {v3, v5}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V",
+        ".end method",
+    ])
+    report = apk_dex._parse_dex_linkage_evidence("\n".join(lines))
+    row = report["methods_with_evidence"][0]
+    assert row["process_builder_library_basenames"] == []
+
+def test_new_string_array_register_overwrite_invalidates_array_evidence():
+    output = (
+        ".method private launchNative()V\n"
+        "    const/4 v0, 0x1\n"
+        "    new-array v2, v0, [Ljava/lang/String;\n"
+        '    const-string v1, "libactual.so"\n'
+        '    const-string v2, "libdecoy.so"\n'
+        "    aput-object v1, v2, v0\n"
+        "    invoke-direct {v3, v2}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["process_builder_library_basenames"] == []
+    assert row["native_library_literals"] == ["libactual.so", "libdecoy.so"]
+
+
+def test_new_string_array_ignores_non_string_array_and_unresolved_values():
+    output = (
+        ".method private launchNative()V\n"
+        "    const/4 v0, 0x1\n"
+        "    new-array v2, v0, [I\n"
+        '    const-string v1, "libactual.so"\n'
+        "    aput-object v1, v2, v0\n"
+        "    invoke-direct {v3, v2}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["invocation_counts"] == {"process_builder": 1}
+    assert row["process_builder_library_basenames"] == []
+
+
+
+def test_new_string_array_write_limit_counts_duplicate_writes():
+    lines = [
+        ".method private launchNative()V",
+        "    const/4 v0, 0x1",
+        "    new-array v2, v0, [Ljava/lang/String;",
+        '    const-string v1, "libnative.so"',
+    ]
+    lines.extend("    aput-object v1, v2, v0" for _ in range(257))
+    lines.extend([
+        "    invoke-direct {v3, v2}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V",
+        ".end method",
+    ])
+    report = apk_dex._parse_dex_linkage_evidence("\n".join(lines))
+    row = report["methods_with_evidence"][0]
+    assert row["process_builder_library_basenames"] == []
+
+
+
+def test_new_string_array_tracking_is_bounded_to_256_writes():
+    lines = [
+        ".method private launchNative()V",
+        "    const/4 v0, 0x1",
+        "    new-array v2, v0, [Ljava/lang/String;",
+    ]
+    for index in range(257):
+        value_register = f"v{index + 3}"
+        lines.extend([
+            f'    const-string {value_register}, "libnative{index}.so"',
+            f"    aput-object {value_register}, v2, v0",
+        ])
+    lines.extend([
+        "    invoke-direct {v1, v2}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V",
+        ".end method",
+    ])
+    report = apk_dex._parse_dex_linkage_evidence("\n".join(lines))
+    row = report["methods_with_evidence"][0]
+    assert row["process_builder_library_basenames"] == []
+
+
+def test_runtime_exec_string_array_links_new_array_and_filled_array_arguments():
+    output = (
+        ".method private launchRuntimeArrays()V\n"
+        "    const/4 v0, 0x1\n"
+        "    new-array v2, v0, [Ljava/lang/String;\n"
+        '    const-string v1, "libudpqtwo.so"\n'
+        "    aput-object v1, v2, v0\n"
+        "    invoke-virtual {v3, v2}, Ljava/lang/Runtime;->exec([Ljava/lang/String;)Ljava/lang/Process;\n"
+        '    const-string v4, "libdecoy.so"\n'
+        "    filled-new-array {v4}, [Ljava/lang/String;\n"
+        "    move-result-object v5\n"
+        "    invoke-virtual {v3, v5}, Ljava/lang/Runtime;->exec([Ljava/lang/String;)Ljava/lang/Process;\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert report["runtime_exec_calls"] == 2
+    assert row["runtime_exec_library_basenames"] == ["libdecoy.so", "libudpqtwo.so"]
+
+def test_invoke_range_calls_are_counted_but_not_mislinked():
+    output = (
+        ".method private launchRange()V\n"
+        '    const-string v4, "libactual.so"\n'
+        "    filled-new-array {v4}, [Ljava/lang/String;\n"
+        "    move-result-object v1\n"
+        '    const-string v5, "libdecoy.so"\n'
+        "    filled-new-array {v5}, [Ljava/lang/String;\n"
+        "    move-result-object v3\n"
+        "    invoke-virtual/range {v0 .. v3}, Ljava/lang/Runtime;->exec([Ljava/lang/String;[Ljava/lang/String;Ljava/io/File;)Ljava/lang/Process;\n"
+        '    const-string v6, "udpqtwo"\n'
+        "    invoke-static/range {v6 .. v6}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["invocation_counts"] == {
+        "runtime_exec": 1,
+        "system_load_library": 1,
+    }
+    assert row["runtime_exec_library_basenames"] == []
+    assert row["system_load_library_names"] == []
+    assert row["native_library_literals"] == ["libactual.so", "libdecoy.so"]
+
+def test_parse_defined_classes_includes_liapp_protector_class():
+    count, candidates = apk_dex.parse_defined_classes(
+        "C d 1 1 20 com.liapp.x\n"
+    )
+    assert count == 1
+    assert candidates == ["com.liapp.x"]
+
+
+def test_linkage_scan_prioritizes_liapp_protector_class():
+    candidates = [f"com.example.Candidate{i:03d}" for i in range(80)]
+    candidates.append("com.liapp.x")
+    targets, truncated = apk_dex._select_linkage_scan_targets(candidates, [])
+    assert targets[0] == "com.liapp.x"
+    assert len(targets) == apk_dex._MAX_LINKAGE_CLASSES
+    assert truncated is True
+
+
+def test_filled_string_array_is_not_linked_after_intervening_instruction():
+    output = (
+        ".method private launchNative()V\n"
+        '    const-string v0, "libdecoy.so"\n'
+        "    filled-new-array {v0}, [Ljava/lang/String;\n"
+        "    invoke-static {}, Lcom/example/Other;->run()V\n"
+        "    move-result-object v5\n"
+        "    invoke-direct {v4, v5}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["process_builder_library_basenames"] == []
+    assert row["native_library_literals"] == ["libdecoy.so"]
+
+
+@pytest.mark.parametrize(
+    ("loader", "descriptor", "path", "expected"),
+    [
+        ("DexClassLoader", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V", "/data/user/0/app/secondary.dex", ["dex"]),
+        ("PathClassLoader", "(Ljava/lang/String;Ljava/lang/ClassLoader;)V", "/data/app/base.apk", ["apk"]),
+        ("DexClassLoader", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V", "/data/user/0/app/cache.jar", ["jar"]),
+        ("DexClassLoader", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V", "/data/user/0/app/secondary.bin", []),
+        ("DexClassLoader", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V", "/data/user/0/app/classes.dex:/data/user/0/app/feature.apk", ["apk", "dex"]),
+    ],
+)
+def test_dynamic_dex_loader_links_only_exact_path_argument_and_reports_extension(
+    loader, descriptor, path, expected
+):
+    registers = (
+        "v0, v1, v2"
+        if loader == "PathClassLoader"
+        else "v0, v1, v2, v3, v4"
+    )
+    output = (
+        ".method private loadSecondary()V\n"
+        f'    const-string v1, "{path}"\n'
+        f"    invoke-direct {{{registers}}}, Ldalvik/system/{loader};-><init>{descriptor}\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["dynamic_dex_loader_path_extensions"] == expected
+    assert row["dynamic_dex_loader_types"] == [loader]
+    assert path not in str(report)
+
+
+def test_in_memory_dex_loader_is_counted_without_inspecting_buffer_contents():
+    output = (
+        ".method private loadMemory()V\n"
+        "    invoke-direct {v0, v1, v2}, Ldalvik/system/InMemoryDexClassLoader;-><init>(Ljava/nio/ByteBuffer;Ljava/lang/ClassLoader;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["invocation_counts"] == {"dynamic_dex_loader": 1}
+    assert row["dynamic_dex_loader_path_extensions"] == []
+    assert row["dynamic_dex_loader_types"] == ["InMemoryDexClassLoader"]
+
+
+def test_dex_loader_does_not_link_a_path_literal_from_an_unrelated_register():
+    output = (
+        ".method private loadSecondary()V\n"
+        '    const-string v7, "/data/user/0/app/decoy.dex"\n'
+        "    invoke-direct {v0, v1, v2, v3, v4}, Ldalvik/system/DexClassLoader;-><init>(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["invocation_counts"] == {"dynamic_dex_loader": 1}
+    assert row["dynamic_dex_loader_path_extensions"] == []
+    assert row["dynamic_dex_loader_types"] == ["DexClassLoader"]
+    assert "decoy.dex" not in str(report)
+
+
+def test_linkage_candidate_filter_includes_udp_quic_and_loader_classes():
+    output = (
+        "C d 2 1 40 com.example.udp.NativeBridge\n"
+        "C d 2 1 40 com.example.quic.Transport\n"
+        "C d 2 1 40 com.example.hysteria.Client\n"
+        "C d 2 1 40 com.example.DynamicLoader\n"
+        "C d 2 1 40 com.example.UnrelatedScreen\n"
+    )
+    _count, candidates = apk_dex.parse_defined_classes(output)
+    assert candidates == [
+        "com.example.DynamicLoader",
+        "com.example.hysteria.Client",
+        "com.example.quic.Transport",
+        "com.example.udp.NativeBridge",
+    ]

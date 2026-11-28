@@ -1,0 +1,202 @@
+name: APK native-library extraction
+
+on:
+  workflow_dispatch:
+    inputs:
+      library_name:
+        description: Native library to extract from the committed APK splits
+        required: true
+        default: libudpqtwo.so
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apk-native-extraction-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  extract-and-inspect:
+    name: Extract Android native library
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Locate and extract library from APKs
+        id: extract
+        shell: bash
+        env:
+          LIBRARY_NAME: ${{ inputs.library_name }}
+        run: |
+          set -euo pipefail
+          [[ "$LIBRARY_NAME" =~ ^[A-Za-z0-9_.+-]+\.so$ ]] || { echo "Invalid library filename" >&2; exit 4; }
+          mkdir -p analysis
+          mapfile -t apks < <(find APNA-APKs -maxdepth 1 -type f -name '*.apk' -print | sort)
+          if (( ${#apks[@]} == 0 )); then
+            echo "No APK files found under APNA-APKs/" >&2
+            exit 1
+          fi
+
+          matches=()
+          for apk in "${apks[@]}"; do
+            while IFS= read -r entry; do
+              if [[ "${entry##*/}" == "$LIBRARY_NAME" ]]; then
+                matches+=("$apk|$entry")
+              fi
+            done < <(unzip -Z1 "$apk")
+          done
+
+          if (( ${#matches[@]} == 0 )); then
+            echo "Library $LIBRARY_NAME was not found in the committed APK files." >&2
+            echo "APK inventory:" >&2
+            printf '  %s\n' "${apks[@]}" >&2
+            exit 2
+          fi
+
+          if (( ${#matches[@]} > 1 )); then
+            echo "Found multiple copies of $LIBRARY_NAME; refusing to choose silently:" >&2
+            printf '  %s\n' "${matches[@]}" >&2
+            exit 3
+          fi
+
+          IFS='|' read -r source_apk entry <<< "${matches[0]}"
+          unzip -p "$source_apk" "$entry" > "analysis/$LIBRARY_NAME"
+          test -s "analysis/$LIBRARY_NAME"
+          printf 'source_apk=%s\nentry=%s\n' "$source_apk" "$entry" >> "$GITHUB_OUTPUT"
+          {
+            echo "Library: $LIBRARY_NAME"
+            echo "Source APK: $source_apk"
+            echo "Archive entry: $entry"
+            echo
+            sha256sum "analysis/$LIBRARY_NAME"
+            file "analysis/$LIBRARY_NAME"
+          } | tee analysis/extraction.txt
+
+          # Inventory every embedded native library without loading or executing it.
+          # This records archive-level hashes so split APKs can be compared safely.
+          {
+            echo "APK archive SHA-256 and embedded native-library inventory"
+            for apk in "${apks[@]}"; do
+              echo
+              echo "===== APK: $apk ====="
+              sha256sum "$apk"
+              mapfile -t native_entries < <(unzip -Z1 "$apk" | grep -E '^lib/[^/]+/[^/]+\.so$' || true)
+              if (( ${#native_entries[@]} == 0 )); then
+                echo "No ABI native libraries found."
+                continue
+              fi
+              for native_entry in "${native_entries[@]}"; do
+                digest="$(unzip -p "$apk" "$native_entry" | sha256sum | awk '{print $1}')"
+                printf "%s  %s\n" "$digest" "$native_entry"
+              done
+            done
+          } > analysis/apk-native-inventory.txt
+
+          PYTHONPATH=src python3 tools/inventory_apk_native.py APNA-APKs/*.apk --output analysis/native-elf-inventory.json
+          PYTHONPATH=src python3 tools/extract_apk_native.py APNA-APKs/*.apk --output analysis/native-libs
+          PYTHONPATH=src python3 tools/analyze_native_fingerprints.py analysis/native-libs --output analysis/native-fingerprints.json
+
+      - name: Inspect ELF and Go metadata
+        shell: bash
+        env:
+          LIBRARY_NAME: ${{ inputs.library_name }}
+        run: |
+          set -euo pipefail
+          {
+            echo "===== ELF HEADER ====="
+            readelf -h "analysis/$LIBRARY_NAME"
+            echo
+            echo "===== PROGRAM HEADERS / LOAD SEGMENTS ====="
+            readelf -lW "analysis/$LIBRARY_NAME"
+            echo
+            echo "===== SECTION HEADERS ====="
+            readelf -SW "analysis/$LIBRARY_NAME"
+            echo
+            echo "===== NOTES ====="
+            readelf -n "analysis/$LIBRARY_NAME" || true
+            echo
+            echo "===== DYNAMIC SECTION ====="
+            readelf -d "analysis/$LIBRARY_NAME" || true
+          } > analysis/readelf-report.txt
+
+          python3 - <<'PY'
+          import hashlib
+          import pathlib
+          import struct
+
+          path = pathlib.Path("analysis") / __import__("os").environ["LIBRARY_NAME"]
+          data = path.read_bytes()
+          out = []
+          def emit(s=""):
+              out.append(str(s))
+          emit("ELF64 little-endian structural inspection")
+          emit(f"File size: {len(data):#x} ({len(data)} bytes)")
+          emit(f"SHA256: {hashlib.sha256(data).hexdigest()}")
+          if data[:4] != b"\x7fELF" or data[4] != 2 or data[5] != 1:
+              raise SystemExit("Expected ELF64 little-endian input")
+          eh = struct.unpack_from("<HHIQQQIHHHHHH", data, 16)
+          e_type, e_machine, _, e_entry, e_phoff, e_shoff, _, e_ehsize, e_phentsize, e_phnum, e_shentsize, e_shnum, e_shstrndx = eh
+          emit(f"Type={e_type} Machine={e_machine} Entry={e_entry:#x}")
+          loads = []
+          for i in range(e_phnum):
+              p_type, p_flags, p_offset, p_vaddr, _, p_filesz, p_memsz, p_align = struct.unpack_from("<IIQQQQQQ", data, e_phoff + i*e_phentsize)
+              if p_type == 1:
+                  loads.append((p_vaddr, p_offset, p_filesz, p_memsz, p_flags))
+                  emit(f"PT_LOAD VA={p_vaddr:#x} OFF={p_offset:#x} FILESZ={p_filesz:#x} MEMSZ={p_memsz:#x} FLAGS={p_flags:#x}")
+          def va_to_off(va, size=1):
+              for vaddr, off, filesz, memsz, flags in loads:
+                  if vaddr <= va and va + size <= vaddr + filesz:
+                      return off + va - vaddr
+              return None
+          emit()
+          emit("Known reverse-engineering addresses:")
+          for label, va in (("pclntab_candidate", 0xc1a200), ("header_derived_functab", 0xef4ba0), ("moduledata_candidate", 0x10ee3a0), ("reported_bad_ftab_pointer", 0x11cf540)):
+              off = va_to_off(va)
+              emit(f"{label}: VA={va:#x} file_offset={off:#x}" if off is not None else f"{label}: VA={va:#x} NOT FILE-BACKED BY PT_LOAD")
+          off = va_to_off(0xc1a200, 72)
+          if off is not None:
+              header = struct.unpack_from("<I4B8Q", data, off)
+              magic, pad1, pad2, min_lc, ptr_size = header[:5]
+              nfunc, nfiles, text_start, funcname_offset, cu_offset, filetab_offset, pctab_offset, pcln_offset = header[5:]
+              emit()
+              emit("Candidate pclntab header:")
+              emit(f"magic={magic:#x} pad=({pad1:#x},{pad2:#x}) minLC={min_lc} ptrSize={ptr_size}")
+              for name, value in (
+                  ("nfunc", nfunc), ("nfiles", nfiles), ("textStart", text_start),
+                  ("funcnameOffset", funcname_offset), ("cuOffset", cu_offset),
+                  ("filetabOffset", filetab_offset), ("pctabOffset", pctab_offset),
+                  ("pclnOffset", pcln_offset),
+              ):
+                  emit(f"{name}={value:#x}")
+              ftab_va = 0xc1a200 + pcln_offset
+              ftab_size = (2*nfunc + 1) * 4
+              ftab_off = va_to_off(ftab_va, ftab_size)
+              emit(f"derived_nfunc={nfunc:#x}")
+              emit(f"derived_functab_va={ftab_va:#x}")
+              emit(f"derived_functab_size={ftab_size:#x}")
+              emit(f"derived_functab_file_offset={ftab_off:#x}" if ftab_off is not None else "derived_functab_is_not_fully_file-backed")
+              if ftab_off is not None:
+                  emit("First functab records:")
+                  for i in range(min(5, nfunc + 1)):
+                      entryoff, funcoff = struct.unpack_from("<II", data, ftab_off + i*8)
+                      emit(f"  [{i}] entryoff={entryoff:#x} funcoff={funcoff:#x}")
+          else:
+              emit("Candidate pclntab header is not fully file-backed.")
+          pathlib.Path("analysis/elf-structural-report.txt").write_text("\n".join(out) + "\n")
+          PY
+
+          strings -a -n 8 "analysis/$LIBRARY_NAME" > analysis/strings.txt
+          grep -a -E 'Go build|go1\.[0-9]+|path[[:space:]]|mod[[:space:]]' analysis/strings.txt > analysis/go-build-strings.txt || true
+
+      - name: Upload extracted library and reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: ApnaWin-libudpqtwo-analysis
+          path: analysis/
+          if-no-files-found: error
+          retention-days: 7

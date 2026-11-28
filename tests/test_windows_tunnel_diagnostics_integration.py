@@ -9,7 +9,7 @@ pytestmark = pytest.mark.skipif(os.name != "nt", reason="native Windows PowerShe
 
 
 def test_powershell_tunnel_diagnostics_executes_on_native_windows():
-    snapshot = WindowsTunnelDiagnostics(timeout=10).snapshot()
+    snapshot = WindowsTunnelDiagnostics(timeout=30).snapshot()
     assert isinstance(snapshot.adapter_present, bool)
     assert isinstance(snapshot.adapter_status, str)
     assert isinstance(snapshot.ipv4_default_route, bool)

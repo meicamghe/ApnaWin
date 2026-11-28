@@ -65,6 +65,109 @@ def _elf32_with_jni_exports():
     return header + dynstr + dynsym + shstr + bytes(section_offset - shstr_offset - len(shstr)) + b"".join(sections)
 
 
+def _elf_with_interpreter(payload, elf_class, *, entry_point=0x1000, interpreter=b"/system/bin/linker\x00"):
+    data = bytearray(payload)
+    if elf_class == 64:
+        phoff = (len(data) + 7) & ~7
+        data.extend(bytes(phoff - len(data)))
+        interp_offset = phoff + 56
+        data.extend(struct.pack(
+            "<IIQQQQQQ", 3, 4, interp_offset, 0, 0,
+            len(interpreter), len(interpreter), 1,
+        ))
+        struct.pack_into("<Q", data, 24, entry_point)
+        struct.pack_into("<Q", data, 32, phoff)
+        struct.pack_into("<H", data, 54, 56)
+        struct.pack_into("<H", data, 56, 1)
+    else:
+        phoff = (len(data) + 3) & ~3
+        data.extend(bytes(phoff - len(data)))
+        interp_offset = phoff + 32
+        data.extend(struct.pack(
+            "<IIIIIIII", 3, interp_offset, 0, 0,
+            len(interpreter), len(interpreter), 4, 1,
+        ))
+        struct.pack_into("<I", data, 24, entry_point)
+        struct.pack_into("<I", data, 28, phoff)
+        struct.pack_into("<H", data, 42, 32)
+        struct.pack_into("<H", data, 44, 1)
+    data.extend(interpreter)
+    return bytes(data)
+
+
+def _elf_with_two_interpreters(payload, elf_class):
+    data = bytearray(_elf_with_interpreter(payload, elf_class))
+    if elf_class == 64:
+        phoff = struct.unpack_from("<Q", data, 32)[0]
+        first_path_offset = struct.unpack_from("<Q", data, phoff + 8)[0]
+        data[first_path_offset:first_path_offset] = bytes(56)
+        struct.pack_into("<Q", data, phoff + 8, first_path_offset + 56)
+        second_path_offset = len(data)
+        second_path = b"/system/bin/linker64\x00"
+        data.extend(second_path)
+        struct.pack_into(
+            "<IIQQQQQQ", data, phoff + 56, 3, 4, second_path_offset,
+            0, 0, len(second_path), len(second_path), 1,
+        )
+        struct.pack_into("<H", data, 56, 2)
+    else:
+        phoff = struct.unpack_from("<I", data, 28)[0]
+        first_path_offset = struct.unpack_from("<I", data, phoff + 4)[0]
+        data[first_path_offset:first_path_offset] = bytes(32)
+        struct.pack_into("<I", data, phoff + 4, first_path_offset + 32)
+        second_path_offset = len(data)
+        second_path = b"/system/bin/linker\x00"
+        data.extend(second_path)
+        struct.pack_into(
+            "<IIIIIIII", data, phoff + 32, 3, second_path_offset,
+            0, 0, len(second_path), len(second_path), 4, 1,
+        )
+        struct.pack_into("<H", data, 44, 2)
+    return bytes(data)
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_classifies_pie_executable_candidate(payload, elf_class):
+    result = inspect_elf_bytes(_elf_with_interpreter(payload, elf_class))
+    assert result["entry_point"] == 0x1000
+    assert result["interpreter_present"] is True
+    assert result["execution_model"] == "pie_executable_candidate"
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_classifies_shared_object_candidate_without_entrypoint(payload, elf_class):
+    result = inspect_elf_bytes(payload)
+    assert result["entry_point"] == 0
+    assert result["interpreter_present"] is False
+    assert result["execution_model"] == "shared_object_candidate"
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_rejects_malformed_interpreter_path(payload, elf_class):
+    data = bytearray(_elf_with_interpreter(payload, elf_class))
+    data[-1] = ord("X")
+    with pytest.raises(ValueError, match="interpreter path is malformed"):
+        inspect_elf_bytes(bytes(data))
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_rejects_multiple_interpreter_segments(payload, elf_class):
+    with pytest.raises(ValueError, match="multiple interpreter segments"):
+        inspect_elf_bytes(_elf_with_two_interpreters(payload, elf_class))
+
+
 @pytest.mark.parametrize(
     ("payload", "elf_class", "section_offset_field", "section_entry_size", "size_field", "entry_size"),
     [
@@ -117,6 +220,30 @@ def test_inspect_elf_rejects_nonzero_null_symbol_entry(
     )[0]
     data[symbol_offset] = 1  # STN_UNDEF requires st_name == 0 (and all other fields zero).
     with pytest.raises(ValueError, match="null entry is not zero"):
+        inspect_elf_bytes(bytes(data))
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_rejects_section_count_without_section_table(payload, elf_class):
+    data = bytearray(payload)
+    struct.pack_into("<Q" if elf_class == 64 else "<I", data, 40 if elf_class == 64 else 32, 0)
+    struct.pack_into("<H", data, 60 if elf_class == 64 else 48, 1)
+    with pytest.raises(ValueError, match="references a missing section-header table"):
+        inspect_elf_bytes(bytes(data))
+
+
+@pytest.mark.parametrize(
+    ("payload", "elf_class"),
+    [(_elf64_with_jni_exports(), 64), (_elf32_with_jni_exports(), 32)],
+)
+def test_inspect_elf_rejects_section_name_index_without_section_table(payload, elf_class):
+    data = bytearray(payload)
+    struct.pack_into("<Q" if elf_class == 64 else "<I", data, 40 if elf_class == 64 else 32, 0)
+    struct.pack_into("<H", data, 62 if elf_class == 64 else 50, 1)
+    with pytest.raises(ValueError, match="references a missing section-header table"):
         inspect_elf_bytes(bytes(data))
 
 
@@ -534,6 +661,8 @@ def test_inspect_elf_bytes_counts_only_exported_jni_symbol_names():
     assert result == {
         "elf_valid": True, "elf_class": 64, "endianness": "little",
         "machine": 183, "machine_name": "aarch64", "file_type": 3,
+        "entry_point": 0, "interpreter_present": False,
+        "execution_model": "shared_object_candidate",
         "dynamic_symbol_table_present": True, "dynamic_symbol_count": 4,
         "jni_exported_symbol_count": 1, "jni_onload_exported": True,
         "inspection_status": "complete",
@@ -788,6 +917,8 @@ def test_inspect_elf32_bytes_counts_exported_jni_function_symbols():
     assert result == {
         "elf_valid": True, "elf_class": 32, "endianness": "little",
         "machine": 3, "machine_name": "x86", "file_type": 3,
+        "entry_point": 0, "interpreter_present": False,
+        "execution_model": "shared_object_candidate",
         "dynamic_symbol_table_present": True, "dynamic_symbol_count": 4,
         "jni_exported_symbol_count": 1, "jni_onload_exported": True,
         "inspection_status": "complete",

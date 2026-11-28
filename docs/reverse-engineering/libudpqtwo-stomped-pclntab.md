@@ -128,3 +128,164 @@ The header-derived address and initial records support this hypothesis, but the 
 - [ ] Run `go test ./...` and build GoReSym.
 - [ ] Re-run GoReSym against `libudpqtwo.so`.
 - [ ] Verify recovered symbols and function metadata before treating the recovery as successful.
+
+
+## Upstream GoReSym v3.4.1 source confirmation
+
+The parser path was checked against the upstream `v3.4.1` tag
+(commit `722897e`, released 2026-09-14), matching the version used for the
+local analysis.
+
+### Pclntab header and functab offsets
+
+For Go 1.18+ the header begins with a 4-byte magic followed by four one-byte
+fields (`pad1`, `pad2`, PC quantum, pointer size). The eight uint64 fields
+begin at byte offset 8:
+
+| Header field | uint64 word | Byte offset |
+|---|---:|---:|
+| nfunctab | 0 | 8 |
+| nfiletab | 1 | 16 |
+| textStart | 2 | 24 |
+| funcnametab offset | 3 | 32 |
+| cutab offset | 4 | 40 |
+| filetab offset | 5 | 48 |
+| pctab offset | 6 | 56 |
+| pcln/functab offset | 7 | 64 |
+
+GoReSym's Go 1.18+ parser reads word 0 for `nfunctab`, word 7 for the
+functab offset, and sizes the serialized table as
+`(2*nfunctab + 1) * 4`. Therefore the candidate table address is
+`pclntabVA + word[7]`. The extraction workflow was corrected to decode this
+header layout rather than treating the first eight bytes as word 0.
+
+### Why the existing moduledata path cannot recover this candidate
+
+In v3.4.1, `main.go` calls `File.ModuleDataTable` with the pclntab VA,
+version/layout, pointer width and endianness. It does not pass
+`PclntabCandidate.StompMagicCandidateMeta`. The main loop checks
+`SuspectedModuleDataVa == tmpModData.VA` only after `ModuleDataTable`
+has returned successfully. That is too late to guide the current validator
+when the moduledata ftab pointer itself is unreadable.
+
+The Go 1.18+ `validateAndConvertModuleData` first reads
+`md.Ftab.Data` through the existing `read_memory` method and returns
+immediately on failure. The existing `textAddr(entryOffset, md.Text,
+textsectmap) == md.Minpc` validation occurs afterward. This confirms the
+narrow failure point: a guarded fallback must provide the first functab record
+without bypassing the existing Minpc validation.
+
+### Guard conditions for a future fallback
+
+The fallback remains proposed and unimplemented. It should run only when the
+normal ftab read fails and all of the following hold:
+
+- Stomp metadata is present and its pclntab VA equals the candidate VA.
+- Its suspected moduledata VA equals the moduledata candidate currently being validated.
+- Metadata endianness matches the parser's endianness.
+- The input is 64-bit little-endian and the parsed layout is Go 1.18+.
+- Header byte fields have valid PC quantum and pointer-size values.
+- Header-derived nfunctab is bounded and consistent with the moduledata ftab length.
+- The derived functab address and full serialized table size pass overflow and
+  file-backed `PT_LOAD` checks using the existing `read_memory` path.
+- The existing first-entry / Minpc / textsectmap validation still succeeds.
+
+Ordinary candidates must continue using the existing path. Do not broaden
+`read_memory` to arbitrary addresses or accept the invalid moduledata ftab
+pointer as BSS.
+
+## Independent moduledata scanner issue
+
+The v3.4.1 ELF `moduledata_scan` implementation uses one `bytes.Index`
+result per section. If that first pointer match is in the ignore list, it
+continues to the next section instead of searching for another occurrence
+later in the same section. This is a real scanner limitation, independent of
+the proposed ftab fallback. It may hide a valid later moduledata candidate
+when multiple references occur in one section, but that has not yet been
+demonstrated for this APK.
+
+A separate regression-tested fix should iterate subsequent matches within the
+same section after an ignored candidate. Keep the existing section-boundary
+check and preserve the concatenated-section behavior. Do not combine this
+scanner fix with the guarded ftab fallback until each has isolated tests.
+
+
+## Upstream scanner status rechecked — 2026-11-28
+
+The independent moduledata scanner limitation was rechecked against both the
+GoReSym v3.4.1 tag (commit 722897e) and the current upstream master commit
+fa3f0577e6f5d5692cf98348ac512dec52bbc04b. Both versions still implement
+the same first-match behavior in elfFile.moduledata_scan:
+
+1. bytes.Index(data, pclntabVA_bytes) returns only the first pointer match
+   in the current section's concatenated data.
+2. If that match is present in ignorelist, continue scan jumps to the
+   outer section loop, abandoning the rest of the current section.
+3. Any later valid moduledata pointer occurrence in that same section is
+   therefore never considered during that scan attempt.
+
+This confirms that the limitation is still present upstream; it is not an
+ApnaWin-specific patch regression. It remains independent of the stomped
+pclntab/ftab fallback. A narrow fix should iterate successive matches with a
+moving byte offset inside the current section, preserve the existing
+moduledata_idx < int(sec.Size) section-boundary guard, and move to the next
+section only after exhausting the current one.
+
+Required regression cases for the GoReSym-side patch:
+
+- First occurrence is ignored and a second occurrence in the same section is
+  returned.
+- First occurrence is valid and remains the selected candidate.
+- Multiple ignored occurrences are skipped without abandoning the section.
+- No candidate in any section returns the existing not-found error.
+
+No GoReSym source has been modified in the ApnaWin repository, and no recovered
+symbol output is claimed from this source review.
+
+
+## Prepared GoReSym v3.4.1 scanner patch
+
+A narrowly scoped patch is now stored at
+`tools/patches/GoReSym-v3.4.1-moduledata-scan.patch`. It changes only the
+moduledata candidate search:
+
+- Searches successive pointer occurrences within the same section.
+- Skips ignored candidate VAs without abandoning the section.
+- Requires the full pointer signature to fit inside the current section, not merely its first byte.
+- Returns the first non-ignored candidate, preserving first-valid-match
+  behavior.
+- Adds five regression cases: ignored first match, first valid match,
+  multiple ignored matches, no match, and a signature crossing the section boundary.
+
+To apply it in a clean GoReSym v3.4.1 checkout, copy the patch file into that
+checkout and run:
+
+```sh
+git apply --check GoReSym-v3.4.1-moduledata-scan.patch
+git apply GoReSym-v3.4.1-moduledata-scan.patch
+gofmt -w objfile/elf.go objfile/elf_moduledata_scan_test.go
+go test ./objfile
+```
+
+The patch is prepared but has **not** been applied to upstream GoReSym or
+validated against the APNA binary. It addresses the independently confirmed
+scanner bug only; it does not yet solve the separate unreadable ftab pointer
+in the suspected APNA moduledata candidate.
+
+
+## Bounded Go function-table recovery tool — 2026-11-28
+
+A standalone offline parser is now available at `tools/recover_go_pclntab.py`. It is deliberately separate from GoReSym and does not relax GoReSym's general ELF/moduledata validation.
+
+For a fresh extracted binary, the invocation for the current candidate is:
+
+```sh
+python tools/recover_go_pclntab.py /path/to/libudpqtwo.so \
+  --pclntab-va 0xc1a200 --allow-stomped-magic > go-functions.json
+```
+
+The parser requires ELF64 little-endian AArch64 ET_DYN/ET_EXEC, checks every requested address against file-backed PT_LOAD ranges, validates the remaining Go 1.18+ header byte fields and bounded counts, derives the functab from header word 7, checks the complete serialized table and terminal PC offset, then resolves each `_func.nameOff` against the function-name table. It emits function index, entry offset, function-record offset and decoded name. The stomped magic word is accepted only with the explicit command-line opt-in; all other structural checks remain mandatory.
+
+Synthetic regression tests cover a stomped-header recovery, missing opt-in, invalid header bytes, a non-file-backed table, and non-monotonic entries. These tests validate the parser against a constructed ELF fixture only. **No recovered function list from the APNA binary is claimed yet**: the committed APK-native extraction workflow has not produced a fresh artifact available to this analysis session. The current candidate VA and previously observed first records remain hypotheses pending execution against the exact fresh ARM64 binary.
+
+The parser currently targets Go 1.18+ 64-bit little-endian functab layout. It does not recover inline trees, pcdata streams, line tables, type metadata or DWARF, and it does not replace validation of moduledata or prove that a recovered function is reachable at runtime.

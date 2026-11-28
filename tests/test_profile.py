@@ -8,6 +8,12 @@ def test_valid_profile_is_constructed():
     assert profile.endpoint_port == 1080
 
 
+def test_legacy_apna_ssh_transport_remains_loadable_but_is_not_xray():
+    profile = ConnectionProfile("Old SSH", Transport.APNA_SSH, "ssh.example.test", 22)
+    assert profile.transport.value == "apna_ssh"
+    assert profile.transport is not Transport.XRAY
+
+
 @pytest.mark.parametrize("host", [
     "localhost",
     "vpn.example.test",

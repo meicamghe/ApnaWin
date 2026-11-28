@@ -45,6 +45,10 @@ class Transport(str, Enum):
     XRAY = "xray"
     OPENVPN = "openvpn"
     SOCKS = "socks"
+    # Read-only compatibility for profiles created by earlier ApnaWin builds.
+    # SSH is intentionally not enabled as a connection backend.
+    APNA_SSH = "apna_ssh"
+    UDPQ = "udpq"
 
 
 @dataclass(frozen=True, slots=True)

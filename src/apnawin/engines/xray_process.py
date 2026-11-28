@@ -245,6 +245,26 @@ def inspect_xray_inbound(config: dict) -> LocalSocksInbound | XrayTunInbound:
     raise ValueError("Xray inbound must use SOCKS or TUN protocol")
 
 
+
+def parse_xray_config_bytes(raw_config: bytes) -> dict:
+    """Decode bounded UTF-8 Xray JSON and reject ambiguous/non-standard JSON."""
+    if not isinstance(raw_config, bytes):
+        raise TypeError("Xray config must be supplied as bytes")
+    if not raw_config or len(raw_config) > MAX_XRAY_CONFIG_BYTES:
+        raise ValueError("Xray config must be non-empty and within the size limit")
+    try:
+        config = json.loads(
+            raw_config.decode("utf-8"),
+            object_pairs_hook=_unique_json_object,
+            parse_constant=_reject_json_constant,
+        )
+    except (UnicodeError, json.JSONDecodeError, ValueError) as exc:
+        raise ValueError("Xray config must be valid UTF-8 JSON without duplicate keys") from exc
+    if not isinstance(config, dict):
+        raise ValueError("Xray config root must be a JSON object")
+    return config
+
+
 def is_windows_elevated() -> bool:
     """Return whether this process has an elevated Windows administrator token."""
     if os.name != "nt":
