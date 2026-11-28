@@ -80,3 +80,67 @@ def test_inventory_enforces_aggregate_native_size(tmp_path, monkeypatch):
 def test_inventory_requires_at_least_one_apk():
     with pytest.raises(ValueError, match="input count"):
         inventory_apk_native.inventory_native_libraries([])
+
+
+def test_inventory_rejects_symlink_apk_input(tmp_path):
+    apk = tmp_path / "real.apk"
+    with zipfile.ZipFile(apk, "w") as archive:
+        archive.writestr("assets/empty", b"x")
+    alias = tmp_path / "alias.apk"
+    alias.symlink_to(apk)
+
+    with pytest.raises(ValueError, match="non-symlink regular file"):
+        inventory_apk_native.inventory_native_libraries([alias])
+
+
+def test_inventory_rejects_duplicate_apk_input_paths(tmp_path):
+    apk = tmp_path / "one.apk"
+    with zipfile.ZipFile(apk, "w") as archive:
+        archive.writestr("assets/empty", b"x")
+
+    with pytest.raises(ValueError, match="more than once"):
+        inventory_apk_native.inventory_native_libraries([apk, apk])
+
+
+def test_inventory_rejects_distinct_inputs_with_duplicate_basenames(tmp_path):
+    first_dir = tmp_path / "first"
+    second_dir = tmp_path / "second"
+    first_dir.mkdir()
+    second_dir.mkdir()
+    first = first_dir / "split.apk"
+    second = second_dir / "split.apk"
+    for path in (first, second):
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("assets/empty", b"x")
+
+    with pytest.raises(ValueError, match="unique basenames"):
+        inventory_apk_native.inventory_native_libraries([first, second])
+
+
+def test_inventory_cli_refuses_to_overwrite_an_apk_input(tmp_path, capsys):
+    apk = tmp_path / "input.apk"
+    with zipfile.ZipFile(apk, "w") as archive:
+        archive.writestr("assets/empty", b"original")
+    before = apk.read_bytes()
+
+    result = inventory_apk_native.main([str(apk), "--output", str(apk)])
+
+    assert result == 2
+    assert apk.read_bytes() == before
+    assert "must not overwrite an APK input" in capsys.readouterr().err
+
+
+def test_inventory_cli_refuses_symlink_output(tmp_path, capsys):
+    apk = tmp_path / "input.apk"
+    with zipfile.ZipFile(apk, "w") as archive:
+        archive.writestr("assets/empty", b"x")
+    target = tmp_path / "target.json"
+    target.write_text("keep", encoding="utf-8")
+    output = tmp_path / "report.json"
+    output.symlink_to(target)
+
+    result = inventory_apk_native.main([str(apk), "--output", str(output)])
+
+    assert result == 2
+    assert target.read_text(encoding="utf-8") == "keep"
+    assert "output path must not be a symlink" in capsys.readouterr().err
