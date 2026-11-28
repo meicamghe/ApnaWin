@@ -40,6 +40,7 @@ def _dex(service, defined):
                 "system_load_path_basenames": ["libudpqtwo.so"],
                 "runtime_exec_library_basenames": ["libtun2socks.so"],
                 "process_builder_library_basenames": ["libpdnsd.so"],
+                "dynamic_dex_loader_path_extensions": ["dex"],
             }],
         }] if defined else [],
         "linkage_scan_classes_inspected": 1,
@@ -119,6 +120,13 @@ def test_split_set_finds_service_class_defined_in_non_base_split(tmp_path, monke
         "library_name_argument": "pdnsd",
         "mapped_library_basename": "libpdnsd.so",
         "mapping_basis": "Android System.loadLibrary naming convention",
+    }]
+    assert report["dynamic_dex_loader_references"] == [{
+        "apk": "split_feature.apk",
+        "class_name": "com.example.vpn.TunnelService",
+        "method_ordinal": 4,
+        "path_extensions": ["dex"],
+        "path_basis": "exact DexClassLoader/PathClassLoader constructor path argument when directly literal",
     }]
     assert report["static_analysis_only"] is True
     assert report["android_device_required"] is False
