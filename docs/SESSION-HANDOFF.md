@@ -236,3 +236,10 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - Added ELF32 and ELF64 regression cases for both orphaned metadata fields.
 - This is static structural validation only; it does not execute or load native code and does not claim Go symbol recovery.
 - The parser and tests are committed; the latest CI result for this addition is pending.
+
+### ELF execution-model regression fixture correction — 2026-11-28
+
+- The first full-suite run on the ELF execution-model metadata addition completed with **937 passed, 2 failed, 1 skipped**. Both failures were exact-dictionary expectations in legacy JNI-export fixtures; the implementation returned the three newly documented fields (entry_point, interpreter_present, execution_model) as designed.
+- Updated the ELF32 and ELF64 expected dictionaries to include the zero-entry/no-interpreter shared_object_candidate classification.
+- Test-only correction committed as 8307b504b5c4752ce66426a82e194563e8220309; a fresh PR validation is pending.
+- The run did not reach Windows packaging; build-windows remained skipped by the reverse-engineering gate. No APK extraction artifact or Go symbol recovery is claimed.
