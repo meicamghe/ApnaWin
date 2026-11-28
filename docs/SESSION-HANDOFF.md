@@ -112,7 +112,7 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 
 - Recomputed SHA-256 from the locally mounted file: `e796e24eece84ab28ab9e20710a8581fbcb1044c6720db5f9c79fecc839f68b5`; it matches the dedicated Xray report and the parallel-audit report.
 - Re-read Go build metadata with `go version -m`: Go 1.26.2, `github.com/xtls/xray-core/main`, `-buildmode=exe`, Android/ARM64, and module version `(devel)`.
-- A second independent offline pclntab pass again recovered 39,856 function records and 2,574 file entries; 39,823 names are unique. The PIE header has `textStart=0`; the executable `.text` section resolves to VA `0x3860a0`.
+- A second independent offline pclntab pass again recovered 39,856 function records and 2,574 file entries; 39,823 names are unique. The PIE header has `textStart=0`; ELF `.text` begins at VA `0x3860a0`, while the symbol-anchored Go text base is `0x386120`.
 - The earlier checksum discrepancy was a reading/summary error, not a different binary. Do not retain any claim that two distinct Xray attachments were observed.
 - Fixed the synthetic Go parser fixture so writing the 27-byte function-name string no longer replaces a 32-byte slice and shifts all later ELF offsets. The regression tests remain unexecuted; no CI was run.
 
@@ -159,6 +159,10 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - The Go ELF function symbol `main.main` at VA `0xeb86f0`, size 416, matches the pclntab PC range for `main.main` (PC offset `0xb325d0`, size 416), providing a symbol-anchored Go text base of `0x386120`.
 - Updated the parser to derive zero-`textStart` bases only from a unique defined ELF function symbol whose name and size match a pclntab function record. If no unique anchor exists, it fails closed rather than guessing from `.text`.
 - Updated synthetic tests to cover the non-Go entry stub, matching symbol anchor and missing-anchor failure. Tests have not been run.
+
+### Xray startup/config call chain
+
+Static AArch64 callsites confirm `main.executeRun` → `main.startXray` → `main.getConfigFilePath` → `main.readConfDir`. This is the native Xray CLI startup chain; Java/Android process creation and config handoff remain unproven. Strings `xray.location.config` and `xray.location.confdir` are present, but their exact lookup precedence is not yet established.
 
 ### Go pclntab parser
 
