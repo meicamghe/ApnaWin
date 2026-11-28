@@ -197,3 +197,14 @@ A later ELF `.dynsym`/dynamic-section cross-check refined the LIAPP note: `libbx
 ### tun2socks command interface refinement
 
 The static binary usage text confirms that `libtun2socks.so` accepts `--tunfd`/`--tunmtu`, requires local netif address/netmask and a SOCKS server address, and supports optional DNS/UDP gateway and SOCKS authentication arguments. This is the strongest current candidate interface for a VPNService TUN-FD handoff, but actual invocation by the APK is still unproven without DEX callsites/runtime evidence.
+
+
+## Library-backed base.apk analysis — 2026-11-28
+
+- Located and materialized the user's existing Library file `/base.apk`; no re-upload was needed. Size 20,419,648 bytes; SHA-256 `b1f650b168665b0728b1be0e25a0c722cd77ec873e1a1c7e2711a78aa1012a6d`.
+- Package `com.apnatunnel.lite`, versionName `APNA`, versionCode 51. Manifest requires `base__abi` and `base__density` splits. The base APK itself contains no `.so` entries.
+- Direct DEX parsing found 10,683 primary-DEX class definitions and confirmed `TunnelManagerHelper`, `Tunnel`, `TunnelVpnManager`, `Tun2Socks`, `Pdnsd`, and `org.uproxy.tun2socks.Tun2SocksJni`. The JNI wrapper declares `runTun2Socks` and `terminateTun2Socks`; Java `Tun2Socks.sendFd` is a concrete TUN descriptor handoff lead.
+- Disassembled `TunnelManagerHelper.startXRay`: it constructs an Intent for `prince.open.vpn.service.XRayDNSService`, calls `TunnelUtils.restartRotate()`, an obfuscated static helper `Kw.r(Context,Intent)`, and `Context.startService`. This establishes a Java-side start path, not successful runtime startup.
+- Decoded manifest declares `SalamanderService`, `XRayDNSService`, `SocksDNSService`, `PInjectorService`, `TunnelVpnService` (with `BIND_VPN_SERVICE`), and tethering `ProxyService`. Several service implementation class definitions are absent from base DEX and must be sought in the required ABI/density splits.
+- `assets/janur.json` is 366,636 bytes of Base64 text; decoded payload is 274,976 bytes with ~7.9993 bits/byte entropy. It is not plaintext JSON; cipher/schema/purpose remain unknown.
+- Full findings and exact caveats: `docs/reverse-engineering/base-apk-library-analysis-2026-11-28.md`. No APK execution, CI, Windows build, SSH work, merge, or main-branch change.
