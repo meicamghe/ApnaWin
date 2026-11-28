@@ -54,6 +54,8 @@ def test_inspector_invokes_documented_commands(tmp_path, monkeypatch):
             return b"classes.dex\nclasses2.dex\n"
         if args[:2] == ["dex", "packages"]:
             return b"C d 1 1 20 com.example.TunnelService\n"
+        if args[:2] == ["dex", "code"]:
+            return b".class public Lcom/example/TunnelService;\n"
         return b"classes.dex 100\nclasses2.dex 200\n"
 
     monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
@@ -66,6 +68,7 @@ def test_inspector_invokes_documented_commands(tmp_path, monkeypatch):
     assert commands == [
         ["dex", "list"],
         ["dex", "packages", "--defined-only"],
+        ["dex", "code", "--class", "com.example.TunnelService"],
         ["dex", "references"],
     ]
 
@@ -185,6 +188,7 @@ def test_manifest_service_join_without_package_reports_unresolved_class(tmp_path
     outputs = iter([
         b"classes.dex\n",
         b"C d 1 1 20 com.example.TunnelService\n",
+        b".class public Lcom/example/TunnelService;\n",
         b"classes.dex 10\n",
     ])
     monkeypatch.setattr(apk_dex.shutil, "which", lambda _: "/sdk/apkanalyzer")
@@ -330,3 +334,50 @@ def test_missing_service_class_has_no_native_method_claim(tmp_path, monkeypatch)
     assert item["native_method_count"] is None
     assert item["native_method_inspection_completed"] is False
 
+
+
+
+def test_parse_dex_linkage_evidence_correlates_calls_and_library_literals():
+    output = (
+        ".class public Lcom/example/Launcher;\\n"
+        ".method public start()V\\n"
+        '    const-string v0, "libudpqtwo.so"\\n'
+        "    invoke-virtual {v1, v0}, Ljava/lang/Runtime;->exec([Ljava/lang/String;)Ljava/lang/Process;\\n"
+        ".end method\\n"
+        ".method private load()V\\n"
+        '    const-string v0, "libpdnsd.so"\\n'
+        "    invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\\n"
+        "    invoke-direct {v1, v2}, Ldalvik/system/DexClassLoader;-><init>(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V\\n"
+        ".end method\\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    assert report["runtime_exec_calls"] == 1
+    assert report["system_load_library_calls"] == 1
+    assert report["dynamic_dex_loader_calls"] == 1
+    assert report["methods_with_evidence"] == [
+        {
+            "method_ordinal": 1,
+            "invocation_kinds": ["runtime_exec"],
+            "native_library_literals": ["libudpqtwo.so"],
+        },
+        {
+            "method_ordinal": 2,
+            "invocation_kinds": ["dynamic_dex_loader", "system_load_library"],
+            "native_library_literals": ["libpdnsd.so"],
+        },
+    ]
+    assert "start" not in str(report)
+    assert report["raw_smali_included"] is False
+
+
+def test_parse_dex_linkage_evidence_ignores_unrelated_strings_and_calls():
+    output = (
+        ".method public run()V\\n"
+        '    const-string v0, "not a native library"\\n'
+        '    const-string v1, "password=do-not-report"\\n'
+        "    invoke-virtual {v0}, Ljava/lang/String;->length()I\\n"
+        ".end method\\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    assert report["methods_with_evidence"] == []
+    assert report["runtime_exec_calls"] == 0
