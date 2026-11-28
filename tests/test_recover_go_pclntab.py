@@ -24,10 +24,11 @@ def _fixture(*, magic: int = 0x12345678) -> bytes:
     struct.pack_into("<8Q", h, 8, 2, 1, 0x3000, 0x60, 0x80, 0x90, 0xA0, 0xC0)
     data[p:p + 72] = h
     data[p + 0x60:p + 0x60 + 32] = b"main.main\0runtime.goexit\0\0\0"
-    # functab at 0x10c0; func records at 0x10e0 and 0x10f0.
-    struct.pack_into("<IIIII", data, p + 0xC0, 0, 0xE0, 0x10, 0xF0, 0x20)
-    struct.pack_into("<Ii", data, p + 0xE0, 0, 0)
-    struct.pack_into("<Ii", data, p + 0xF0, 0x10, 10)
+    # functab at 0x10c0; func offsets are relative to pclnOffset (0xC0).
+    # The two _func records follow the 20-byte functab.
+    struct.pack_into("<IIIII", data, p + 0xC0, 0, 0x14, 0x10, 0x24, 0x20)
+    struct.pack_into("<Ii", data, p + 0xD4, 0, 0)
+    struct.pack_into("<Ii", data, p + 0xE4, 0x10, 10)
     # executable bytes cover [0x3000, 0x3400).
     return bytes(data)
 
@@ -47,7 +48,7 @@ def test_stomped_magic_requires_opt_in():
 
 def test_name_offset_cannot_escape_funcnametab():
     data = bytearray(_fixture())
-    struct.pack_into("<i", data, 0x2E4, 0x100)  # first _func.nameOff
+    struct.pack_into("<i", data, 0x2D8, 0x100)  # first _func.nameOff
     with pytest.raises(ValueError, match="funcnametab"):
         recover_go_pclntab(bytes(data), 0x1000, allow_stomped_magic=True)
 
