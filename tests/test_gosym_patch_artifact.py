@@ -41,10 +41,10 @@ def test_gosym_patch_boundary_regression_test_is_complete():
     patch = _PATCH.read_text(encoding="utf-8")
     marker = "+++ b/objfile/elf_moduledata_scan_test.go\n"
     assert marker in patch
-    test_hunk = patch.split(marker, 1)[1].split("\n@@ ", 1)[0]
+    test_hunk = patch.split(marker, 1)[1].splitlines()[1:]
     source = "\n".join(
         line[1:]
-        for line in test_hunk.splitlines()
+        for line in test_hunk
         if line.startswith("+") and not line.startswith("+++")
     )
 
