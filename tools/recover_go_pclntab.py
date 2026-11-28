@@ -69,10 +69,19 @@ class _ElfImage:
     def read_c_string_before(self, address: int, end_address: int, maximum: int = 4096) -> bytes:
         if address < 0 or end_address <= address or maximum <= 0:
             raise ValueError("invalid ELF string range")
-        va, file_size, offset, _flags = self._unique_mapping(address, 1)
+        segment = self._unique_mapping(address, 1)
+        va, file_size, offset, _flags = segment
         available = min(maximum, end_address - address, file_size - (address - va))
         if available <= 0:
             raise ValueError("Go function name has no readable bytes")
+        string_end = address + available
+        for other in self.loads:
+            if other is segment:
+                continue
+            overlap_start = max(address, other[0])
+            overlap_end = min(string_end, other[0] + other[1])
+            if overlap_start < overlap_end:
+                raise ValueError("Go function name crosses an ambiguous PT_LOAD mapping")
         raw = self.data[offset + address - va:offset + address - va + available]
         terminator = raw.find(b"\0")
         if terminator <= 0:
