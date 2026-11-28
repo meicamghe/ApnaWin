@@ -256,7 +256,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             current["invocation_counts"]["runtime_exec"] = current["invocation_counts"].get("runtime_exec", 0) + 1
             register_match = runtime_exec_registers.search(line)
             if register_match:
-                registers = re.findall(r"\b(?:v|p)[0-9]+\b", register_match.group(1))
+                registers = _explicit_invocation_registers(register_match.group(1))
                 # Runtime.exec is an instance call: register zero is the Runtime receiver.
                 if len(registers) > 1:
                     current["runtime_exec_library_basenames"].update(
@@ -267,7 +267,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             current["invocation_counts"]["process_builder"] = current["invocation_counts"].get("process_builder", 0) + 1
             register_match = process_builder_registers.search(line)
             if register_match:
-                registers = re.findall(r"\b(?:v|p)[0-9]+\b", register_match.group(1))
+                registers = _explicit_invocation_registers(register_match.group(1))
                 # ProcessBuilder constructors are instance calls; inspect only the first argument.
                 if len(registers) > 1:
                     current["process_builder_library_basenames"].update(
@@ -278,7 +278,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             current["invocation_counts"]["system_load_library"] = current["invocation_counts"].get("system_load_library", 0) + 1
             register_match = load_library_registers.search(line)
             if register_match:
-                registers = re.findall(r"\b(?:v|p)[0-9]+\b", register_match.group(1))
+                registers = _explicit_invocation_registers(register_match.group(1))
                 for register in registers:
                     literal = current["string_registers"].get(register)
                     if literal and safe_library_name.fullmatch(literal):
@@ -288,7 +288,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             current["invocation_counts"]["system_load"] = current["invocation_counts"].get("system_load", 0) + 1
             register_match = load_path_registers.search(line)
             if register_match:
-                registers = re.findall(r"\b(?:v|p)[0-9]+\b", register_match.group(1))
+                registers = _explicit_invocation_registers(register_match.group(1))
                 for register in registers:
                     literal = current["string_registers"].get(register)
                     basename = native_basename.search(literal or "")
@@ -360,6 +360,17 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
     }
 
 
+
+def _explicit_invocation_registers(register_operands: str) -> list[str]:
+    """Return registers only for explicitly enumerated invoke operands.
+
+    Smali invoke-range operands use ``vN .. vM``. Treating the two endpoints
+    as an ordinary argument list can select the wrong argument register, so
+    range calls are counted but never correlated by this bounded scanner.
+    """
+    if ".." in register_operands:
+        return []
+    return re.findall(r"\\b(?:v|p)[0-9]+\\b", register_operands)
 
 def _command_argument_libraries(
     current: dict[str, Any],
