@@ -89,8 +89,8 @@ def test_split_set_finds_service_class_defined_in_non_base_split(tmp_path, monke
         "class_name": "com.example.vpn.TunnelService",
         "method_ordinal": 4,
         "library_literal": "libtun2socks.so",
-        "invocation_kinds": ["runtime_exec", "system_load_library"],
-        "invocation_counts": {"runtime_exec": 1, "system_load_library": 1},
+        "invocation_kinds": ["dynamic_dex_loader", "runtime_exec", "system_load_library"],
+        "invocation_counts": {"dynamic_dex_loader": 1, "runtime_exec": 1, "system_load_library": 1},
     }]
     assert report["system_load_path_references"] == [{
         "apk": "split_feature.apk",
