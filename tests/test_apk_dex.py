@@ -477,6 +477,54 @@ def test_process_launch_links_only_exact_command_argument_registers():
         "libbuilder.so", "libdecoy.so", "libudpqtwo.so"
     ]
 
+
+def test_new_string_array_tracks_direct_aput_object_native_arguments():
+    output = (
+        ".method private launchNative()V\n"
+        "    const/4 v0, 0x2\n"
+        "    new-array v2, v0, [Ljava/lang/String;\n"
+        '    const-string v1, "libudpqtwo.so"\n'
+        '    const-string v5, "libdecoy.so"\n'
+        "    aput-object v1, v2, v0\n"
+        "    invoke-direct {v3, v2}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["process_builder_library_basenames"] == ["libudpqtwo.so"]
+    assert row["native_library_literals"] == ["libdecoy.so", "libudpqtwo.so"]
+
+
+def test_new_string_array_register_overwrite_invalidates_array_evidence():
+    output = (
+        ".method private launchNative()V\n"
+        "    const/4 v0, 0x1\n"
+        "    new-array v2, v0, [Ljava/lang/String;\n"
+        '    const-string v1, "libactual.so"\n'
+        '    const-string v2, "libdecoy.so"\n'
+        "    aput-object v1, v2, v0\n"
+        "    invoke-direct {v3, v2}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["process_builder_library_basenames"] == []
+    assert row["native_library_literals"] == ["libactual.so", "libdecoy.so"]
+
+
+def test_new_string_array_ignores_non_string_array_and_unresolved_values():
+    output = (
+        ".method private launchNative()V\n"
+        "    const/4 v0, 0x1\n"
+        "    new-array v2, v0, [I\n"
+        '    const-string v1, "libactual.so"\n'
+        "    aput-object v1, v2, v0\n"
+        "    invoke-direct {v3, v2}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    assert report["methods_with_evidence"] == []
+
 def test_invoke_range_calls_are_counted_but_not_mislinked():
     output = (
         ".method private launchRange()V\n"
