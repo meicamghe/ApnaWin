@@ -1,10 +1,10 @@
 """APNA-style SSH payload expansion and segmented stream writes.
 
 The APNA primary DEX exposes the formatter/injector call graph, split tokens,
-ISO-8859-1 writes, and a delay-split path. The 1000 ms default is derived from
-a closely related public implementation, remains configurable, and is not
-claimed as an APNA v51 runtime default until protected bytecode confirms it.
-Hidden formatter keys are cross-checked against the related implementation.
+ISO-8859-1 writes, and a delay-split path. Its bytecode loads 1000 ms directly
+before Thread.sleep(long), so the default below matches this APK and remains
+configurable for catalog compatibility. Hidden formatter keys are cross-checked
+against the related implementation.
 """
 from __future__ import annotations
 
@@ -172,6 +172,10 @@ def render_apna_payload(
 
 def _java_split(value: str, delimiter: str) -> list[str]:
     """Match Java String.split(regex) trailing-empty removal for literal tokens."""
+    if value == "":
+        # Java String.split returns one empty element when the input itself
+        # is empty and the pattern has no match.
+        return [""]
     parts = value.split(delimiter)
     while parts and parts[-1] == "":
         parts.pop()
