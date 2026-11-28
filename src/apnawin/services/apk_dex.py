@@ -274,6 +274,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             result_match = move_result_object.search(line)
             if result_match:
                 array_register = result_match.group(1)
+                current["string_registers"].pop(array_register, None)
                 current["string_array_registers"][array_register] = current["pending_string_array"]
                 current["string_array_write_counts"][array_register] = 0
                 current["pending_string_array"] = None
@@ -357,6 +358,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
         allocated_array = new_string_array.search(line)
         if allocated_array:
             array_register = allocated_array.group(1)
+            current["string_registers"].pop(array_register, None)
             current["string_array_registers"][array_register] = []
             current["string_array_write_counts"][array_register] = 0
             continue
