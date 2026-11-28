@@ -62,7 +62,7 @@ The readable primary DEX inspection established:
 
 **Interpretation:** pdnsd and tun2socks have readable primary-DEX process ownership. `libudpqtwo.so` has no exported JNI entrypoint and looks like a standalone PIE child executable. A protected LIAPP path is a plausible launch owner, but this has not been proven. Do not attribute UDPQ ownership to the pdnsd/tun2socks classes.
 
-The protected secondary DEX must not be decrypted or bypassed. The acceptable next evidence is ordinary Android process/service diagnostics while APNA is used normally, plus the manifest and readable DEX from every committed split.
+The protected secondary DEX must not be decrypted or bypassed. The next static evidence is the manifest and every readable DEX from each committed split, including bounded method-level process/native-loader callsite extraction. No Android device or protected-DEX bypass is required for this static work. If LIAPP keeps the launch site opaque, record the ownership as unresolved rather than inventing a runtime attribution.
 
 ## 3. Other engine and protocol leads
 
@@ -126,5 +126,5 @@ This final gate requires an ordinary APNA session on an Android test device and 
 - Never execute the Android native binaries in CI.
 - Never contact third-party endpoints without authorization.
 - Do not enable Connect or route/DNS/TUN activation based on static fingerprints.
-- Do not start a new Windows build until APK reverse engineering is complete.
+- No Android application build or device-based testing is part of the ApnaWin deliverable.\n- Do not start a Windows or Linux product build until the user explicitly authorizes that phase.
 - PR #8 remains open and must not be merged without explicit user approval.
