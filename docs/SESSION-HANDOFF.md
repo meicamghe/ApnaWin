@@ -323,3 +323,12 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - The analyzer separately retains exact lib*.so basenames (including basenames extracted from absolute paths) and System.loadLibrary name arguments.
 - Cross-split aggregation now emits native_library_literal_references and system_load_library_references with APK split, class, method ordinal and invocation kind. The conventional lib{name}.so mapping is explicitly labeled as inferred from Android API naming convention.
 - Added regression tests for exact register correlation, arbitrary-string exclusion, and cross-split DEX/native reference aggregation.
+
+
+## GoReSym moduledata patch prepared — 2026-11-28
+
+- Added tools/patches/GoReSym-v3.4.1-moduledata-scan.patch against the exact v3.4.1 moduledata_scan implementation.
+- The patch iterates successive occurrences within the current section, skips ignored VAs without jumping to the next section, preserves section-size bounds and includes four focused Go regression cases.
+- Documented clean-checkout application and validation commands. This is a prepared upstream-tool patch only; it has not been applied to GoReSym or run against the APNA binary.
+- It fixes the independently confirmed ignored-first-match bug, not the separate unreadable ftab pointer in the suspected APNA moduledata candidate.
+- DEX linkage reports now include exact string-register correlation for System.loadLibrary and accurate invocation-site counts (not merely methods containing a call).
