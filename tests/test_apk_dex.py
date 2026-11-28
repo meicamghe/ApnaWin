@@ -557,3 +557,29 @@ def test_dynamic_dex_loader_links_only_exact_path_argument_and_reports_extension
     row = report["methods_with_evidence"][0]
     assert row["dynamic_dex_loader_path_extensions"] == expected
     assert path not in str(report)
+
+
+def test_in_memory_dex_loader_is_counted_without_inspecting_buffer_contents():
+    output = (
+        ".method private loadMemory()V\\n"
+        "    invoke-direct {v0, v1, v2}, Ldalvik/system/InMemoryDexClassLoader;-><init>(Ljava/nio/ByteBuffer;Ljava/lang/ClassLoader;)V\\n"
+        ".end method\\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["invocation_counts"] == {"dynamic_dex_loader": 1}
+    assert row["dynamic_dex_loader_path_extensions"] == []
+
+
+def test_dex_loader_does_not_link_a_path_literal_from_an_unrelated_register():
+    output = (
+        ".method private loadSecondary()V\\n"
+        '    const-string v7, "/data/user/0/app/decoy.dex"\\n'
+        "    invoke-direct {v0, v1, v2, v3, v4}, Ldalvik/system/DexClassLoader;-><init>(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V\\n"
+        ".end method\\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["invocation_counts"] == {"dynamic_dex_loader": 1}
+    assert row["dynamic_dex_loader_path_extensions"] == []
+    assert "decoy.dex" not in str(report)
