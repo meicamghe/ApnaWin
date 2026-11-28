@@ -89,3 +89,15 @@ The next practical requirement is a binary-safe retrieval path for the exact APK
 - VMess parsing type-checks textual JSON fields, gates the link version, rejects non-zero legacy alterId, and rejects unsupported network/header/security values. The parser audit did not establish live compatibility with a particular server or Xray binary version.
 - The APK inventory implementation hashes the opened APK via SHA-256, validates ZIP entry paths and expansion bounds, detects duplicate ZIP names, and records native ABI/library path and size without extracting or executing members. This is a useful reproducible inventory layer; it does not itself inspect split APKs as a set or discover dynamically unpacked libraries.
 - The source review did not find a safe basis to claim that the proprietary APNA protocol is one of the generic Xray protocols. Keep protocol identification evidence separate from share-link parser capability.
+
+
+## Parallel implementation follow-up
+
+The following source/documentation changes were added on this research branch after the audit:
+
+- Added `tools/recover_go_pclntab.py` as a hardened offline parser. It now requires unique VA-to-file mappings, bounds function names to the `funcnametab` interval, rejects names crossing overlapping PT_LOAD ranges, requires function entries to map to executable PT_LOAD segments, and bounds function records to the metadata segment.
+- Added synthetic regression tests for name-table escape, non-executable text addresses, ambiguous VA mappings and partial segment overlap. These tests have **not been executed** in this environment; no CI workflow was dispatched. The parser remains unvalidated against the real `libudpqtwo.so`.
+- Replaced the stale Xray milestone text with an accurate source-level description of share-link import and guarded worker lifecycle integration, while retaining the distinction between source integration and live VPN validation.
+- Added `docs/reverse-engineering/dex-apk-wide-linkage-index.md` defining the bounded APK-wide DEX callsite index, provenance requirements, resource limits and regression matrix. The index itself is not yet implemented; existing class-candidate scanning remains heuristic.
+
+The branch is six commits ahead of `main` and has no divergence from `main` at the time of this update. No Windows build, CI run, SSH work, PR merge or native-binary execution was performed.
