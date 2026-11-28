@@ -192,6 +192,12 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
     string_array_registers = re.compile(
         r'filled-new-array\s+\{([^}]*)\},\s*\[Ljava/lang/String;'
     )
+    new_string_array = re.compile(
+        r'new-array\s+(v[0-9]+|p[0-9]+),\s*(v[0-9]+|p[0-9]+),\s*\[Ljava/lang/String;'
+    )
+    string_array_put = re.compile(
+        r'aput-object\s+(v[0-9]+|p[0-9]+),\s*(v[0-9]+|p[0-9]+),\s*(v[0-9]+|p[0-9]+)'
+    )
     path_dex_loader_registers = re.compile(
         r'\{([^}]*)\},\s*Ldalvik/system/(?:DexClassLoader|PathClassLoader);-><init>\(([^)]*)\)'
     )
@@ -341,6 +347,29 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
                         suffix.group(1).lower()
                         for suffix in dex_archive_suffix.finditer(path_literal)
                     )
+
+        # Track only arrays allocated as String[] in this method and populated
+        # through direct aput-object register operands. No aliases, indices,
+        # reflection or computed strings are followed.
+        allocated_array = new_string_array.search(line)
+        if allocated_array:
+            array_register = allocated_array.group(1)
+            current["string_array_registers"][array_register] = []
+            continue
+
+        array_put = string_array_put.search(line)
+        if array_put:
+            value_register, array_register, _index_register = array_put.groups()
+            if array_register in current["string_array_registers"]:
+                values = current["string_array_registers"][array_register]
+                if len(values) < 256:
+                    literal = current["string_registers"].get(value_register, "")
+                    basename = native_basename.search(literal)
+                    if basename and basename.group(1) not in values:
+                        values.append(basename.group(1))
+                else:
+                    current["string_array_registers"].pop(array_register, None)
+            continue
 
         array_match = string_array_registers.search(line)
         if array_match:
