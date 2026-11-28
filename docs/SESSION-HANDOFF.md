@@ -151,6 +151,15 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - Example on a machine with Android SDK tools installed:
   `python tools/inspect_apk_dex_set.py APNA-APKs/base.apk APNA-APKs/split_config.arm64_v8a.apk APNA-APKs/split_config.de.apk APNA-APKs/split_config.en.apk APNA-APKs/split_config.fa.apk APNA-APKs/split_config.xxhdpi.apk`
 
+
+
+### Go PIE text-base correction — 2026-11-28
+
+- The previous parser's `textStart=0` fallback to the ELF `.text` section start was incorrect for this binary: `.text` begins at `0x3860a0` with the native `_start` stub, while Go text begins at `0x386120`.
+- The Go ELF function symbol `main.main` at VA `0xeb86f0`, size 416, matches the pclntab PC range for `main.main` (PC offset `0xb325d0`, size 416), providing a symbol-anchored Go text base of `0x386120`.
+- Updated the parser to derive zero-`textStart` bases only from a unique defined ELF function symbol whose name and size match a pclntab function record. If no unique anchor exists, it fails closed rather than guessing from `.text`.
+- Updated synthetic tests to cover the non-Go entry stub, matching symbol anchor and missing-anchor failure. Tests have not been run.
+
 ### Go pclntab parser
 
 - `tools/recover_go_pclntab.py` was corrected for Go functab offsets relative to `pcln` and PIE images whose `textStart=0`.
