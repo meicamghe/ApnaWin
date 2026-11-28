@@ -393,7 +393,8 @@ classes (up to 64 per APK) using `apkanalyzer dex code --class`. It processes
 smali only in memory and emits allowlisted evidence grouped by anonymous
 method ordinal:
 
-- `Runtime.exec` calls and `ProcessBuilder` construction;
+- `Runtime.exec` calls, `ProcessBuilder` construction, and separate
+  `ProcessBuilder.start()` invocation counts;
 - `System.load` and `System.loadLibrary` calls;
 - `DexClassLoader`, `PathClassLoader`, and
   `InMemoryDexClassLoader` construction;
@@ -500,7 +501,9 @@ APIs:
 - `Runtime.exec(String)` and `Runtime.exec(String[])`: the command argument
   register is inspected, excluding the receiver register.
 - `ProcessBuilder(String[])`: the first constructor argument is inspected,
-  excluding the receiver register. A `String[]` created by a fully enumerated
+  excluding the receiver register. Constructor and `start()` callsites are
+  counted separately; the scanner does not prove that a particular builder
+  instance reaches a particular `start()` call. A `String[]` created by a fully enumerated
   `filled-new-array {v...}` instruction and immediately captured by
   `move-result-object` is supported. A `new-array` String[] followed by direct
   `aput-object` writes to the same register is also supported with a 256-write
