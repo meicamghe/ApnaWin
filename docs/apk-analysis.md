@@ -477,3 +477,43 @@ string-register argument is observed; constructed arrays, aliases, values
 loaded from files, reflection, and obfuscated/protected code may remain
 unresolved. A callsite proves static argument linkage only, not that the
 method runs, the child starts, the library loads, or traffic uses it.
+
+## Exact DEX native-loader and process-launch linkage
+
+The optional DEX inspection also performs a bounded, in-memory scan of selected
+classes for exact invocation-site relationships. It records allowlisted
+invocation counts and correlates only the argument register passed to these
+APIs:
+
+- `System.loadLibrary(String)`: the exact argument register is matched to a
+  preceding string literal. The reported `lib<name>.so` mapping is the
+  Android API naming convention, not a literal binary path.
+- `System.load(String)`: the exact path argument register is matched to a
+  preceding string literal, and only a safe native-library basename is kept.
+- `Runtime.exec(String)` and `Runtime.exec(String[])`: the command argument
+  register is inspected, excluding the receiver register.
+- `ProcessBuilder(String[])`: the first constructor argument is inspected,
+  excluding the receiver register. A `String[]` created by a fully enumerated
+  `filled-new-array {v...}` instruction and immediately captured by
+  `move-result-object` is supported; only safe library basenames from its
+  enumerated string registers are retained.
+
+For process-launch calls, the report keeps the library basename only when it
+is present in that exact argument value. An unrelated string elsewhere in the
+same method is not treated as a link. Cross-split aggregation preserves the
+APK split, class name, method ordinal, and evidence basis for each reference.
+The report does not expose arbitrary strings, method names, command arguments,
+paths, raw smali, or bytecode.
+
+This is intentionally a conservative partial data-flow analysis, not a full
+DEX interpreter. It does **not** currently resolve `filled-new-array/range`,
+`new-array` plus `aput-object`, register aliases or general move chains,
+reflection, dynamically generated commands, interprocedural values, or
+obfuscated/protected DEX. A missing reference therefore means “not established
+by this bounded scan,” not “the APK cannot load or launch that library.”
+Invocation evidence is static only and does not prove that the call executes,
+the process starts, or a native engine establishes a connection.
+
+The scan is optional and requires the local Android SDK `apkanalyzer` tool.
+It is static-only and does not require an Android device. It never loads or
+executes APK code.
