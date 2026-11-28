@@ -644,4 +644,3 @@ def inspect_apk_dex(
         "source": "apkanalyzer",
         "raw_dex_output_included": False,
     }
-)
