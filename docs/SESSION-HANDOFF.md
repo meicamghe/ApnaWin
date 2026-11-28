@@ -274,5 +274,13 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 ## Latest completed CI — 2026-11-28
 
 - GitHub Actions run [46109432150](https://github.com/meicamghe/ApnaWin/actions/runs/46109432150) passed on head 723d2089073a8abc9836db9a889e6f6c1b67ead3: **943 passed, 1 skipped, 1 warning**.
-- The warning is from the duplicate-ZIP-entry test fixture; the expected warning is captured by the test. The build-windows job was skipped by the reverse-engineering gate.
+- The remaining pytest warning is from the duplicate-ZIP-entry fixture in tests/test_apk_inventory.py. The build-windows job was skipped by the reverse-engineering gate.
 - Run 46109432150 did not dispatch the manual APK extraction workflow and produced no fresh APK/ELF artifact.
+
+
+## Method-level DEX scan CI — 2026-11-28
+
+- GitHub Actions run [46110162159](https://github.com/meicamghe/ApnaWin/actions/runs/46110162159) passed on head 0a1889a320e0d17706155e5acebee1d1b7314e64: **945 passed, 1 skipped, 1 warning**.
+- New DEX linkage parser regression tests passed, including method-scoped Runtime.exec, System.loadLibrary, secondary-Dex loader detection, safe .so literal extraction, and exclusion of arbitrary strings.
+- Windows packaging remained skipped by the reverse-engineering gate.
+- No fresh APK extraction artifact was generated; the native inventory workflow remains manual-only.
