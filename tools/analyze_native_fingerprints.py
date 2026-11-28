@@ -112,7 +112,7 @@ def analyze_native_fingerprints(extraction_dir: str | Path) -> dict[str, Any]:
         raise ValueError("native extraction manifest exceeds the analysis limit")
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
         raise ValueError("native extraction manifest is not valid UTF-8 JSON") from exc
     if not isinstance(manifest, dict):
         raise ValueError("native extraction manifest root must be an object")
@@ -137,7 +137,7 @@ def analyze_native_fingerprints(extraction_dir: str | Path) -> dict[str, Any]:
             or not isinstance(library, str) or not _LIBRARY_NAME.fullmatch(library)
             or not isinstance(relative, str)
             or relative != f"{apk}/{abi}/{library}"
-            or not isinstance(expected_size, int) or not 0 <= expected_size <= _MAX_FILE_BYTES
+            or type(expected_size) is not int or not 0 <= expected_size <= _MAX_FILE_BYTES
             or not isinstance(expected_hash, str) or not _SHA256.fullmatch(expected_hash)
             or relative in seen_paths
         ):
