@@ -366,6 +366,7 @@ def test_parse_dex_linkage_evidence_correlates_calls_and_library_literals():
             "runtime_exec_library_basenames": ["libudpqtwo.so"],
             "process_builder_library_basenames": [],
             "dynamic_dex_loader_path_extensions": [],
+            "dynamic_dex_loader_types": [],
         },
         {
             "method_ordinal": 2,
@@ -377,6 +378,7 @@ def test_parse_dex_linkage_evidence_correlates_calls_and_library_literals():
             "runtime_exec_library_basenames": [],
             "process_builder_library_basenames": [],
             "dynamic_dex_loader_path_extensions": [],
+            "dynamic_dex_loader_types": ["DexClassLoader"],
         },
     ]
     assert "start" not in str(report)
@@ -539,6 +541,7 @@ def test_filled_string_array_is_not_linked_after_intervening_instruction():
         ("PathClassLoader", "(Ljava/lang/String;Ljava/lang/ClassLoader;)V", "/data/app/base.apk", ["apk"]),
         ("DexClassLoader", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V", "/data/user/0/app/cache.jar", ["jar"]),
         ("DexClassLoader", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V", "/data/user/0/app/secondary.bin", []),
+        ("DexClassLoader", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V", "/data/user/0/app/classes.dex:/data/user/0/app/feature.apk", ["apk", "dex"]),
     ],
 )
 def test_dynamic_dex_loader_links_only_exact_path_argument_and_reports_extension(
@@ -558,6 +561,7 @@ def test_dynamic_dex_loader_links_only_exact_path_argument_and_reports_extension
     report = apk_dex._parse_dex_linkage_evidence(output)
     row = report["methods_with_evidence"][0]
     assert row["dynamic_dex_loader_path_extensions"] == expected
+    assert row["dynamic_dex_loader_types"] == [loader]
     assert path not in str(report)
 
 
@@ -571,6 +575,7 @@ def test_in_memory_dex_loader_is_counted_without_inspecting_buffer_contents():
     row = report["methods_with_evidence"][0]
     assert row["invocation_counts"] == {"dynamic_dex_loader": 1}
     assert row["dynamic_dex_loader_path_extensions"] == []
+    assert row["dynamic_dex_loader_types"] == ["InMemoryDexClassLoader"]
 
 
 def test_dex_loader_does_not_link_a_path_literal_from_an_unrelated_register():
@@ -584,4 +589,5 @@ def test_dex_loader_does_not_link_a_path_literal_from_an_unrelated_register():
     row = report["methods_with_evidence"][0]
     assert row["invocation_counts"] == {"dynamic_dex_loader": 1}
     assert row["dynamic_dex_loader_path_extensions"] == []
+    assert row["dynamic_dex_loader_types"] == ["DexClassLoader"]
     assert "decoy.dex" not in str(report)
