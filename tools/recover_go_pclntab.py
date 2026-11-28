@@ -79,7 +79,7 @@ class _ElfImage:
                                 continue
                             if st_name >= len(symbol_strings):
                                 raise ValueError("ELF function symbol name is outside its string table")
-                            symbol_end = symbol_strings.find(b"\\0", st_name)
+                            symbol_end = symbol_strings.find(b"\0", st_name)
                             if symbol_end < 0:
                                 raise ValueError("ELF function symbol name is not NUL-terminated")
                             try:
