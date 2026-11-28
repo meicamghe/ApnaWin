@@ -253,7 +253,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             current["invocation_counts"]["system_load"] = current["invocation_counts"].get("system_load", 0) + 1
             register_match = load_path_registers.search(line)
             if register_match:
-                registers = re.findall(r"\\b(?:v|p)[0-9]+\\b", register_match.group(1))
+                registers = re.findall(r"\b(?:v|p)[0-9]+\b", register_match.group(1))
                 for register in registers:
                     literal = current["string_registers"].get(register)
                     basename = native_basename.search(literal or "")
