@@ -52,6 +52,13 @@ payload endpoint (`connect_host`) for that value. Therefore the actual HTTP
 `Host: [cf]` and `Host: [host]` intentionally resolve to different names.
 The mapper does not overwrite a provider template's Host header.
 
+The formatter's ordered replacement loop, post-substitution rotation, ISO-8859-1
+writes/flushes and split injection are cross-referenced against the primary-DEX
+findings in [apna-dex-payload-and-tunnel-findings.md](apna-dex-payload-and-tunnel-findings.md).
+The APNA v51 bytecode loads an exact 1000 ms delay before
+`Thread.sleep(long)`; this is now the renderer default (still configurable),
+rather than an unverified sibling-project assumption.
+
 For TLS modes, an explicit catalog `sausage` value is used as SNI when
 present. Otherwise TLS Direct uses the selected SSH server host, while TLS
 HTTP Proxy uses the selected payload endpoint. SNI is the TLS ClientHello
