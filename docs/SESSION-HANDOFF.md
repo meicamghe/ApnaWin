@@ -596,3 +596,14 @@ The user has now explicitly authorized moving from reverse-engineering-only work
 - Added a successful mocked TLS/HTTP probe test plus a DNS-route leak rejection test.
 - The first full Windows CI attempt on head `4f19169710a195f836148556401621dc5e38d728` reported **1038 passed, 1 skipped, 1 failed**. The sole failure was a test observer connected with Qt's default queued delivery while the test blocked the main thread in `QThread.wait()`; the observer now uses an explicit direct connection. This was a test-harness issue, not a production worker failure.
 - Next required result is a green Windows test job followed by the new `build-windows` job and its artifact. No claim of live VPN acceptance is made until the resulting executable is tested against an authorized server on Windows 10/11.
+
+
+## APNA SSH backend port — 2026-11-28
+
+- Created `feature/apna-ssh-backend-port` from the legacy-profile compatibility head `c023874e07ff6883da74833e89cab2a748fc235f`.
+- Ported the APNA SSH stack from the older `vpn/dual-stack-egress-readiness` workstream: bounded catalog decoder/source, strict server/payload mapper, DPAPI-protected APNA profile store, payload socket adapters (direct/TLS/HTTP/WebSocket), Paramiko SSH session with host-key pinning, loopback SOCKS5 TCP forwarding, UDPGW framing/flow relay, APNA tunnel engine, and Xray/Wintun TUN composition.
+- Ported the matching SSH/catalog/profile-store/egress/supervisor regression tests and restored the APNA import, host-key verification and connection UI integration from that workstream. The generic JSON profile import remains intentionally absent and Add remains hidden.
+- Added Paramiko as an explicit runtime dependency. Existing legacy `apna_ssh` profile metadata is preserved by the base compatibility commits; encrypted connection settings are kept separately in the DPAPI-backed APNA profile store.
+- The source workstream PR #6 is highly divergent from the current reverse-engineering branch (788 commits ahead and 352 behind at comparison time); it was **not merged**. Only the focused transport/UI files and tests were ported.
+- This is a code integration checkpoint, **not a verified APNA connection**. No CI result is claimed for this new branch, and no authorized provider SSH host-key/authentication, UDPGW datagram, routed TCP/UDP/DNS, disconnect, or crash-recovery acceptance has been recorded. Connect remains dependent on a protected Windows helper installation and an imported APNA configuration with independently verified host identity.
+- Next gates: run the full test suite on this exact branch; inspect and resolve integration failures; then test one authorized APNA profile on Windows 10/11 with provider-issued host-key verification and real TCP/UDP/DNS traffic. Do not enable a false-positive Connected state or publish a release before those gates pass.
