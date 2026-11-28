@@ -483,3 +483,30 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
   against the sample, Go symbol recovery, provider handshake, or live traffic
   validation is claimed. PR #8 remains open and unmerged; all product builds
   and connection activation remain gated off.
+
+## DEX alias and process-start evidence follow-up — 2026-11-28
+
+- The bounded DEX scanner now follows direct `move-object`, `move-object/from16`,
+  and `move-object/16` copies for known string literals and tracked `String[]`
+  references within one method. String[] aliases share one mutable evidence
+  state and one 256-write budget; exceeding the budget invalidates every alias
+  of that array.
+- Added separate `ProcessBuilder.start()` invocation counts instead of treating
+  constructor creation as proof that a child process starts. Split-set reports
+  aggregate these counts by APK/class/method and explicitly do not associate a
+  constructor instance with a particular `start()` call.
+- Added regression tests for direct string aliases, String[] aliases, shared
+  alias write limits, stale-register invalidation, and ProcessBuilder
+  constructor-versus-start distinctions.
+- Final CI run [46127388033](https://github.com/meicamghe/ApnaWin/actions/runs/46127388033)
+  passed on head `e48ebfb661ef46ee0336bb40a575db3460d36938`: **992 passed,
+  1 skipped, 1 warning**. Windows build remained skipped by the reverse-engineering
+  gate. Intermediate regression failures in this batch were corrected before
+  this final passing run.
+- The parser remains conservative: no general register/data-flow analysis,
+  computed values, array index reasoning, reflection, or protected-DEX access.
+  Static constructor/start counts are not proof of runtime process creation.
+- No fresh APK extraction artifact or native fingerprint output was produced;
+  no GoReSym sample execution, Go symbol recovery, APNA provider handshake,
+  or live traffic is claimed. PR #8 remains open/unmerged; product builds and
+  connection activation remain gated off.
