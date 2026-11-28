@@ -191,3 +191,8 @@ def test_rotation_state_resets_when_expanded_host_changes():
     assert first[0].data.startswith(b"CONNECT a ")
     assert second[0].data.startswith(b"CONNECT b ")
     assert changed[0].data.startswith(b"CONNECT a ")
+
+
+def test_empty_rotate_value_matches_java_string_split_behavior():
+    chunks = render_apna_payload("[rotate=]", host="ssh.example.test", port=22)
+    assert chunks == (PayloadChunk(b""),)
