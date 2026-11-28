@@ -99,7 +99,7 @@ The following source/documentation changes were added on this research branch af
 - Replaced the stale Xray milestone text with an accurate source-level description of share-link import and guarded worker lifecycle integration, while retaining the distinction between source integration and live VPN validation.
 - Ported bounded DEX process/native-loader linkage scanning, split-set aggregation, a CLI and mocked regression tests from the divergent research branch as selective files only. The 64-class cap remains; the exhaustive class-name-independent DEX reference index is still unimplemented. Updated the design note to distinguish implemented bounded scanning from the remaining exhaustive index.
 
-The branch is six commits ahead of `main` and has no divergence from `main` at the time of this update. No Windows build, CI run, SSH work, PR merge or native-binary execution was performed.
+At the initial audit checkpoint the branch was six commits ahead; subsequent selective implementation and documentation updates brought it to 24 commits ahead of `main` with zero commits behind (latest comparison at this handoff). No Windows build, CI run, SSH work, PR merge or native-binary execution was performed.
 
 
 ## Uploaded Xray binary follow-up
@@ -113,3 +113,8 @@ The dedicated report `docs/reverse-engineering/libxray-binary-analysis-2026-11-2
 - Ported the matching bounded `apk_dex.py` implementation and its tests so the split-set aggregator receives the expected process/native-loader evidence schema.
 - Static analysis of `libxray.so` recovered CLI functions `main.main`, `main.executeRun`, `main.getConfigFilePath`, `main.startXray`, `main.readConfDir` and `main/confloader.LoadConfig`. Help strings expose `run [-c config.json] [-confdir dir]`, `-config`, `-confdir`, `-format`, `-test`, and `-dump`. The literal `xray.tun.fd` is recorded only as a TUN-related internal string; it does not prove VPNService FD transfer.
 - New DEX tests and updated Go parser tests have not been run. No CI was dispatched.
+
+
+## Provenance note
+
+The current `APNA-APKs` repository directory does not contain a standalone `libxray.so` file. The uploaded binary's SHA-256 is recorded, but its exact member path inside `base.apk` or a split has not yet been matched. The binary must remain an externally supplied artifact until that provenance check is completed.
