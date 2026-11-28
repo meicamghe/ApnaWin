@@ -336,8 +336,9 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 
 ## Dynamic secondary-DEX loader evidence — 2026-11-28
 
-- The bounded DEX smali scan now correlates direct String-register arguments to `DexClassLoader` and `PathClassLoader` constructors and reports only the observed `.dex`, `.apk`, or `.jar` extension.
-- `InMemoryDexClassLoader` remains a counted callsite only; computed paths, aliases, reflection, invoke-range arguments and protected DEX remain unresolved.
+- The bounded DEX smali scan now records the exact loader type (`DexClassLoader`, `PathClassLoader`, or `InMemoryDexClassLoader`) and correlates direct String-register path arguments for file-backed loaders.
+- Colon-separated direct-literal archive paths retain only allowlisted `.dex`, `.apk`, and `.jar` extensions; the path itself is never emitted. In-memory loaders are explicitly identified as ByteBuffer constructors with no file-path argument.
+- Computed paths, aliases, reflection, invoke-range arguments and protected DEX remain unresolved.
 - Split aggregation preserves APK/class/method references for these loader callsites. A loader constructor reference is not proof that the target archive was decrypted, accepted, loaded or executed.
 - The regression suite includes wrong-register and non-literal boundaries; no fresh APK extraction artifact has been produced by the manual workflow.
 
