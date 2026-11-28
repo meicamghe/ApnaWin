@@ -63,6 +63,10 @@ class ProfileDialog(QDialog):
         self.port_spin.setValue(profile.endpoint_port if profile else 443)
         self.transport_combo = QComboBox()
         for transport in Transport:
+            # Legacy APNA SSH entries remain editable/exportable, but must not
+            # be offered as a new connection type before that engine is verified.
+            if transport is Transport.APNA_SSH and profile is None:
+                continue
             self.transport_combo.addItem(transport.value.upper(), transport.value)
         if profile:
             self.transport_combo.setCurrentIndex(
