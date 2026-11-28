@@ -192,6 +192,10 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
     string_array_registers = re.compile(
         r'filled-new-array\s+\{([^}]*)\},\s*\[Ljava/lang/String;'
     )
+    path_dex_loader_registers = re.compile(
+        r'\{([^}]*)\},\s*Ldalvik/system/(?:DexClassLoader|PathClassLoader);-><init>\(([^)]*)\)'
+    )
+    dex_archive_suffix = re.compile(r"\.(dex|apk|jar)$", re.IGNORECASE)
     move_result_object = re.compile(r'move-result-object\s+(v[0-9]+|p[0-9]+)')
     destination_register = re.compile(r'^\s+[a-z][a-z0-9/-]*\s+(v[0-9]+|p[0-9]+)\s*,')
     safe_library_name = re.compile(r"^[A-Za-z0-9_]{1,120}$")
