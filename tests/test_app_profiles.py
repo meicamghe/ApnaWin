@@ -507,3 +507,64 @@ def test_import_share_links_dialog_cancel_is_noop(tmp_path, qapp, monkeypatch):
     assert window.profiles == [existing]
     assert destination.read_bytes() == original
     window.close()
+
+
+def test_connect_button_requires_installed_helper_and_encrypted_xray_config(
+    tmp_path, qapp, monkeypatch
+):
+    from apnawin.app import MainWindow
+    from apnawin.domain.profile import ConnectionProfile, Transport
+
+    program_files = tmp_path / "Program Files"
+    helper = program_files / "ApnaWin" / "ApnaWinElevator.exe"
+    helper.parent.mkdir(parents=True)
+    helper.write_bytes(b"test helper")
+    monkeypatch.setenv("ProgramFiles", str(program_files))
+
+    class ConfigStore:
+        path = tmp_path / "xray-configs.json"
+
+        def has_config(self, name):
+            return name == "Office"
+
+    profiles_path = tmp_path / "profiles.json"
+    save_profiles(
+        profiles_path,
+        [ConnectionProfile("Office", Transport.XRAY, "vpn.example", 443)],
+    )
+    window = MainWindow(
+        profiles_path=profiles_path,
+        xray_config_store=ConfigStore(),
+    )
+
+    assert window.connect_button.isEnabled()
+    assert window.connect_button.text() == "Connect"
+    window.close()
+
+
+def test_connect_button_stays_disabled_without_xray_config_or_helper(
+    tmp_path, qapp, monkeypatch
+):
+    from apnawin.app import MainWindow
+    from apnawin.domain.profile import ConnectionProfile, Transport
+
+    monkeypatch.delenv("ProgramFiles", raising=False)
+
+    class ConfigStore:
+        path = tmp_path / "xray-configs.json"
+
+        def has_config(self, _name):
+            return False
+
+    profiles_path = tmp_path / "profiles.json"
+    save_profiles(
+        profiles_path,
+        [ConnectionProfile("Office", Transport.XRAY, "vpn.example", 443)],
+    )
+    window = MainWindow(
+        profiles_path=profiles_path,
+        xray_config_store=ConfigStore(),
+    )
+
+    assert not window.connect_button.isEnabled()
+    window.close()
