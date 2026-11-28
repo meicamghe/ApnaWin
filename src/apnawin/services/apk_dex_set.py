@@ -69,6 +69,7 @@ def inspect_apk_dex_set(
     system_load_path_references: list[dict[str, Any]] = []
     runtime_exec_library_references: list[dict[str, Any]] = []
     process_builder_library_references: list[dict[str, Any]] = []
+    dynamic_dex_loader_references: list[dict[str, Any]] = []
     for apk in per_apk:
         for class_row in apk["dex"]["native_linkage_evidence"]:
             for method in class_row["methods_with_evidence"]:
@@ -104,6 +105,14 @@ def inspect_apk_dex_set(
                         "method_ordinal": method["method_ordinal"],
                         "library_basename": library,
                         "launch_basis": "exact ProcessBuilder constructor argument register",
+                    })
+                if "dynamic_dex_loader" in method["invocation_kinds"]:
+                    dynamic_dex_loader_references.append({
+                        "apk": apk["apk"],
+                        "class_name": class_row["class_name"],
+                        "method_ordinal": method["method_ordinal"],
+                        "path_extensions": method["dynamic_dex_loader_path_extensions"],
+                        "path_basis": "exact DexClassLoader/PathClassLoader constructor path argument when directly literal",
                     })
                 for library_name in method["system_load_library_names"]:
                     system_load_library_references.append({
@@ -162,6 +171,7 @@ def inspect_apk_dex_set(
         "system_load_path_references": system_load_path_references,
         "runtime_exec_library_references": runtime_exec_library_references,
         "process_builder_library_references": process_builder_library_references,
+        "dynamic_dex_loader_references": dynamic_dex_loader_references,
         "per_apk": per_apk,
         "static_analysis_only": True,
         "android_device_required": False,
