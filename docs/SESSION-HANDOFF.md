@@ -545,3 +545,8 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - Added regression tests, including platform-aware skips where symlink creation
   is unavailable. This is static tooling hardening; no fresh APK artifact was
   generated and no native library was executed.
+
+- Final CI for APK inventory path-safety hardening: run
+  [46129520043](https://github.com/meicamghe/ApnaWin/actions/runs/46129520043)
+  passed on code head `5d7573e7ab6f64a6614ae2b7a8e7a189c15cc410`:
+  **1007 passed, 1 skipped, 1 warning**. Windows packaging remained skipped.
