@@ -221,6 +221,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             or current["system_load_path_basenames"]
             or current["runtime_exec_library_basenames"]
             or current["process_builder_library_basenames"]
+            or current["invocation_counts"].get("process_builder_start", 0)
             or current["dynamic_dex_loader_path_extensions"]
         ):
             if len(rows) >= _MAX_LINKAGE_EVIDENCE_ROWS:
@@ -294,6 +295,9 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
                     current["runtime_exec_library_basenames"].update(
                         _command_argument_libraries(current, registers[1], register_match.group(2), native_basename)
                     )
+        if "Ljava/lang/ProcessBuilder;->start()Ljava/lang/Process;" in line:
+            current["invocation_kinds"].add("process_builder_start")
+            current["invocation_counts"]["process_builder_start"] = current["invocation_counts"].get("process_builder_start", 0) + 1
         if "Ljava/lang/ProcessBuilder;-><init>(" in line:
             current["invocation_kinds"].add("process_builder")
             current["invocation_counts"]["process_builder"] = current["invocation_counts"].get("process_builder", 0) + 1
@@ -437,6 +441,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
     totals = {
         "runtime_exec_calls": 0,
         "process_builder_calls": 0,
+        "process_builder_start_calls": 0,
         "system_load_calls": 0,
         "system_load_library_calls": 0,
         "dynamic_dex_loader_calls": 0,
@@ -444,6 +449,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
     kind_to_total = {
         "runtime_exec": "runtime_exec_calls",
         "process_builder": "process_builder_calls",
+        "process_builder_start": "process_builder_start_calls",
         "system_load": "system_load_calls",
         "system_load_library": "system_load_library_calls",
         "dynamic_dex_loader": "dynamic_dex_loader_calls",
@@ -621,6 +627,7 @@ def inspect_apk_dex(
         if any((
             linkage_by_class[name]["runtime_exec_calls"],
             linkage_by_class[name]["process_builder_calls"],
+            linkage_by_class[name]["process_builder_start_calls"],
             linkage_by_class[name]["system_load_calls"],
             linkage_by_class[name]["system_load_library_calls"],
             linkage_by_class[name]["dynamic_dex_loader_calls"],
