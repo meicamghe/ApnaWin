@@ -2,22 +2,23 @@
 
 ## Scope and safety
 
-This report records a source-level audit of the existing `re/apk-native-extract` branch. It does not claim that the APK's native binaries were executed or disassembled. No Windows build, CI workflow, SSH implementation, PR merge, or runtime network test was started for this audit.
+This report combines a selective source audit of `re/apk-native-extract` with offline static inspection and AArch64 disassembly of the uploaded `libxray.so`. No native binary was executed or connected to a network. No Windows build, CI workflow, SSH implementation, PR merge, or runtime network test was started for this audit.
 
 The implementation under review is on `re/apk-native-extract`; this research branch is based on `main` and deliberately does not import that branch's broad, divergent changes.
 
 ## Track A — DEX/JNI and LIAPP discovery
 
-### Confirmed from source
+### Confirmed implementation on this branch
 
-- `apk_dex.py` inspects a bounded set of candidate classes, prioritizing manifest services and class names matching LIAPP-related patterns.
-- The selected scan list is truncated at `_MAX_LINKAGE_CLASSES` (64 in the reviewed source).
-- The DEX code parser tracks a limited set of smali register flows for `System.loadLibrary`, `System.load`, process launch, and secondary DEX loaders.
-- This is static evidence only. It does not prove that a callsite executes, and it does not establish the contents or origin of a library loaded at runtime.
+- `apk_dex.py` now scans bounded candidate classes, prioritizing exact manifest services, LIAPP-related classes and network/proxy/service name signals.
+- The selected class scan remains capped at `_MAX_LINKAGE_CLASSES=64` per APK. This is not an exhaustive DEX-wide index.
+- The parser records bounded evidence for `System.loadLibrary`, `System.load`, `Runtime.exec`, `ProcessBuilder`, `DexClassLoader`, `PathClassLoader` and `InMemoryDexClassLoader`. Direct argument-register tracking is intentionally limited; invoke-range calls and computed/reflection paths remain unresolved.
+- `apk_dex_set.py` and `tools/inspect_apk_dex_set.py` were selectively ported to this research branch. They aggregate manifest and linkage evidence across supplied base/split APKs and identify which APK defines a manifest VPN service class.
+- Added mocked regression tests for linkage evidence and split-set aggregation. These tests have **not yet been executed**.
 
-### Risk / next work
+### Remaining gap
 
-A class-name-driven candidate set can miss obfuscated classes that load a protector library. The next improvement should add an APK-wide, bounded reference/callsite index for exact method references to `System.loadLibrary`, `System.load`, `Runtime.exec`, `ProcessBuilder`, `DexClassLoader`, and `PathClassLoader`. Preserve class/method provenance and register-flow confidence, but do not emit arbitrary method bodies or secrets. Add tests for obfuscated class names, aliases/moves, register reuse, reflection, and truncation reporting.
+Class-name-driven selection can miss obfuscated classes that load a protector library. A true APK-wide index still needs a class-name-independent pass over DEX references/callsites with stable DEX/class/method/invoke-offset provenance. Current scanner output is static evidence, not proof of runtime execution or dynamic library origin.
 
 The observed `libbxdtcxfzx.so` evidence (AArch64, `JNI_OnLoad`, `libliapp.so` dependency and process-introspection imports) is consistent with a LIAPP loader/bridge. It is not proof of the exact protection behavior or where `libliapp.so` is stored. `libtoolChecker.so` is separately identified as RootBeer root detection; do not conflate the two.
 
@@ -65,7 +66,7 @@ The Xray share-link parser is a generic Xray import path. It is not evidence tha
 | Area | Evidence status | Gate before claiming completion |
 |---|---|---|
 | LIAPP bridge identification | Strong static indicators | Find/load-path evidence for `libliapp.so`; inspect JNI registration/runtime behavior |
-| DEX linkage discovery | Partial, bounded heuristic | APK-wide reference index and obfuscation regression tests |
+| DEX linkage discovery | Bounded callsite scan + base/split aggregation implemented; not exhaustive | Execute new tests; implement class-name-independent DEX reference index |
 | Go symbol recovery | 39,856 names recovered from real `libxray.so`; parser updated | Execute updated tests; validate distinct `libudpqtwo.so` when available |
 | Xray link parsing | Source + unit-test coverage on research branch | Upstream schema validation and malformed-input regressions |
 | Xray live tunnel | Lifecycle code + mocked tests | Windows end-to-end traffic and no-leak trace |
@@ -85,7 +86,7 @@ The Xray share-link parser is a generic Xray import path. It is not evidence tha
 - The share-link parser's Hysteria2 path explicitly forces TLS verification (`allowInsecure: false`), accepts only the supported Salamander obfuscation form, and rejects unsupported query options. The generic parser's supported transport subset remains RAW/TCP, WebSocket and gRPC; this is intentionally not complete coverage of every Xray transport.
 - VMess parsing type-checks textual JSON fields, gates the link version, rejects non-zero legacy alterId, and rejects unsupported network/header/security values. The parser audit did not establish live compatibility with a particular server or Xray binary version.
 - The APK inventory implementation hashes the opened APK via SHA-256, validates ZIP entry paths and expansion bounds, detects duplicate ZIP names, and records native ABI/library path and size without extracting or executing members. This is a useful reproducible inventory layer; it does not itself inspect split APKs as a set or discover dynamically unpacked libraries.
-- The source review did not find a safe basis to claim that the proprietary APNA protocol is one of the generic Xray protocols. Keep protocol identification evidence separate from share-link parser capability.
+- The source review did not find a safe basis to claim that the proprietary APNA protocol is one of the generic Xray protocols. Keep protocol identification evidence separate from share-link parser capability. The uploaded Xray binary itself contains CLI entry points `main.main`, `main.executeRun`, `main.getConfigFilePath`, `main.startXray`, `main.readConfDir` and `main/confloader.LoadConfig`; the DEX-to-process/config handoff is still unproven.
 
 
 ## Parallel implementation follow-up
@@ -96,7 +97,7 @@ The following source/documentation changes were added on this research branch af
 - Synthetic tests now include the real Go offset convention and zero-`textStart` PIE fallback, in addition to the adversarial bounds/overlap cases. They have **not yet been executed**; no CI workflow was dispatched.
 - Uploaded `libxray.so` was statically inspected and 39,856 function records were recovered offline. This validates the recovery approach against Xray, not against the separate `libudpqtwo.so`.
 - Replaced the stale Xray milestone text with an accurate source-level description of share-link import and guarded worker lifecycle integration, while retaining the distinction between source integration and live VPN validation.
-- Added `docs/reverse-engineering/dex-apk-wide-linkage-index.md` defining the bounded APK-wide DEX callsite index, provenance requirements, resource limits and regression matrix. The index itself is not yet implemented; existing class-candidate scanning remains heuristic.
+- Ported bounded DEX process/native-loader linkage scanning, split-set aggregation, a CLI and mocked regression tests from the divergent research branch as selective files only. The 64-class cap remains; the exhaustive class-name-independent DEX reference index is still unimplemented. Updated the design note to distinguish implemented bounded scanning from the remaining exhaustive index.
 
 The branch is six commits ahead of `main` and has no divergence from `main` at the time of this update. No Windows build, CI run, SSH work, PR merge or native-binary execution was performed.
 
@@ -104,3 +105,11 @@ The branch is six commits ahead of `main` and has no divergence from `main` at t
 ## Uploaded Xray binary follow-up
 
 The dedicated report `docs/reverse-engineering/libxray-binary-analysis-2026-11-28.md` records the binary hash, Android/ARM64 executable classification, Go build metadata, protocol/transport inventory, Android TUN symbols, and the distinction between code presence and runtime activation. The branch remains research-only; no Windows build, CI run, SSH work, PR merge or native-binary execution was performed.
+
+
+## Parallel implementation follow-up — DEX split-set and Xray entrypoints
+
+- Added `src/apnawin/services/apk_dex_set.py`, `tools/inspect_apk_dex_set.py` and `tests/test_apk_dex_set.py` to aggregate linkage evidence across all supplied APK splits, preserve per-APK provenance and locate service-class definitions outside base.apk.
+- Ported the matching bounded `apk_dex.py` implementation and its tests so the split-set aggregator receives the expected process/native-loader evidence schema.
+- Static analysis of `libxray.so` recovered CLI functions `main.main`, `main.executeRun`, `main.getConfigFilePath`, `main.startXray`, `main.readConfDir` and `main/confloader.LoadConfig`. Help strings expose `run [-c config.json] [-confdir dir]`, `-config`, `-confdir`, `-format`, `-test`, and `-dump`. The literal `xray.tun.fd` is recorded only as a TUN-related internal string; it does not prove VPNService FD transfer.
+- New DEX tests and updated Go parser tests have not been run. No CI was dispatched.
