@@ -107,6 +107,16 @@
 | `common/platform.GetConfigurationPath` | `0x294f00` | `0x61b020` |
 | `common/platform.GetConfDirPath` | `0x294f90` | `0x61b0b0` |
 
+
+
+### Static call chain recovered from AArch64 instructions
+
+The corrected function addresses and direct branch targets establish this call chain in the binary:
+
+`main.executeRun` (`0xeb8d60`) → `main.startXray` (`0xeb9a30`) → `main.getConfigFilePath` (`0xeb9420`) → `main.readConfDir` (`0xeb9180`).
+
+The callsites are visible as direct `BL` instructions: `executeRun` calls `startXray` at `0xeb8da8`; `startXray` calls `getConfigFilePath` at `0xeb9a50`; and `getConfigFilePath` calls `readConfDir` at `0xeb9450`. This confirms the internal Xray startup/config-path flow, but not the Java/Android caller or the source of the config values. Strings `xray.location.config` and `xray.location.confdir` are present; their exact environment-variable lookup and precedence still require callsite-level confirmation.
+
 رشته‌های CLI در باینری این موارد را ثبت می‌کنند:
 - `run [-c config.json] [-confdir dir]`
 - `-config=file` و alias آن `-c=file`
