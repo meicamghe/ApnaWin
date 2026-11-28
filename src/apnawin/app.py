@@ -534,6 +534,15 @@ class MainWindow(QMainWindow):
 
     def _on_connection_worker_finished(self) -> None:
         worker = self._connection_worker
+        if worker is not None and worker.cleanup_failed:
+            self._connection_state = "cleanup-error"
+            self.connect_button.setText("Cleanup required")
+            self.connect_button.setEnabled(False)
+            self.status_label.setText(
+                "Tunnel cleanup could not be confirmed. Do not reconnect. "
+                "Close ApnaWin so the elevated helper can detect parent exit and unwind."
+            )
+            return
         self._connection_worker = None
         if worker is not None:
             worker.deleteLater()
@@ -552,6 +561,9 @@ class MainWindow(QMainWindow):
                 )
                 event.ignore()
                 return
+        # If cleanup failed, closing the desktop is the final recovery signal:
+        # the elevated helper owns a wait handle on this process and unwinds
+        # its Xray Job Object when the parent exits.
         event.accept()
 
     def _import_xray_config(self) -> None:
