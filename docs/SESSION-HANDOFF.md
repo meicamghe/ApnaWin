@@ -187,3 +187,8 @@ Keep static evidence, source integration, and runtime proof as separate statuses
 A separate report was added at `docs/reverse-engineering/native-library-static-audit-2026-11-28.md`. It records direct static inspection of the repository's `libbxdtcxfzx.so`, `libpdnsd.so`, `libtun2socks.so`, `libtoolChecker.so` and `libdatastore_shared_counter.so` bytes returned by GitHub. Confirmed observations: BadVPN tun2socks 1.999.127 command surface; pdnsd DNS/cache/EDNS/TCP-UDP code; RootBeer JNI exports; AndroidX DataStore shared counter exports; and LIAPP-associated loader indicators in `libbxdtcxfzx.so`. Git blob SHA-1 values are recorded as object IDs, not SHA-256 hashes.
 
 The current GitHub connector still does not return binary bytes for `base.apk`, `split_config.arm64_v8a.apk`, `libudpqtwo.so` or `libsalamander.so`. No fresh DEX run or Go pclntab analysis of those unavailable binaries is claimed. The bounded 64-class DEX scan and unexecuted tests remain as previously documented. No native binary was executed; no CI, Windows build, SSH change or merge was performed.
+
+
+### Dynamic-symbol verification refinement
+
+A later ELF `.dynsym`/dynamic-section cross-check refined the LIAPP note: `libbxdtcxfzx.so` exports `JNI_OnLoad`, imports `dlopen`/`dlsym`, and contains the printable name `libliapp.so`, but `libliapp.so` is not a `DT_NEEDED` dependency. The strings `prctl` and `waitpid` are not imports in the parsed dynamic symbol table. Treat this as evidence for a possible dynamic JNI loader, not proof of a loaded LIAPP module or anti-tamper behavior. The same symbol pass confirmed `main` and DNS worker exports in `libpdnsd.so`, and `main` plus SOCKS/UDP/DNS state symbols in `libtun2socks.so`.
