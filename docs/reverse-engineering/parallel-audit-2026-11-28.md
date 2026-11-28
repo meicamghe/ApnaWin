@@ -145,3 +145,8 @@ The current `APNA-APKs` repository directory does not contain a standalone `libx
 A further byte-level static pass is recorded in [native-library-static-audit-2026-11-28.md](native-library-static-audit-2026-11-28.md). Five repository libraries were returned and inspected: `libtun2socks.so` (BadVPN 1.999.127 command surface), `libpdnsd.so` (DNS cache/EDNS/TCP-UDP implementation), `libtoolChecker.so` (RootBeer JNI exports), `libdatastore_shared_counter.so` (AndroidX DataStore shared-counter JNI exports), and `libbxdtcxfzx.so` (LIAPP-associated loader indicators). Findings are static only; Git blob SHA-1 values are not presented as SHA-256 checksums.
 
 The connector did not return the bytes for APK archives, `libudpqtwo.so` or `libsalamander.so`; therefore this pass did not execute the DEX split-set scanner or validate Go pclntab against those two distinct libraries. Existing bounded DEX scan remains limited to 64 candidate classes/APK and the new tests remain unexecuted. No native execution, CI, Windows build, SSH change or merge was performed.
+
+
+### tun2socks TUN descriptor interface
+
+The additional byte-level pass recovered the full `libtun2socks.so` usage strings. It accepts `--tunfd` and `--tunmtu`, requires `--netif-ipaddr`, `--netif-netmask` and `--socks-server-addr`, and supports optional DNS gateway, UDP gateway, SOCKS credentials and process/logging options. The `--tunfd` option is a concrete candidate for the Android VPNService-to-child-process handoff. It does not establish that the APK actually passes its VPN descriptor to this executable; DEX/JNI callsite proof remains required. Details are in `native-library-static-audit-2026-11-28.md`.
