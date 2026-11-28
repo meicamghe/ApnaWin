@@ -527,3 +527,10 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - Final validation for this hardening batch also rejects boolean values where an
   integer byte size is required and converts deeply nested JSON parser failures
   into a bounded validation error.
+
+
+- Final CI for the native fingerprint manifest-hardening batch: run
+  [46128039334](https://github.com/meicamghe/ApnaWin/actions/runs/46128039334)
+  passed on head `2b132cde198dbfd9f43f733529686d60df29243e`:
+  **1002 passed, 1 skipped, 1 warning**. The Windows packaging job was
+  skipped by the reverse-engineering gate.
