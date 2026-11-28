@@ -53,15 +53,17 @@ def import_proxy_profiles(
         records.append((profile, serialize_tun_config(item)))
         imported_names.add(folded)
 
-    created: list[str] = []
+    attempted: list[str] = []
     try:
         for profile, config in records:
+            # Include the current record before calling save: a storage backend
+            # may raise after an atomic replace has already committed its file.
+            attempted.append(profile.name)
             config_store.save(profile.name, config)
-            created.append(profile.name)
         save_profiles([*current, *new_profiles])
     except Exception as exc:
         cleanup_errors: list[Exception] = []
-        for name in reversed(created):
+        for name in reversed(attempted):
             try:
                 config_store.remove(name)
             except Exception as cleanup_exc:
