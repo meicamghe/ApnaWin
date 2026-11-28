@@ -457,3 +457,14 @@ code, and never loads or executes a native library. Marker hits are leads for
 manual correlation, not proof that a protocol is active or used by a specific
 service. Common transport words such as UDP/TCP/TLS are deliberately weaker
 evidence than protocol-specific fingerprints.
+
+
+The split-set DEX report also builds two explicit native-linkage indexes:
+`native_library_literal_references` records exact `lib*.so` literals
+found in a method together with its class, APK split, method ordinal and
+process/loader call kinds. `system_load_library_references` records the
+exact string register passed to `System.loadLibrary`; its conventional
+`lib{name}.so` mapping is labeled as an API naming convention, not as a
+separately observed filename. These indexes make it possible to compare DEX
+references with the all-ABI native inventory without conflating process
+launches, JNI loading and mere string presence.
