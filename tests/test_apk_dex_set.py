@@ -111,3 +111,32 @@ def test_split_set_rejects_duplicate_basenames(tmp_path):
 def test_split_set_requires_existing_inputs():
     with pytest.raises(ValueError, match="split count"):
         apk_dex_set.inspect_apk_dex_set([])
+
+
+def test_split_set_rejects_conflicting_service_class_resolution(tmp_path, monkeypatch):
+    base = tmp_path / "base.apk"
+    split = tmp_path / "split.apk"
+    base.write_bytes(b"x")
+    split.write_bytes(b"y")
+    manifests = {
+        "base.apk": _manifest([".vpn.TunnelService"]),
+        "split.apk": _manifest(),
+    }
+    monkeypatch.setattr(
+        apk_dex_set,
+        "inspect_apk_manifest",
+        lambda path, **kwargs: manifests[Path(path).name],
+    )
+
+    def inspect(path, manifest_services, **kwargs):
+        result = _dex(manifest_services[0], True)
+        result["manifest_service_classes"][0]["resolved_class_name"] = (
+            "com.example.vpn.TunnelService"
+            if Path(path).name == "base.apk"
+            else "com.example.other.TunnelService"
+        )
+        return result
+
+    monkeypatch.setattr(apk_dex_set, "inspect_apk_dex", inspect)
+    with pytest.raises(ValueError, match="resolve the same manifest service inconsistently"):
+        apk_dex_set.inspect_apk_dex_set([base, split])
