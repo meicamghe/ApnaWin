@@ -42,7 +42,7 @@ def test_probe_refuses_https_when_windows_route_does_not_use_apnawin():
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr("apnawin.services.windows_tunnel_traffic_probe.os.name", "nt")
     try:
-        with pytest.raises(RuntimeError, match="No HTTPS traffic probe"):
+        with pytest.raises(RuntimeError, match="Configured DNS server"):
             probe.verify()
     finally:
         monkeypatch.undo()
@@ -55,6 +55,7 @@ def test_probe_rejects_unresolved_probe_host_before_opening_sockets():
         resolver=lambda *_args, **_kwargs: [],
         connector=lambda *_args, **_kwargs: pytest.fail("must not connect"),
     )
+    probe._route_interface = lambda _address: 12
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr("apnawin.services.windows_tunnel_traffic_probe.os.name", "nt")
     try:
@@ -130,5 +131,5 @@ def test_probe_rejects_dns_route_outside_tun_before_resolving_host(monkeypatch):
     )
     probe._route_interface = lambda _address: 7
 
-    with pytest.raises(RuntimeError, match="configured DNS server"):
+    with pytest.raises(RuntimeError, match="Configured DNS server"):
         probe.verify()
