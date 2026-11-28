@@ -16,7 +16,7 @@ _MAX_APKS = 64
 _MAX_ENTRIES_PER_APK = 100_000
 _MAX_NATIVE_MEMBER_BYTES = 64 * 1024 * 1024
 _MAX_TOTAL_NATIVE_BYTES = 256 * 1024 * 1024
-_NATIVE_PATH = re.compile(r"^lib/([A-Za-z0-9_.+-]{1,64})/(lib[A-Za-z0-9_.+-]{1,120}\\.so)$")
+_NATIVE_PATH = re.compile(r"^lib/([A-Za-z0-9_.+-]{1,64})/(lib[A-Za-z0-9_.+-]{1,120}\.so)$")
 
 
 def inventory_native_libraries(apk_paths: list[str | Path]) -> dict[str, Any]:
@@ -95,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, zipfile.BadZipFile) as exc:
         print(f"native inventory failed: {exc}", file=sys.stderr)
         return 2
-    rendered = json.dumps(report, indent=2, sort_keys=True) + "\\n"
+    rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if args.output:
         args.output.write_text(rendered, encoding="utf-8")
     else:
