@@ -10,7 +10,7 @@ This repository now has a manual GitHub Actions workflow for extracting and insp
 4. Keep the default library name `libudpqtwo.so`, then start the run.
 5. When the run completes, open its **Artifacts** section and download `ApnaWin-libudpqtwo-analysis`.
 
-The workflow is manual-only. It does not run on pushes or pull requests, does not build any ApnaWin product, and does not need secrets or write permissions. This is offline static analysis; it does not install the APK or require an Android device. It searches all top-level APK files in `APNA-APKs/` and fails rather than silently selecting a library if multiple copies are found.
+The workflow is manual-only. It does not run on pushes or pull requests, does not build any ApnaWin product, and does not need secrets or write permissions. It extracts every native library for offline static analysis; it does not install the APK or require an Android device. It searches all top-level APK files in `APNA-APKs/` and fails rather than silently selecting a library if multiple copies are found.
 
 ## Artifact contents
 
@@ -18,6 +18,7 @@ The workflow is manual-only. It does not run on pushes or pull requests, does no
 - `extraction.txt`: source APK/archive entry, SHA-256 and file identification.
 - `apk-native-inventory.txt`: SHA-256 of each committed APK plus every embedded ABI `.so` entry and its uncompressed-content hash, across all APK splits.
 - `native-elf-inventory.json`: per-library ABI, basename, size, SHA-256 and bounded ELF metadata (class, machine, entry point, PT_INTERP and conservative execution-model candidate), across all APK splits. Malformed/non-ELF members are reported as errors rather than silently omitted. The scanner reads members in memory and never loads or executes native code.
+- `native-libs/`: every embedded native member extracted into an APK/ABI/library directory. `native-libs/manifest.json` records each relative path, byte size, SHA-256 and any ELF parse error. Extraction is bounded to 64 MiB per member and 256 MiB aggregate, verifies every digest against the in-memory inventory, and never loads or executes native code.
 - `readelf-report.txt`: ELF header, LOAD segments, sections, notes and dynamic section.
 - `elf-structural-report.txt`: file-backed VA mapping for the known pclntab/moduledata candidates, pclntab header words, derived functab range and initial records when readable.
 - `strings.txt` and `go-build-strings.txt`: printable strings and likely Go build metadata strings.
