@@ -607,3 +607,54 @@ The user has now explicitly authorized moving from reverse-engineering-only work
 - The source workstream PR #6 is highly divergent from the current reverse-engineering branch (788 commits ahead and 352 behind at comparison time); it was **not merged**. Only the focused transport/UI files and tests were ported.
 - This is a code integration checkpoint, **not a verified APNA connection**. No CI result is claimed for this new branch, and no authorized provider SSH host-key/authentication, UDPGW datagram, routed TCP/UDP/DNS, disconnect, or crash-recovery acceptance has been recorded. Connect remains dependent on a protected Windows helper installation and an imported APNA configuration with independently verified host identity.
 - Next gates: run the full test suite on this exact branch; inspect and resolve integration failures; then test one authorized APNA profile on Windows 10/11 with provider-issued host-key verification and real TCP/UDP/DNS traffic. Do not enable a false-positive Connected state or publish a release before those gates pass.
+
+
+## Mandatory continuation handoff — 2026-11-28 (do not lose state)
+
+### Active task and hard constraints
+- Active task: finish **real APNA SSH connectivity**, not merely enable a UI button.
+- Active working branch: `feature/apna-ssh-backend-port`.
+- Base: `c023874e07ff6883da74833e89cab2a748fc235f` (legacy `apna_ssh` profile compatibility).
+- Latest known branch HEAD: `9a63914093b82c7f9f6ec583307e256c2fd65f69` (README status documentation); branch is 54 commits ahead and 0 behind base at last compare.
+- Branch URL: https://github.com/meicamghe/ApnaWin/tree/feature/apna-ssh-backend-port
+- Do NOT merge any PR, publish a release, build Windows/Linux installers, or run GitHub Actions/CI unless the user explicitly asks.
+- Do NOT modify/delete/migrate the user's existing 3030 profile records. Keep legacy `apna_ssh` round-trip compatibility.
+- Do NOT claim a live connection or enable a false-positive Connected state without live end-to-end evidence.
+- User wants parallel/multi-track execution and concrete work, not repetitive status-only replies. Do not claim background execution after a turn ends; continue when the user returns.
+
+### What was ported onto the active branch
+Ported from `vpn/dual-stack-egress-readiness`:
+- APNA SSH: `apna_host_key.py`, `apna_payload.py`, `apna_payload_socket.py`, `apna_ssh_diagnostics.py`, `apna_ssh_session.py`, `apna_tunnel_engine.py`, `apna_tunnel_session.py`, `apna_udp_dns_probe.py`, `apna_xray_config.py`.
+- Transport/tunnel support: `multi_transport.py`, `socks5_gateway.py`, `udpgw_flows.py`, `udpgw_protocol.py`, `udpgw_stream.py`, `websocket_stream.py`, `xray_tunnel.py`, `windows_tunnel_egress.py`.
+- APNA catalog/storage: `apna_lite_catalog.py`, `apna_lite_profile_mapper.py`, `apna_lite_source.py`, `apna_profile_store.py`.
+- Additional Xray/UDPQ files: `xray_share_link.py`, `udpq_tunnel.py`, `udpq_sidecar.py`, `udpq_config_store.py`, plus `windows_job.py` and `vpn_runtime.py`.
+- `pyproject.toml`: Paramiko runtime dependency added.
+- `domain/profile.py`: UDPQ enum addition; legacy APNA_SSH remains.
+- `app.py`: restored APNA import/host-key verification/connection integration from source workstream; Add remains hidden and generic JSON import remains unavailable.
+- Regression tests and docs were ported/added, including APNA host-key, payload, SSH session, tunnel, catalog, storage, VPN runtime, egress, Xray share links, UDPQ tests.
+- Commits include the port series; do not assume this port is integration-clean.
+
+### Validation truth (important)
+- The branch's combined GitHub status was empty (no statuses) at last check; **no CI has run on this branch**.
+- No full test suite was executed against this branch.
+- No Windows live APNA provider connection has been performed.
+- No provider-issued SSH host key, authorized credentials, real UDPGW datagram, routed TCP/UDP/DNS, IPv4/IPv6 egress, disconnect cleanup, or crash-recovery acceptance has been verified.
+- The older source branch PR #6 was not merged; it was very divergent (last comparison: 788 ahead / 352 behind relative to the reverse-engineering base).
+- A code-port is not evidence of APNA native protocol equivalence. `libudpqtwo.so` reverse engineering is still incomplete and its actual runtime owner/caller is unconfirmed.
+- Never describe the imported Paramiko transport as the recovered native APNA SSH protocol unless wire-level analysis proves equivalence.
+
+### Next execution plan (parallel workstreams)
+1. **Static integration audit:** fetch the exact current branch tree and resolve all imports, dependencies, constructor signatures, enum mappings, profile-store formats, worker/UI wiring and platform guards.
+2. **Test audit:** inspect all newly ported tests and workflows; identify the exact safe command for local test execution. User asked not to run CI; do not trigger GitHub Actions.
+3. **Security audit:** verify SSH host-key pinning is mandatory, no trust-on-first-use bypass, secret redaction, DPAPI handling, least privilege, no root/elevation surprise, and safe teardown.
+4. **Transport audit:** verify Payload byte framing, TLS SNI/cert validation, HTTP/WebSocket upgrade handling, SSH channel lifecycle, SOCKS5 backpressure, UDPGW framing/sequence/fragment handling, DNS and IPv6.
+5. **Reverse-engineering track:** continue DEX caller/loader analysis for `libudpqtwo.so`, Go pclntab/moduledata recovery and compare native wire behavior. Keep native APNA protocol claims separate from generic SSH compatibility.
+6. **Live acceptance gate:** only with a user-authorized APNA test profile and provider-issued host key: SSH auth, TCP egress, UDP egress, DNS, IPv4/IPv6 route behavior, disconnect rollback, crash recovery. Do not fabricate test endpoints or credentials.
+7. Only after gates pass, request permission before release/build/CI actions if those are still prohibited.
+
+### User interaction rules for this project
+- Reply in Persian.
+- Avoid asking the user to repeat information already documented here.
+- If a critical input is missing, identify it precisely (e.g. authorized APNA test profile/host-key evidence or ability to run the local test suite), not a broad questionnaire.
+- When the user says “چک”, check the active branch's actual latest state and continue the task; do not repeat this handoff verbatim.
+- When user says “ادامه بده / مسیر را برو جلو”, perform concrete repo/tool work in this turn and report only verified changes and blockers.
