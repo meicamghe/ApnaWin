@@ -142,3 +142,22 @@ The text content of Apna server list.txt was inspected without copying its conte
 - No common ZIP/GZIP/JSON header is apparent at offset zero. This is high-entropy opaque data; it may be encrypted, compressed, or a custom binary envelope. No cipher, key, or format is identified.
 
 The opaque 405,128-byte Library item could not be materialized through the available Files interface and was not analyzed. Do not assume it is an APK or native library based on its size or hash-like title.
+
+
+## Exact LIAPP native bootstrap linkage — 2026-11-28 (newly confirmed)
+
+The DEX instruction at method `com.liapp.x.۲۬٬֭ة(Context)`, code-item offset `0xaf59e0`, establishes an exact native-library load:
+
+- At code-unit offset `0x316`, the DEX executes `const-string v0, "bxdtcxfzx"`.
+- At offset `0x318`, it immediately invokes `System.loadLibrary(v0)`.
+- The same `com.liapp.x` class is the manifest Application class. Its `attachBaseContext(Context)` method calls this initialization method before delegating to `Application.attachBaseContext`.
+
+Therefore the app's startup path explicitly loads the library named `bxdtcxfzx`, which maps by Android naming convention to `libbxdtcxfzx.so`. This is now a direct DEX-to-library-name linkage, not merely an inference from the native file's embedded strings. The native binary's JNI_OnLoad export is consistent with this load path. The embedded `libliapp.so` string inside the native file is still not a DT_NEEDED dependency; loading or execution of that separate library is not proven.
+
+### Hidden DEX asset refinement
+
+`assets/.bxdtcxfzx.dex` is not a substantive second LIAPP implementation in the inspected bytes:
+- It contains exactly one class definition, whose descriptor is malformed/obfuscated under `com.liapp` and whose superclass is `android.app.Activity`.
+- It has one instance method with a one-instruction code item containing only `return-void`.
+- Its string/type/method tables contain only the Activity/class/method metadata.
+This looks like a placeholder/stub DEX in this artifact. It does not explain the LIAPP native loader or service behavior.
