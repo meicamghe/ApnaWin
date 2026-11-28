@@ -10,7 +10,7 @@ The Git object identifiers below are Git blob SHA-1 values, **not SHA-256 checks
 
 | File | Size | Git blob SHA-1 | Static finding |
 |---|---:|---|---|
-| `libbxdtcxfzx.so` | 688,364 | `d28f5a6fa03bfee41b392573d2091473d9a39fe1` | ELF64 AArch64 shared object; contains `JNI_OnLoad`, references `libliapp.so`, and strings/imports including `dlopen`, `dlsym`, `prctl`, `waitpid`. Consistent with a JNI bridge/loader associated with LIAPP. Exact protection actions and the location/origin of `libliapp.so` are not established. |
+| `libbxdtcxfzx.so` | 688,364 | `d28f5a6fa03bfee41b392573d2091473d9a39fe1` | ELF64 AArch64 shared object; exports only `JNI_OnLoad` in the inspected dynamic symbol table; `DT_NEEDED` lists `liblog.so`, `libdl.so`, `libc.so` and `libm.so`. The string `libliapp.so` is embedded in the file but is **not** a `DT_NEEDED` dependency. Dynamic imports include `dlopen` and `dlsym`; `prctl` and `waitpid` occur as printable strings but are not dynamic imports in this file's `.dynsym`. This is consistent with a JNI loader/bridge that may resolve additional symbols or libraries dynamically, but the exact behavior and origin of `libliapp.so` are not established. |
 | `libpdnsd.so` | 215,632 | `c97bc8bd2c8fa6627e0d990a28dd44e304c41972` | ELF64 AArch64 executable-style ELF with pdnsd strings/source paths. Contains DNS cache, root-server discovery, EDNS, TCP/UDP fallback, UDP server/thread and daemonization paths. Confirms a pdnsd-derived DNS component is compiled into this file. |
 | `libtun2socks.so` | 160,232 | `3dcf20c86b381081b33c4609bd44b683eaf811d8` | ELF64 AArch64 executable-style ELF. Explicit banner: `BadVPN tun2socks 1.999.127`. CLI strings require a SOCKS server and expose DNS gateway, remote UDP gateway, UDP connection/buffer limits and transparent DNS options. This confirms the BadVPN tun2socks code family and supported command-line surface, not that the app launches it. |
 | `libtoolChecker.so` | 5,512 | `5d8fb7036073d4f3fbe84df1af65d38a2a3d682f` | JNI exports include `Java_com_scottyab_rootbeer_RootBeerNative_setLogDebugMessages` and `Java_com_scottyab_rootbeer_RootBeerNative_checkForRoot`; strings identify RootBeer. This is a root-detection component, separate from the LIAPP evidence above. |
@@ -59,3 +59,16 @@ The repository contains separate DNS (`libpdnsd.so`) and packet-to-SOCKS bridge 
 - `libbxdtcxfzx.so`: دارای نشانه‌های JNI/loader و ارجاع به `libliapp.so`؛ ارتباط با LIAPP محتمل و مستند است، اما رفتار دقیق هنوز اثبات نشده است.
 
 **محدودیت مهم:** محتوای باینری APKها، `libudpqtwo.so` و `libsalamander.so` از مسیر فعلی GitHub دریافت نشد. بنابراین DEX جدید و تحلیل عمیق این دو کتابخانه انجام‌شده محسوب نمی‌شود. هیچ فایل باینری اجرا نشده، CI یا Build ویندوز اجرا نشده، و هیچ تغییری در SSH انجام نشده است.
+
+
+## ELF dynamic-symbol cross-check
+
+The dynamic symbol tables were parsed separately from printable strings:
+
+- `libbxdtcxfzx.so`: the only inspected defined dynamic export is `JNI_OnLoad`; `DT_NEEDED` is `liblog.so`, `libdl.so`, `libc.so`, `libm.so`. Imported symbols include `dlopen`, `dlsym`, `getuid` and `lstat`. Although the strings `prctl` and `waitpid` are present, neither is a dynamic import in the parsed `.dynsym`. The embedded `libliapp.so` name is not listed in `DT_NEEDED`; dynamic loading is plausible but not proven by that string alone.
+- `libpdnsd.so`: dynamic symbols expose `main`, `udp_server_thread` and `tcp_server_thread`, among other symbols; imports include socket, bind, send/receive, pthread, fork/exec and process lifecycle functions. This supports the DNS daemon architecture inferred from its embedded messages.
+- `libtun2socks.so`: dynamic symbols expose `main` and globals for SOCKS server address, UDP gateway, DNS gateway and device/network state. Imports include socket/connect/bind/accept, epoll and ioctl. This supports its standalone command-line packet-bridge architecture.
+- `libtoolChecker.so`: exported JNI functions explicitly include `RootBeerNative_checkForRoot` and `setLogDebugMessages`.
+- `libdatastore_shared_counter.so`: exported JNI functions explicitly implement AndroidX `NativeSharedCounter` operations.
+
+This symbol pass refines earlier string-only interpretations. A printable token is not an imported symbol, and an embedded library filename is not proof of an ELF dependency or successful runtime load.
