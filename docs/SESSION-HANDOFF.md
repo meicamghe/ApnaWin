@@ -110,7 +110,7 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 
 ### Independent revalidation — current `libxray.so` attachment
 
-- Recomputed SHA-256 from the locally mounted file: `e796e24eece84ab28ab9e20710a8581fbcb1044c6720db5f9c79fecc839f68b5`; it matches the dedicated Xray report and the parallel-audit report.
+- Recomputed SHA-256 from the locally mounted file: `e796e24eece84ab28ab9e20710a8581fbcb1044c6720db5f9cfecc839f68b5`; it matches the dedicated Xray report and the parallel-audit report.
 - Re-read Go build metadata with `go version -m`: Go 1.26.2, `github.com/xtls/xray-core/main`, `-buildmode=exe`, Android/ARM64, and module version `(devel)`.
 - A second independent offline pclntab pass again recovered 39,856 function records and 2,574 file entries; 39,823 names are unique. The PIE header has `textStart=0`; ELF `.text` begins at VA `0x3860a0`, while the symbol-anchored Go text base is `0x386120`.
 - The earlier checksum discrepancy was a reading/summary error, not a different binary. Do not retain any claim that two distinct Xray attachments were observed.
@@ -133,7 +133,7 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 
 ### Uploaded `libxray.so`
 
-- SHA-256: `e796e24eece84ab28ab9e20710a8581fbcb1044c6720db5f9c79fecc839f68b5`
+- SHA-256: `e796e24eece84ab28ab9e20710a8581fbcb1044c6720db5f9cfecc839f68b5`
 - 32,740,552 bytes; Android ARM64; Go 1.26.2; `-buildmode=exe`; ELF ET_DYN with Android interpreter and entry point.
 - 39,856 Go function names recovered offline from `.gopclntab`.
 - CLI entry points recovered: `main.main`, `main.executeRun`, `main.getConfigFilePath`, `main.startXray`, `main.readConfDir`, `main/confloader.LoadConfig`.
