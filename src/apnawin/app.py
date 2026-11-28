@@ -71,6 +71,46 @@ from apnawin.storage.apna_profile_store import ApnaProfileStore
 from apnawin.services.connection_controller import ConnectionController
 from apnawin.services.xray_tunnel_supervisor import XrayTunnelSupervisor
 
+ 
+def import_proxy_profiles(document: bytes, existing, config_store, save):
+    """Atomically import newline-delimited Xray share links and encrypt credentials."""
+    if not isinstance(document, bytes) or not document or len(document) > 2 * 1024 * 1024:
+        raise ValueError("Share-link document is empty or exceeds the size limit")
+    try:
+        lines = document.decode("utf-8-sig").splitlines()
+    except UnicodeDecodeError as exc:
+        raise ValueError("Share-link document must be UTF-8 text") from exc
+    imported = []
+    names = {item.name.casefold() for item in existing}
+    stored = []
+    try:
+        for line in lines:
+            value = line.strip()
+            if not value or value.startswith("#"):
+                continue
+            item = import_xray_share_link(value)
+            if item.profile.name.casefold() in names:
+                raise ValueError("A profile with this name already exists")
+            names.add(item.profile.name.casefold())
+            config_store.save(item.profile.name, item.config_bytes)
+            stored.append(item.profile.name)
+            imported.append(item.profile)
+        if not imported:
+            raise ValueError("No supported proxy share links were found")
+        result = save([*existing, *imported])
+        if result is False:
+            raise OSError("Profile metadata could not be saved")
+        return imported
+    except Exception:
+        for name in reversed(stored):
+            try:
+                config_store.remove(name)
+            except (OSError, ValueError, TypeError):
+                pass
+        raise
+
+
+
 
 
 def show_copyable_error(parent, title: str, message: str) -> None:
@@ -905,10 +945,15 @@ class MainWindow(QMainWindow):
         xray_engine = XrayTunnelEngine(
             xray_supervisor, helper, self.xray_config_store
         )
-        apna_supervisor = XrayTunnelSupervisor(helper, self.xray_config_store)
+        # APNA sessions create short-lived generated Xray configs; keep those
+        # records separate from user-imported Xray profiles.
+        apna_tunnel_store = XrayConfigStore(
+            self.profiles_path.with_name("apna-tunnel-configs.json")
+        )
+        apna_supervisor = XrayTunnelSupervisor(helper, apna_tunnel_store)
         apna_engine = ApnaTunnelEngine(
             self.apna_profile_store.load,
-            self.xray_config_store,
+            apna_tunnel_store,
             apna_supervisor,
         )
         engines = {
@@ -1940,6 +1985,35 @@ class MainWindow(QMainWindow):
             "encrypted for this Windows user; TLS certificate verification remains enabled."
         )
 
+    def _import_share_links(self) -> None:
+        """Import newline-delimited Xray proxy share links from a text file."""
+        if not self.profile_storage_writable:
+            return
+        filename, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Import proxy share links",
+            "",
+            "Share-link lists (*.txt *.conf *.uri);;Text files (*.txt);;All files (*)",
+        )
+        if not filename:
+            return
+        try:
+            with Path(filename).open("rb") as stream:
+                document = stream.read(2 * 1024 * 1024 + 1)
+            imported = import_proxy_profiles(
+                document, self.profiles, self.xray_config_store, self._save_profiles
+            )
+        except (OSError, TypeError, ValueError) as exc:
+            QMessageBox.warning(
+                self, "Proxy import failed",
+                f"No profiles were imported. ({type(exc).__name__}: {exc})",
+            )
+            return
+        self._refresh_profiles(len(self.profiles) - 1)
+        self.status_label.setText(
+            f"Imported {len(imported)} proxy profile(s). Runtime connectivity has not yet been tested."
+        )
+
     def _import_xray_config(self) -> None:
         """Import a full-tunnel Xray JSON config and encrypt it with current-user DPAPI."""
         if not self.profile_storage_writable:
@@ -1981,7 +2055,7 @@ class MainWindow(QMainWindow):
             return
         self.status_label.setText(
             f"Xray TUN config imported and encrypted for {profile.name}. "
-            "The installed helper verifies TUN routes, DNS, WFP leak protection and external egress."
+            "Connect remains disabled until the installed helper and runtime are verified."
         )
         self._show_selected_profile(row)
         self._update_connection_controls()
