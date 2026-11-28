@@ -98,6 +98,7 @@ jobs:
           } > analysis/apk-native-inventory.txt
 
           PYTHONPATH=src python3 tools/inventory_apk_native.py APNA-APKs/*.apk --output analysis/native-elf-inventory.json
+          PYTHONPATH=src python3 tools/extract_apk_native.py APNA-APKs/*.apk --output analysis/native-libs
 
       - name: Inspect ELF and Go metadata
         shell: bash
