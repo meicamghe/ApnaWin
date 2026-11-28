@@ -72,3 +72,13 @@ The dynamic symbol tables were parsed separately from printable strings:
 - `libdatastore_shared_counter.so`: exported JNI functions explicitly implement AndroidX `NativeSharedCounter` operations.
 
 This symbol pass refines earlier string-only interpretations. A printable token is not an imported symbol, and an embedded library filename is not proof of an ELF dependency or successful runtime load.
+
+
+## ELF execution model distinction
+
+The ELF headers/program headers add an important distinction between the files with a `.so` suffix:
+
+- `libpdnsd.so` and `libtun2socks.so` are both ELF64 AArch64 `ET_DYN` images with a nonzero entry point, a `PT_INTERP` segment naming `/system/bin/linker64`, and a defined dynamic symbol named `main`. These are executable-style Android PIE images, despite their `.so` filenames. This makes subprocess execution a stronger hypothesis than ordinary `System.loadLibrary` loading; DEX callsites are still needed to prove how the app launches them.
+- `libbxdtcxfzx.so` has no ELF entry point in the inspected header and exports `JNI_OnLoad`, which is consistent with a conventional JNI shared-library role.
+
+This distinction is especially useful for the next DEX pass: search separately for executable file extraction/chmod plus `ProcessBuilder`/`Runtime.exec` launches of pdnsd/tun2socks, and JNI/native-loader references for the LIAPP bridge. Do not treat the `.so` suffix as evidence that all three are loaded the same way.
