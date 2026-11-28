@@ -160,3 +160,14 @@ def test_rejects_malformed_or_non_object_manifest(tmp_path, payload):
 
     with pytest.raises(ValueError, match="manifest"):
         analyze_native_fingerprints(tmp_path)
+
+
+def test_rejects_boolean_manifest_size_even_though_bool_is_an_int_subclass(tmp_path):
+    _fixture(tmp_path)
+    manifest_path = tmp_path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["libraries"][0]["size_bytes"] = True
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="unsafe row"):
+        analyze_native_fingerprints(tmp_path)
