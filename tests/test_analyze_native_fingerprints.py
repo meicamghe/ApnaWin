@@ -116,3 +116,47 @@ def test_reports_allowlisted_starudp_wire_types_config_and_dependencies(tmp_path
     assert groups["transport_dependencies"]["pion_dtls"] == 1
     assert groups["transport_dependencies"]["txthinking_socks5"] == 1
     assert "provider-secret.example" not in json.dumps(report)
+
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("abi", ".."),
+        ("abi", "."),
+        ("library", ".."),
+        ("library", "manifest.json"),
+        ("library", "libengine.so/../../outside"),
+    ],
+)
+def test_rejects_manifest_path_components_that_are_not_native_names(tmp_path, field, value):
+    _fixture(tmp_path)
+    manifest_path = tmp_path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["libraries"][0][field] = value
+    manifest["libraries"][0]["relative_path"] = (
+        f'{manifest["libraries"][0]["apk"]}/'
+        f'{manifest["libraries"][0]["abi"]}/'
+        f'{manifest["libraries"][0]["library"]}'
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="unsafe row"):
+        analyze_native_fingerprints(tmp_path)
+
+
+def test_rejects_oversized_manifest_before_json_parsing(tmp_path, monkeypatch):
+    _fixture(tmp_path)
+    monkeypatch.setattr("tools.analyze_native_fingerprints._MAX_MANIFEST_BYTES", 16)
+
+    with pytest.raises(ValueError, match="manifest exceeds"):
+        analyze_native_fingerprints(tmp_path)
+
+
+@pytest.mark.parametrize("payload", [b"not-json", b"[]", b"null"])
+def test_rejects_malformed_or_non_object_manifest(tmp_path, payload):
+    _fixture(tmp_path)
+    (tmp_path / "manifest.json").write_bytes(payload)
+
+    with pytest.raises(ValueError, match="manifest"):
+        analyze_native_fingerprints(tmp_path)
