@@ -374,3 +374,18 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
   provider connection.
 - SSH remains on hold. Do not add connection activation, TUN/DNS routing,
   Android builds, Windows builds or Linux builds. Keep Connect disabled.
+
+- Follow-up hardening: DEX `invoke-*/range` callsites are still counted, but
+  are deliberately excluded from argument correlation because the compressed
+  register range must be expanded before choosing the first argument. A
+  regression test prevents false `Runtime.exec` / `System.loadLibrary`
+  associations from the range endpoints. Cross-split CLI now accepts all APK
+  inputs and writes JSON with `--output`; the documented example names the
+  actual six APK files currently committed in `APNA-APKs/`.
+- GoReSym scanner patch was tightened so the entire pointer signature must
+  fit inside the section, with a fifth boundary regression case. Patch hunk
+  counts were checked for consistency; it remains unapplied/unbuilt against
+  upstream and the APNA binary.
+- CI run [46118622215](https://github.com/meicamghe/ApnaWin/actions/runs/46118622215)
+  passed on head `efaab7db6869c13293eae94a4416cdb76a6d77b4`:
+  **965 passed, 1 skipped, 1 warning**. Windows packaging remained skipped.
