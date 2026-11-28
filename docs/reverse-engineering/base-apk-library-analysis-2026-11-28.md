@@ -70,3 +70,21 @@ The service descriptors for `XRayDNSService`, `SalamanderService`, and `TunnelVp
 - No APK code was executed; no device/runtime behavior is claimed.
 - No CI, Windows build, SSH change, PR merge, or main-branch modification was performed.
 - Existing DEX scanner/parser tests remain unexecuted; the observations above came from a separate bounded local parser and direct byte inspection.
+
+
+## Deeper VPN/TUN execution path recovered from DEX — 2026-11-28
+
+A second pass decoded method references and DEX instruction operands for the tunnel classes:
+
+- Tunnel.startVpn calls Android VpnService.Builder.addRoute (and app allow/disallow filters), setSession, setConfigureIntent, and establish(), which returns a ParcelFileDescriptor. It contains configure-intent references for XRayDNSService, SalamanderService, and SocksDNSService. This is direct static evidence that the app's Java VPN engine establishes Android's VPN interface and supports multiple service/configuration modes.
+- Tunnel.routeThroughTunnel creates and starts both Pdnsd and Tun2Socks worker threads. The Tun2Socks constructor receives a ParcelFileDescriptor, MTU and several network/SOCKS parameters.
+- Tun2Socks.run resolves the libtun2socks.so executable path, creates a sock_path under the app data directory, builds a command line containing the TUN FD (ParcelFileDescriptor.getFd()), socket path, MTU/network arguments and --udpgw-transparent-dns, then invokes Runtime.exec(String). It subsequently calls sendFd(ParcelFileDescriptor, File).
+- Tun2Socks.sendFd connects an Android LocalSocket to the generated socket path, obtains the descriptor with ParcelFileDescriptor.getFileDescriptor(), calls LocalSocket.setFileDescriptorsForSend(FileDescriptor[]), writes a byte, shuts down the socket output and closes the socket. This is concrete static evidence of SCM_RIGHTS-style FD passing to the native tun2socks process; it closes the previously open question of whether the Java wrapper contains an FD handoff path. Exact native receive-side behavior still needs the ABI binary.
+- Pdnsd.run resolves libpdnsd.so, generates pdnsd.conf and pdnsd.cache, and invokes the DNS helper using Runtime.exec(String).
+- TunnelVpnManager.runTunnel calls Tunnel.startTunneling, waits on a CountDownLatch, then stops tunneling/foreground service on termination. onStartCommand extracts VPN settings, SOCKS server address and DNS resolvers from the incoming Intent and calls Tunnel.startRouting.
+
+These findings establish a concrete Android VPNService → Builder.establish → ParcelFileDescriptor → Java tun2socks launcher → LocalSocket FD transfer → native process design in static code. They do not establish successful execution on a device, the exact contents/behavior of missing native split binaries, or the Xray core process/config launch path. In particular, TunnelManagerHelper.startXRay starts XRayDNSService; this is not yet a proven direct invocation of the Go Xray executable.
+
+## Library inventory limitation
+
+The Library root inventory currently exposes base.apk but no exact-title split_config.arm64_v8a.apk, libudpqtwo.so, or libsalamander.so entries. The required ABI/density splits are therefore still missing from the accessible Library inventory; the base APK is sufficient for the Java-side TUN path above but not for native payload analysis.
