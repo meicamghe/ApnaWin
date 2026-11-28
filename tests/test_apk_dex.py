@@ -567,6 +567,26 @@ def test_new_string_array_tracking_is_bounded_to_256_writes():
     row = report["methods_with_evidence"][0]
     assert row["process_builder_library_basenames"] == []
 
+
+def test_runtime_exec_string_array_links_new_array_and_filled_array_arguments():
+    output = (
+        ".method private launchRuntimeArrays()V\\n"
+        "    const/4 v0, 0x1\\n"
+        "    new-array v2, v0, [Ljava/lang/String;\\n"
+        '    const-string v1, "libudpqtwo.so"\\n'
+        "    aput-object v1, v2, v0\\n"
+        "    invoke-virtual {v3, v2}, Ljava/lang/Runtime;->exec([Ljava/lang/String;)Ljava/lang/Process;\\n"
+        '    const-string v4, "libdecoy.so"\\n'
+        "    filled-new-array {v4}, [Ljava/lang/String;\\n"
+        "    move-result-object v5\\n"
+        "    invoke-virtual {v3, v5}, Ljava/lang/Runtime;->exec([Ljava/lang/String;)Ljava/lang/Process;\\n"
+        ".end method\\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert report["runtime_exec_calls"] == 2
+    assert row["runtime_exec_library_basenames"] == ["libdecoy.so", "libudpqtwo.so"]
+
 def test_invoke_range_calls_are_counted_but_not_mislinked():
     output = (
         ".method private launchRange()V\n"
