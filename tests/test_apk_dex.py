@@ -571,6 +571,42 @@ def test_filled_string_array_result_invalidates_stale_string_fact():
     assert row["runtime_exec_library_basenames"] == []
     assert row["native_library_literals"] == ["libstale.so"]
 
+
+def test_move_object_alias_preserves_string_array_launch_linkage():
+    output = (
+        ".method private launchAliasedArray()V\n"
+        "    const/4 v0, 0x1\n"
+        "    new-array v2, v0, [Ljava/lang/String;\n"
+        '    const-string v1, "libudpqtwo.so"\n'
+        "    aput-object v1, v2, v0\n"
+        "    move-object v5, v2\n"
+        "    invoke-direct {v3, v5}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["process_builder_library_basenames"] == ["libudpqtwo.so"]
+
+
+def test_string_array_aliases_share_write_limit_and_invalidate_together():
+    lines = [
+        ".method private launchAliasedArrayLimit()V",
+        "    const/4 v0, 0x1",
+        "    new-array v2, v0, [Ljava/lang/String;",
+        "    move-object v5, v2",
+        '    const-string v1, "libnative.so"',
+    ]
+    lines.extend("    aput-object v1, v2, v0" for _ in range(128))
+    lines.extend("    aput-object v1, v5, v0" for _ in range(129))
+    lines.extend([
+        "    invoke-direct {v3, v2}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V",
+        "    invoke-direct {v3, v5}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V",
+        ".end method",
+    ])
+    report = apk_dex._parse_dex_linkage_evidence("\n".join(lines))
+    row = report["methods_with_evidence"][0]
+    assert row["process_builder_library_basenames"] == []
+
 def test_new_string_array_register_overwrite_invalidates_array_evidence():
     output = (
         ".method private launchNative()V\n"
