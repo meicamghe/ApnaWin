@@ -10,7 +10,7 @@ This repository now has a manual GitHub Actions workflow for extracting and insp
 4. Keep the default library name `libudpqtwo.so`, then start the run.
 5. When the run completes, open its **Artifacts** section and download `ApnaWin-libudpqtwo-analysis`.
 
-The workflow is manual-only. It does not run on pushes or pull requests, does not build the Windows application, and does not need secrets or write permissions. It searches all top-level APK files in `APNA-APKs/` and fails rather than silently selecting a library if multiple copies are found.
+The workflow is manual-only. It does not run on pushes or pull requests, does not build any ApnaWin product, and does not need secrets or write permissions. This is offline static analysis; it does not install the APK or require an Android device. It searches all top-level APK files in `APNA-APKs/` and fails rather than silently selecting a library if multiple copies are found.
 
 ## Artifact contents
 
