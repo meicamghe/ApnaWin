@@ -192,3 +192,8 @@ The current GitHub connector still does not return binary bytes for `base.apk`, 
 ### Dynamic-symbol verification refinement
 
 A later ELF `.dynsym`/dynamic-section cross-check refined the LIAPP note: `libbxdtcxfzx.so` exports `JNI_OnLoad`, imports `dlopen`/`dlsym`, and contains the printable name `libliapp.so`, but `libliapp.so` is not a `DT_NEEDED` dependency. The strings `prctl` and `waitpid` are not imports in the parsed dynamic symbol table. Treat this as evidence for a possible dynamic JNI loader, not proof of a loaded LIAPP module or anti-tamper behavior. The same symbol pass confirmed `main` and DNS worker exports in `libpdnsd.so`, and `main` plus SOCKS/UDP/DNS state symbols in `libtun2socks.so`.
+
+
+### tun2socks command interface refinement
+
+The static binary usage text confirms that `libtun2socks.so` accepts `--tunfd`/`--tunmtu`, requires local netif address/netmask and a SOCKS server address, and supports optional DNS/UDP gateway and SOCKS authentication arguments. This is the strongest current candidate interface for a VPNService TUN-FD handoff, but actual invocation by the APK is still unproven without DEX callsites/runtime evidence.
