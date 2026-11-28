@@ -180,6 +180,9 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
     load_library_registers = re.compile(
         r'\{([^}]*)\},\s*Ljava/lang/System;->loadLibrary\('
     )
+    load_path_registers = re.compile(
+        r'\{([^}]*)\},\s*Ljava/lang/System;->load\('
+    )
     safe_library_name = re.compile(r"^[A-Za-z0-9_]{1,120}$")
     native_basename = re.compile(r"(lib[A-Za-z0-9_.+-]{1,120}\.so)$")
     rows: list[dict[str, Any]] = []
@@ -193,6 +196,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             current["invocation_kinds"]
             or current["native_library_literals"]
             or current["system_load_library_names"]
+            or current["system_load_path_basenames"]
         ):
             if len(rows) >= _MAX_LINKAGE_EVIDENCE_ROWS:
                 raise ValueError("DEX linkage evidence contains too many methods")
@@ -202,6 +206,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
                 "invocation_counts": dict(sorted(current["invocation_counts"].items())),
                 "native_library_literals": sorted(current["native_library_literals"]),
                 "system_load_library_names": sorted(current["system_load_library_names"]),
+                "system_load_path_basenames": sorted(current["system_load_path_basenames"]),
             })
 
     for line in output.splitlines():
@@ -216,6 +221,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
                 "invocation_counts": {},
                 "native_library_literals": set(),
                 "system_load_library_names": set(),
+                "system_load_path_basenames": set(),
                 "string_registers": {},
             }
             continue
@@ -245,6 +251,14 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
         if "Ljava/lang/System;->load(" in line:
             current["invocation_kinds"].add("system_load")
             current["invocation_counts"]["system_load"] = current["invocation_counts"].get("system_load", 0) + 1
+            register_match = load_path_registers.search(line)
+            if register_match:
+                registers = re.findall(r"\\b(?:v|p)[0-9]+\\b", register_match.group(1))
+                for register in registers:
+                    literal = current["string_registers"].get(register)
+                    basename = native_basename.search(literal or "")
+                    if basename:
+                        current["system_load_path_basenames"].add(basename.group(1))
         if any(token in line for token in (
             "Ldalvik/system/DexClassLoader;-><init>(",
             "Ldalvik/system/PathClassLoader;-><init>(",
