@@ -346,7 +346,8 @@ def test_parse_dex_linkage_evidence_correlates_calls_and_library_literals():
         ".end method\n"
         ".method private load()V\n"
         '    const-string v0, "libpdnsd.so"\n'
-        "    invoke-static {v0}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        '    const-string v1, "pdnsd"\n'
+        "    invoke-static {v1}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
         "    invoke-direct {v1, v2}, Ldalvik/system/DexClassLoader;-><init>(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V\n"
         ".end method\n"
     )
@@ -359,11 +360,13 @@ def test_parse_dex_linkage_evidence_correlates_calls_and_library_literals():
             "method_ordinal": 1,
             "invocation_kinds": ["runtime_exec"],
             "native_library_literals": ["libudpqtwo.so"],
+            "system_load_library_names": [],
         },
         {
             "method_ordinal": 2,
             "invocation_kinds": ["dynamic_dex_loader", "system_load_library"],
             "native_library_literals": ["libpdnsd.so"],
+            "system_load_library_names": ["pdnsd"],
         },
     ]
     assert "start" not in str(report)
