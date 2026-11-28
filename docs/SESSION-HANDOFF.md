@@ -261,3 +261,18 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - GitHub Actions run [46109322697](https://github.com/meicamghe/ApnaWin/actions/runs/46109322697) passed on code head `8436a803910aef40d16ca9c6c74bf299785cc6c2`: **943 passed, 1 skipped, 2 warnings**.
 - The new `test_inventory_apk_native.py` cases passed, including split aggregation, SHA-256 verification, PIE/PT_INTERP classification, malformed ELF handling, duplicate-entry rejection and aggregate-size limits.
 - `build-windows` was skipped by the existing reverse-engineering gate. This CI run did not execute the manual APK extraction workflow and produced no native-analysis artifact.
+
+
+## Static DEX linkage analysis — 2026-11-28
+
+- Added a bounded, read-only DEX smali inspection for up to 64 network/service candidate classes.
+- It records method-scoped Runtime.exec, ProcessBuilder, System.load, System.loadLibrary, and secondary-Dex loader callsites, plus native lib*.so literals from the same method.
+- Raw smali, method names, descriptors and arbitrary string literals are discarded. The output marks scan truncation and does not claim runtime invocation or successful loading.
+- The implementation and regression tests are committed; CI run 46110097915 is validating this change.
+- This analysis is offline and does not require an Android device. Protected LIAPP DEX remains out of scope for bypass; any hidden launch owner must remain explicitly unresolved unless readable evidence establishes it.
+
+## Latest completed CI — 2026-11-28
+
+- GitHub Actions run [46109432150](https://github.com/meicamghe/ApnaWin/actions/runs/46109432150) passed on head 723d2089073a8abc9836db9a889e6f6c1b67ead3: **943 passed, 1 skipped, 1 warning**.
+- The warning is from the duplicate-ZIP-entry test fixture; the expected warning is captured by the test. The build-windows job was skipped by the reverse-engineering gate.
+- Run 46109432150 did not dispatch the manual APK extraction workflow and produced no fresh APK/ELF artifact.
