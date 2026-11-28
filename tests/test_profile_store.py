@@ -24,6 +24,23 @@ def test_profile_store_round_trip(tmp_path):
     assert load_profiles(path) == expected
 
 
+def test_profile_store_round_trips_legacy_apna_ssh_profiles(tmp_path):
+    path = tmp_path / "profiles.json"
+    expected = [
+        ConnectionProfile("Legacy 1", Transport.APNA_SSH, "legacy-one.example.test", 443),
+        ConnectionProfile("Legacy 2", Transport.APNA_SSH, "legacy-two.example.test", 8443),
+    ]
+
+    save_profiles(path, expected)
+
+    assert load_profiles(path) == expected
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert [record["transport"] for record in payload["profiles"]] == [
+        "apna_ssh",
+        "apna_ssh",
+    ]
+
+
 def test_profile_store_supports_empty_list(tmp_path):
     path = tmp_path / "profiles.json"
     save_profiles(path, [])
