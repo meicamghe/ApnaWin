@@ -82,3 +82,15 @@ The ELF headers/program headers add an important distinction between the files w
 - `libbxdtcxfzx.so` has no ELF entry point in the inspected header and exports `JNI_OnLoad`, which is consistent with a conventional JNI shared-library role.
 
 This distinction is especially useful for the next DEX pass: search separately for executable file extraction/chmod plus `ProcessBuilder`/`Runtime.exec` launches of pdnsd/tun2socks, and JNI/native-loader references for the LIAPP bridge. Do not treat the `.so` suffix as evidence that all three are loaded the same way.
+
+
+## tun2socks command-line contract recovered from the binary
+
+The full embedded usage text in `libtun2socks.so` exposes the following options:
+
+- TUN/device: `--tunfd`, `--tunmtu`, `--netif-ipaddr`, `--netif-netmask`, optional `--netif-ip6addr`.
+- SOCKS upstream: required `--socks-server-addr`; optional `--username`, `--password`, `--password-file`, `--append-source-to-username`.
+- DNS/UDP relay: `--dnsgw`, `--udpgw-remote-server-addr`, `--udpgw-max-connections`, `--udpgw-connection-buffer-size`, `--udpgw-transparent-dns`.
+- Process/logging: `--pid`, `--sock`, `--fake-proc`, `--logger`, `--syslog-facility`, `--syslog-ident`, `--loglevel`, `--channel-loglevel`, `--help`, `--version`.
+
+The presence of `--tunfd` is important: this build has an explicit interface for receiving an already-open TUN file descriptor, while `--socks-server-addr` identifies its upstream SOCKS endpoint. It provides a concrete hypothesis for the Android VPNService-to-child-process handoff. It does **not** prove that ApnaWin's target APK actually passes the VPNService descriptor to this process, which process creates the SOCKS endpoint, or whether this binary is launched on every connection. Those require DEX/JNI callsite evidence or runtime tracing.
