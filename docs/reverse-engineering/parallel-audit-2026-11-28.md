@@ -20,7 +20,7 @@ The implementation under review is on `re/apk-native-extract`; this research bra
 
 Class-name-driven selection can miss obfuscated classes that load a protector library. A true APK-wide index still needs a class-name-independent pass over DEX references/callsites with stable DEX/class/method/invoke-offset provenance. Current scanner output is static evidence, not proof of runtime execution or dynamic library origin.
 
-The observed `libbxdtcxfzx.so` evidence (AArch64, `JNI_OnLoad`, `libliapp.so` dependency and process-introspection imports) is consistent with a LIAPP loader/bridge. It is not proof of the exact protection behavior or where `libliapp.so` is stored. `libtoolChecker.so` is separately identified as RootBeer root detection; do not conflate the two.
+The observed `libbxdtcxfzx.so` evidence (AArch64, `JNI_OnLoad`, embedded `libliapp.so` filename, and `dlopen`/`dlsym` imports) is consistent with a dynamic JNI loader/bridge associated with LIAPP. `libliapp.so` is not in this file's `DT_NEEDED` list, and `prctl`/`waitpid` are printable strings rather than imports in the parsed `.dynsym`; exact protection behavior and library origin remain unproven. `libtoolChecker.so` is separately identified as RootBeer root detection; do not conflate the two.
 
 ## Track B — Go pclntab recovery
 
