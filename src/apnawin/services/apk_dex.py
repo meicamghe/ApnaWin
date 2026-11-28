@@ -183,6 +183,12 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
     load_path_registers = re.compile(
         r'\{([^}]*)\},\s*Ljava/lang/System;->load\('
     )
+    runtime_exec_registers = re.compile(
+        r'\{([^}]*)\},\s*Ljava/lang/Runtime;->exec\('
+    )
+    process_builder_registers = re.compile(
+        r'\{([^}]*)\},\s*Ljava/lang/ProcessBuilder;-><init>\('
+    )
     safe_library_name = re.compile(r"^[A-Za-z0-9_]{1,120}$")
     native_basename = re.compile(r"(lib[A-Za-z0-9_.+-]{1,120}\.so)$")
     rows: list[dict[str, Any]] = []
@@ -197,6 +203,8 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             or current["native_library_literals"]
             or current["system_load_library_names"]
             or current["system_load_path_basenames"]
+            or current["runtime_exec_library_basenames"]
+            or current["process_builder_library_basenames"]
         ):
             if len(rows) >= _MAX_LINKAGE_EVIDENCE_ROWS:
                 raise ValueError("DEX linkage evidence contains too many methods")
@@ -207,6 +215,8 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
                 "native_library_literals": sorted(current["native_library_literals"]),
                 "system_load_library_names": sorted(current["system_load_library_names"]),
                 "system_load_path_basenames": sorted(current["system_load_path_basenames"]),
+                "runtime_exec_library_basenames": sorted(current["runtime_exec_library_basenames"]),
+                "process_builder_library_basenames": sorted(current["process_builder_library_basenames"]),
             })
 
     for line in output.splitlines():
@@ -222,6 +232,8 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
                 "native_library_literals": set(),
                 "system_load_library_names": set(),
                 "system_load_path_basenames": set(),
+                "runtime_exec_library_basenames": set(),
+                "process_builder_library_basenames": set(),
                 "string_registers": {},
             }
             continue
@@ -235,9 +247,25 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
         if "Ljava/lang/Runtime;->exec(" in line:
             current["invocation_kinds"].add("runtime_exec")
             current["invocation_counts"]["runtime_exec"] = current["invocation_counts"].get("runtime_exec", 0) + 1
+            register_match = runtime_exec_registers.search(line)
+            if register_match:
+                registers = re.findall(r"\b(?:v|p)[0-9]+\b", register_match.group(1))
+                # Runtime.exec is an instance call: register zero is the Runtime receiver.
+                for register in registers[1:2]:
+                    basename = native_basename.search(current["string_registers"].get(register, ""))
+                    if basename:
+                        current["runtime_exec_library_basenames"].add(basename.group(1))
         if "Ljava/lang/ProcessBuilder;-><init>(" in line:
             current["invocation_kinds"].add("process_builder")
             current["invocation_counts"]["process_builder"] = current["invocation_counts"].get("process_builder", 0) + 1
+            register_match = process_builder_registers.search(line)
+            if register_match:
+                registers = re.findall(r"\b(?:v|p)[0-9]+\b", register_match.group(1))
+                # ProcessBuilder constructors are instance calls; inspect only the first argument.
+                for register in registers[1:2]:
+                    basename = native_basename.search(current["string_registers"].get(register, ""))
+                    if basename:
+                        current["process_builder_library_basenames"].add(basename.group(1))
         if "Ljava/lang/System;->loadLibrary(" in line:
             current["invocation_kinds"].add("system_load_library")
             current["invocation_counts"]["system_load_library"] = current["invocation_counts"].get("system_load_library", 0) + 1
