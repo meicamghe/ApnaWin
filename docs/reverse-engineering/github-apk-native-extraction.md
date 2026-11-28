@@ -39,3 +39,13 @@ escapes, and resolved library paths outside the extraction root. These checks
 protect the offline analysis stage from a malformed or substituted extraction
 manifest; they do not change the APK extraction workflow or imply fresh binary
 analysis.
+
+
+## APK inventory input/output safeguards
+
+The inventory CLI rejects symlinked APK inputs, repeated references to the same
+APK, and distinct input files with colliding basenames (the report identifies
+sources by basename). Its `--output` path cannot be a symlink or resolve to an
+APK input, preventing an accidental report write from replacing the source
+archive. These checks complement ZIP duplicate-entry and bounded native-member
+validation; they do not execute or extract native code.
