@@ -4,7 +4,7 @@
 
 فایل ارائه‌شده با نام `libxray.so` یک باینری Go برای Android/ARM64 است. با وجود پسوند `.so`، metadata ساخت آن صریحاً `-buildmode=exe` را نشان می‌دهد؛ فایل دارای interpreter اندروید، نقطه ورود `_start` و تابع `main.main` است. بنابراین از نظر ELF یک PIE executable است، نه یک shared library معمولی برای `dlopen` یا `System.loadLibrary`.
 
-**SHA-256:** `e796e24eece84ab28ab9e20710a8581fbcb1044c6720db5f9c79fecc839f68b5`
+**SHA-256:** `e796e24eece84ab28ab9e20710a8581fbcb1044c6720db5f9cfecc839f68b5`
 
 **حجم:** 32,740,552 bytes
 
