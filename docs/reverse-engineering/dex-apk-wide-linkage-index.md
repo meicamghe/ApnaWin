@@ -9,6 +9,12 @@ The current implementation has two layers:
 
 This is a useful split-set audit, but it is **not yet an exhaustive APK-wide callsite index**: class-name selection can miss obfuscated classes, and each APK's code scan remains capped at 64 selected classes.
 
+
+
+## Tooling constraint confirmed from Android's APK Analyzer documentation
+
+The official CLI reference documents that `dex code --class` requires a class name, while `dex packages` emits a package/class/method/field tree and `dex references` reports per-DEX method-reference counts. These outputs do not provide invoke offsets or a class-independent callsite listing. Therefore the current class-name heuristic cannot be made exhaustive merely by changing `dex references`; a real exhaustive index needs a DEX-level parser/disassembler (e.g. dexlib2/baksmali or an equivalent parser) that walks every method's instructions and records exact invoke references and offsets. The index must preserve DEX filename, class descriptor, method descriptor, instruction offset, API target and register-flow confidence. See the official [APK Analyzer CLI reference](https://developer.android.com/tools/apkanalyzer).
+
 ## Required indexed references
 
 - `Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V`
