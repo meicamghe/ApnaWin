@@ -44,6 +44,7 @@ class _ElfImage:
         if not self.loads:
             raise ValueError("ELF has no file-backed PT_LOAD segment")
         self.text_sections: list[tuple[int, int]] = []
+        self.function_symbols: list[tuple[str, int, int]] = []
         shoff, shentsize, shnum, shstrndx = header[6], header[11], header[12], header[13]
         if shoff and shnum and shentsize >= 64 and shnum <= 65535:
             if shoff <= len(data) and shnum * shentsize <= len(data) - shoff and shstrndx < shnum:
@@ -55,6 +56,37 @@ class _ElfImage:
                 names_off, names_size = name_header[4], name_header[5]
                 if names_off <= len(data) and names_size <= len(data) - names_off:
                     names = data[names_off:names_off + names_size]
+                    # Anchor zero-textStart Go PIE images to defined ELF function symbols.
+                    for symbol_section in section_headers:
+                        if symbol_section[1] not in (2, 11):  # SHT_SYMTAB / SHT_DYNSYM
+                            continue
+                        sym_off, sym_size = symbol_section[4], symbol_section[5]
+                        sym_link, sym_entsize = symbol_section[6], symbol_section[9]
+                        if sym_link >= len(section_headers) or sym_entsize < 24 or sym_size % sym_entsize:
+                            raise ValueError("ELF symbol table metadata is invalid")
+                        string_section = section_headers[sym_link]
+                        str_off, str_size = string_section[4], string_section[5]
+                        if str_off > len(data) or str_size > len(data) - str_off:
+                            raise ValueError("ELF symbol string table is outside the file")
+                        if sym_off > len(data) or sym_size > len(data) - sym_off:
+                            raise ValueError("ELF symbol table is outside the file")
+                        symbol_strings = data[str_off:str_off + str_size]
+                        for symbol_offset in range(sym_off, sym_off + sym_size, sym_entsize):
+                            st_name, st_info, _other, st_shndx, st_value, st_size = struct.unpack_from(
+                                "<IBBHQQ", data, symbol_offset
+                            )
+                            if not st_name or not st_shndx or (st_info & 0x0F) != 2 or not st_size:
+                                continue
+                            if st_name >= len(symbol_strings):
+                                raise ValueError("ELF function symbol name is outside its string table")
+                            symbol_end = symbol_strings.find(b"\\0", st_name)
+                            if symbol_end < 0:
+                                raise ValueError("ELF function symbol name is not NUL-terminated")
+                            try:
+                                symbol_name = symbol_strings[st_name:symbol_end].decode("utf-8")
+                            except UnicodeDecodeError:
+                                continue
+                            self.function_symbols.append((symbol_name, st_value, st_size))
                     for section in section_headers:
                         name_off, _kind, flags, address, _offset, size = section[:6]
                         if not (flags & 0x4) or not size or name_off >= len(names):
@@ -143,10 +175,6 @@ def recover_go_pclntab(data: bytes, pclntab_va: int, allow_stomped_magic: bool =
     metadata_segment = image._unique_mapping(pclntab_va, 72)
     metadata_end = metadata_segment[0] + metadata_segment[1]
     text_base = text_start
-    if text_base == 0:
-        if len(image.text_sections) != 1:
-            raise ValueError("Go pclntab textStart is zero and ELF has no unique executable .text section")
-        text_base = image.text_sections[0][0]
     records: list[dict[str, Any]] = []
     previous_entry = -1
     for index in range(nfunc):
@@ -165,22 +193,40 @@ def recover_go_pclntab(data: bytes, pclntab_va: int, allow_stomped_magic: bool =
         name = name_bytes.decode("utf-8", errors="strict")
         if any(ord(char) < 0x20 for char in name):
             raise ValueError("Go function name contains control characters")
-        code_va = text_base + entry_off
-        if not image.is_executable_va(code_va):
-            raise ValueError("Go function entry does not map uniquely to executable PT_LOAD")
         records.append({"index": index, "entry_offset": entry_off, "function_offset": func_off, "name": name})
         previous_entry = entry_off
     end_entry = struct.unpack_from("<I", table, nfunc * 8)[0]
+    if text_base == 0:
+        symbols_by_name: dict[str, list[tuple[int, int]]] = {}
+        for symbol_name, symbol_value, symbol_size in image.function_symbols:
+            symbols_by_name.setdefault(symbol_name, []).append((symbol_value, symbol_size))
+        candidate_bases: set[int] = set()
+        for index, record in enumerate(records):
+            next_entry = struct.unpack_from("<I", table, (index + 1) * 8)[0]
+            function_size = next_entry - record["entry_offset"]
+            for symbol_value, symbol_size in symbols_by_name.get(record["name"], []):
+                if symbol_size == function_size and symbol_value >= record["entry_offset"]:
+                    candidate_bases.add(symbol_value - record["entry_offset"])
+        if len(candidate_bases) != 1:
+            raise ValueError(
+                "Go pclntab textStart is zero and ELF has no unique matching function-symbol anchor"
+            )
+        text_base = next(iter(candidate_bases))
+    for record in records:
+        code_va = text_base + record["entry_offset"]
+        if not image.is_executable_va(code_va):
+            raise ValueError("Go function entry does not map uniquely to executable PT_LOAD")
     if end_entry <= previous_entry or not image.is_executable_va(text_base + end_entry - 1):
         raise ValueError("Go functab terminal PC offset is outside the executable code range")
     return {
-        "format": "apnawin-go-pclntab-recovery-v2",
+        "format": "apnawin-go-pclntab-recovery-v3",
         "elf_class": 64, "machine": "AArch64",
         "pclntab_va": hex(pclntab_va), "magic": hex(magic),
         "magic_stomped": magic not in _GO_MAGIC,
         "go_pc_quantum": quantum, "pointer_size": pointer_size,
         "nfunc": nfunc, "nfiles": nfiles, "text_start": hex(text_start),
         "resolved_text_start": hex(text_base),
+        "text_start_resolution": "pclntab-header" if text_start else "elf-function-symbol-anchor",
         "functab_va": hex(table_va), "functab_bytes": table_size,
         "terminal_entry_offset": end_entry, "recovered_function_count": len(records),
         "functions": records, "binary_executed": False,
