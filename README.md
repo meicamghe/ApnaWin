@@ -18,7 +18,7 @@ A native Windows 10/11 desktop client project inspired by the workflow of APNA T
 - Windows GitHub Actions tests and a PyInstaller build job that publishes a portable Windows x64 application-folder artifact (14-day retention).
 - A pinned runtime packaging step for Xray-core v26.11.9 and Wintun 0.14.1, with archive hash, PE architecture, Authenticode and version checks.
 
-The Connect button remains disabled. Share links are now converted into strict dual-stack Xray TUN configurations with no direct fallback, but parsing and config composition do not validate credentials or establish a remote session. Xray-core owns the Windows Wintun adapter, packet I/O, routes, DNS and WFP leak filters. The fixed-path UAC helper can start Xray and waits for stable adapter/routes/DNS, but the helper is not yet integrated into the desktop Connect lifecycle. A production engine adapter, end-to-end traffic probe, graceful/forced-disconnect restoration tests, clean Windows 10/11 acceptance and an authorized APNA-compatible config source remain outstanding. Any portable build produced before those gates pass is a desktop/config-import preview, not a connectable VPN client. No APNA TUNNEL server compatibility is claimed.
+The desktop now has an asynchronous Xray TUN connection lifecycle. Connect is enabled only when an XRAY profile has an encrypted TUN config and the protected Program Files helper is installed. The worker starts the elevated helper without blocking the UI, waits for the adapter/routes/DNS readiness signal, then performs a real HTTPS request only after confirming that Windows selects the ApnaWin interface for the probe destination. The UI reports Connected only after that route-bound TLS/HTTP probe succeeds; a failed probe triggers helper shutdown. Disconnect requests graceful helper cleanup, and a cleanup failure blocks reconnect and instructs the user to close the desktop so the helper's parent-process monitor can unwind. This is a generic Xray connectivity path, not proof of APNA TUNNEL compatibility. Actual Windows 10/11 end-to-end acceptance, route/DNS restoration after crashes, WFP leak tests and an authorized APNA-compatible configuration source remain outstanding. Do not treat CI unit tests as live VPN acceptance.
 
 The Android app may refresh its server catalog and connection parameters remotely. This is a first-class requirement for the Windows product, but the actual API, schema, authentication and refresh policy have not yet been verified. See [remote configuration discovery](docs/remote-configuration.md); no guessed backend endpoint or static replacement server list will be shipped.
 
@@ -60,7 +60,7 @@ It does not store passwords, access tokens, private keys or other credentials. D
 - `src/apnawin/domain/` — transport-neutral domain models
 - `src/apnawin/engines/` — tunnel-engine contract, test-only mock and Xray process runner
 - `src/apnawin/storage/` — profile and encrypted Xray-config persistence
-- `src/apnawin/services/` — UAC helper lifecycle and read-only Windows tunnel diagnostics
+- `src/apnawin/services/` — UAC helper lifecycle, asynchronous connection worker, route-bound HTTPS probe, Xray config import and Windows tunnel diagnostics
 - `tests/` — automated tests, including desktop profile workflow checks
 - `docs/architecture.md` — architecture, milestones and security boundaries
 - `docs/SESSION-HANDOFF.md` — durable implementation status and next engineering steps
