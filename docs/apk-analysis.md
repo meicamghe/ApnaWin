@@ -79,8 +79,13 @@ the manifest name is aliased, obfuscated, or loaded through other mechanisms.
 ## Native library metadata and engine-name leads
 
 The safe ZIP inventory records bounded `.so` basenames, ABI labels and
-uncompressed sizes from entries matching `lib/<abi>/lib*.so`. It never reads
-or extracts their contents. The combined report includes per-ABI library
+uncompressed sizes from entries matching `lib/<abi>/lib*.so`. The manual
+native-extraction workflow additionally reads each matching member in bounded
+memory to hash it and inspect ELF headers; it does not write members to disk,
+load them, or execute them. Its `native-elf-inventory.json` output reports
+per-split/per-ABI hashes, ELF class, machine, entry point, interpreter presence,
+and a conservative execution-model candidate. Invalid ELF data is retained as
+a bounded per-file error rather than being mistaken for a valid library. The combined report includes per-ABI library
 counts and filename-only engine candidates.
 
 Candidate matching uses name-token boundaries rather than arbitrary substring
