@@ -365,6 +365,7 @@ def test_parse_dex_linkage_evidence_correlates_calls_and_library_literals():
             "system_load_path_basenames": [],
             "runtime_exec_library_basenames": ["libudpqtwo.so"],
             "process_builder_library_basenames": [],
+            "dynamic_dex_loader_path_extensions": [],
         },
         {
             "method_ordinal": 2,
@@ -375,6 +376,7 @@ def test_parse_dex_linkage_evidence_correlates_calls_and_library_literals():
             "system_load_path_basenames": [],
             "runtime_exec_library_basenames": [],
             "process_builder_library_basenames": [],
+            "dynamic_dex_loader_path_extensions": [],
         },
     ]
     assert "start" not in str(report)
