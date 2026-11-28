@@ -137,18 +137,21 @@ def test_probe_closes_socket_when_transport_construction_fails():
 
 
 @pytest.mark.parametrize(
-    "transport_detail",
+    ("transport_detail", "transport_stage"),
     [
-        "DNS resolution failed before TCP connection; endpoint=proxy.example.test:80; gaierror: [Errno 11001]",
-        "TLS certificate verification failed: tls_direct endpoint=ssh.example.test:443; SNI amtun.example.test",
-        "Proxy returned HTTP 403. CloudFront returned an edge-level HTTP denial. "
-        "Request details: mode=http_proxy; request=GET / HTTP/1.1; "
-        "Host=front.example.test; endpoint=proxy.example.test:80; "
-        "target=ssh.example.test:1194. Response headers: server=CloudFront, x-cache=Error from cloudfront.",
+        ("DNS resolution failed before TCP connection; endpoint=proxy.example.test:80; gaierror: [Errno 11001]", "dns"),
+        ("TLS certificate verification failed: tls_direct endpoint=ssh.example.test:443; SNI amtun.example.test", "tls"),
+        (
+            "Proxy returned HTTP 403. CloudFront returned an edge-level HTTP denial. "
+            "Request details: mode=http_proxy; request=GET / HTTP/1.1; "
+            "Host=front.example.test; endpoint=proxy.example.test:80; "
+            "target=ssh.example.test:1194. Response headers: server=CloudFront, x-cache=Error from cloudfront.",
+            "http_proxy",
+        ),
     ],
 )
 def test_probe_keeps_payload_transport_failures_out_of_ssh_key_exchange_stage(
-    transport_detail,
+    transport_detail, transport_stage,
 ):
     class FailingConnector:
         def connect(self, config):
@@ -159,6 +162,7 @@ def test_probe_keeps_payload_transport_failures_out_of_ssh_key_exchange_stage(
 
     assert isinstance(error.value, ApnaPayloadTransportProbeError)
     assert error.value.stage == "payload_transport"
+    assert error.value.transport_stage == transport_stage
     assert str(error.value).startswith("Payload transport failed before SSH key exchange:")
     assert "SSH host-key exchange failed" not in str(error.value)
     assert transport_detail in str(error.value)
