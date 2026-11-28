@@ -23,21 +23,17 @@ The observed `libbxdtcxfzx.so` evidence (AArch64, `JNI_OnLoad`, `libliapp.so` de
 
 ## Track B — Go pclntab recovery
 
-### Confirmed from source
+### Confirmed from source and uploaded binary
 
-- `tools/recover_go_pclntab.py` parses ELF64 little-endian AArch64 images and a Go 1.18+ style pclntab function table without executing the binary.
-- The current tests use a synthetic ELF fixture. They do not validate recovery against the actual `libudpqtwo.so`.
-- The parser checks file-backed PT_LOAD bounds for metadata reads and checks non-decreasing function-table entry offsets.
+- `tools/recover_go_pclntab.py` is an offline ELF64/AArch64 Go 1.18+ pclntab parser; it does not execute the binary.
+- The uploaded `libxray.so` contains a Go pclntab with 39,856 functions and 2,574 file entries. Offline recovery using the corrected Go offset rules recovered all 39,856 function names.
+- Real-binary validation exposed two parser requirements: functab `funcOff` is relative to the `pcln` table, and PIE images with `textStart=0` need a validated executable `.text` base. Both are now implemented on this branch.
+- The parser still has not been validated against the distinct `libudpqtwo.so`; do not transfer Xray findings to that binary.
 
-### Correctness gaps to close before trusting recovered names
+### Remaining validation
 
-1. `name_off` is checked for negativity, but the resulting address is not constrained to the pclntab function-name table interval `[pclntab_va + funcname_off, pclntab_va + cu_off)`. A string elsewhere in a PT_LOAD can therefore be mistaken for a function name.
-2. `read_c_string` and `read_va` return from the first matching PT_LOAD. Overlapping load segments can make VA-to-file mapping ambiguous; reject ambiguous mappings rather than selecting the first.
-3. The parser does not validate that each `text_start + entry_off` maps into an executable PT_LOAD segment.
-4. The terminal PC offset is checked for monotonicity but not against a validated executable code range.
-5. The function-record offsets and records should be constrained to the pclntab metadata region, not merely any readable PT_LOAD bytes.
-
-Add adversarial synthetic tests for each case, plus a real-binary validation fixture once the exact native file can be retrieved. Until then, report Go symbol recovery as unverified.
+- Synthetic tests now cover relative function-record offsets and zero-`textStart` ELF `.text` resolution, in addition to the existing bounds/overlap checks. The updated pytest suite has not yet been executed.
+- After running tests, validate the parser directly against `libxray.so` and then against `libudpqtwo.so` when that exact binary is available.
 
 ## Track C — Xray and non-SSH protocol path
 
@@ -57,11 +53,12 @@ Add adversarial synthetic tests for each case, plus a real-binary validation fix
 
 The Xray share-link parser is a generic Xray import path. It is not evidence that the proprietary APNA native protocol uses VLESS, VMess, Trojan, Shadowsocks, or Hysteria2. SSH remains out of scope and on hold.
 
-## Track D — Native binary evidence and retrieval blocker
+## Track D — Native binary evidence and retrieval
 
-The repository inventory previously exposed small native libraries that could be inspected through the GitHub connector. The larger `libudpqtwo.so` and `libsalamander.so` contents were not returned by the connector's UTF-8 file fetch, and the Git blob endpoint rejected binary content. No real disassembly or Go symbol extraction was performed on those files in this pass.
-
-The next practical requirement is a binary-safe retrieval path for the exact APK member bytes, preserving SHA-256 and ABI/path provenance. Do not substitute a prior Windows packaging artifact for an APK extraction artifact.
+- `libxray.so` was uploaded directly for offline inspection. Its SHA-256 is `e796e24eece84ab28ab9e20710a8581fbcb1044c6720db5f9c79fecc839f68b5`; the full report is `docs/reverse-engineering/libxray-binary-analysis-2026-11-28.md`.
+- `libxray.so` is an Android/ARM64 Go PIE executable despite its `.so` suffix. It contains Xray-core protocol/transport implementations and Android TUN code; no JNI exports were found in its dynamic symbol table.
+- The larger `libudpqtwo.so` and `libsalamander.so` contents remain unavailable for direct binary inspection. Do not transfer Xray findings to either file.
+- Preserve exact APK member path, ABI and SHA-256 for each binary. Do not substitute a prior Windows packaging artifact for an APK extraction artifact, and do not commit raw native binaries into Git.
 
 ## Status summary
 
@@ -69,7 +66,7 @@ The next practical requirement is a binary-safe retrieval path for the exact APK
 |---|---|---|
 | LIAPP bridge identification | Strong static indicators | Find/load-path evidence for `libliapp.so`; inspect JNI registration/runtime behavior |
 | DEX linkage discovery | Partial, bounded heuristic | APK-wide reference index and obfuscation regression tests |
-| Go symbol recovery | Synthetic-fixture parser only | Parser hardening plus validation against actual `libudpqtwo.so` |
+| Go symbol recovery | 39,856 names recovered from real `libxray.so`; parser updated | Execute updated tests; validate distinct `libudpqtwo.so` when available |
 | Xray link parsing | Source + unit-test coverage on research branch | Upstream schema validation and malformed-input regressions |
 | Xray live tunnel | Lifecycle code + mocked tests | Windows end-to-end traffic and no-leak trace |
 | Proprietary APNA protocol | Not established | Recover actual native protocol configuration/handshake from APK and runtime evidence |
@@ -95,9 +92,15 @@ The next practical requirement is a binary-safe retrieval path for the exact APK
 
 The following source/documentation changes were added on this research branch after the audit:
 
-- Added `tools/recover_go_pclntab.py` as a hardened offline parser. It now requires unique VA-to-file mappings, bounds function names to the `funcnametab` interval, rejects names crossing overlapping PT_LOAD ranges, requires function entries to map to executable PT_LOAD segments, and bounds function records to the metadata segment.
-- Added synthetic regression tests for name-table escape, non-executable text addresses, ambiguous VA mappings and partial segment overlap. These tests have **not been executed** in this environment; no CI workflow was dispatched. The parser remains unvalidated against the real `libudpqtwo.so`.
+- Added and hardened `tools/recover_go_pclntab.py`: unique VA-to-file mappings, bounded function-name strings, overlap rejection, executable-PC checks, metadata bounds, correct `pcln`-relative function-record offsets, and a validated `.text` fallback for PIE images with zero `textStart`.
+- Synthetic tests now include the real Go offset convention and zero-`textStart` PIE fallback, in addition to the adversarial bounds/overlap cases. They have **not yet been executed**; no CI workflow was dispatched.
+- Uploaded `libxray.so` was statically inspected and 39,856 function records were recovered offline. This validates the recovery approach against Xray, not against the separate `libudpqtwo.so`.
 - Replaced the stale Xray milestone text with an accurate source-level description of share-link import and guarded worker lifecycle integration, while retaining the distinction between source integration and live VPN validation.
 - Added `docs/reverse-engineering/dex-apk-wide-linkage-index.md` defining the bounded APK-wide DEX callsite index, provenance requirements, resource limits and regression matrix. The index itself is not yet implemented; existing class-candidate scanning remains heuristic.
 
 The branch is six commits ahead of `main` and has no divergence from `main` at the time of this update. No Windows build, CI run, SSH work, PR merge or native-binary execution was performed.
+
+
+## Uploaded Xray binary follow-up
+
+The dedicated report `docs/reverse-engineering/libxray-binary-analysis-2026-11-28.md` records the binary hash, Android/ARM64 executable classification, Go build metadata, protocol/transport inventory, Android TUN symbols, and the distinction between code presence and runtime activation. The branch remains research-only; no Windows build, CI run, SSH work, PR merge or native-binary execution was performed.
