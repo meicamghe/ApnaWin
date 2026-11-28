@@ -306,3 +306,12 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - GitHub Actions run [46110514246](https://github.com/meicamghe/ApnaWin/actions/runs/46110514246) passed on head 36a671dded230f2b960ba987c3c1777ea0afc14c: **955 passed, 1 skipped, 1 warning**. Windows packaging remained skipped.
 - Added /analysis/ to .gitignore so local extraction reports and native binaries are not accidentally committed.
 - Rechecked GoReSym v3.4.1 and current upstream master: the moduledata scanner's ignored-first-match behavior remains unfixed upstream. Exact failure mode and regression cases are documented in libudpqtwo-stomped-pclntab.md.
+
+
+## All-split native protocol fingerprint analyzer — 2026-11-28
+
+- Added tools/analyze_native_fingerprints.py. It verifies every extracted native file against native-libs/manifest.json (relative path, size and SHA-256) before scanning.
+- It emits occurrence counts only for allowlisted protocol-family, Go-runtime and known-engine markers across every ABI and APK split. Arbitrary strings, credentials, raw bytes and code are never included.
+- Added tests for protocol/runtime marker counts, secret-string exclusion, hash tampering, symlinked parent paths and unsafe manifest paths.
+- Wired native-fingerprints.json into the manual all-split extraction artifact and documented interpretation limits: marker hits are leads, not proof of active protocol use.
+- This extends offline static analysis only; it does not load or execute any native library and does not require an Android device.
