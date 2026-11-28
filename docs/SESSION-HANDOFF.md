@@ -315,3 +315,11 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - Added tests for protocol/runtime marker counts, secret-string exclusion, hash tampering, symlinked parent paths and unsafe manifest paths.
 - Wired native-fingerprints.json into the manual all-split extraction artifact and documented interpretation limits: marker hits are leads, not proof of active protocol use.
 - This extends offline static analysis only; it does not load or execute any native library and does not require an Android device.
+
+
+## Exact DEX-to-native name correlation — 2026-11-28
+
+- Tightened method-level DEX inspection so System.loadLibrary arguments are captured only when the exact string register is passed to that call; unrelated string constants in the same method are not promoted to library names.
+- The analyzer separately retains exact lib*.so basenames (including basenames extracted from absolute paths) and System.loadLibrary name arguments.
+- Cross-split aggregation now emits native_library_literal_references and system_load_library_references with APK split, class, method ordinal and invocation kind. The conventional lib{name}.so mapping is explicitly labeled as inferred from Android API naming convention.
+- Added regression tests for exact register correlation, arbitrary-string exclusion, and cross-split DEX/native reference aggregation.
