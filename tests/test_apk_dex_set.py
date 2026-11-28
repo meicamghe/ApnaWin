@@ -34,6 +34,7 @@ def _dex(service, defined):
             "methods_with_evidence": [{
                 "method_ordinal": 4,
                 "invocation_kinds": ["runtime_exec", "system_load_library"],
+                "invocation_counts": {"runtime_exec": 1, "system_load_library": 1},
                 "native_library_literals": ["libtun2socks.so"],
                 "system_load_library_names": ["pdnsd"],
             }],
@@ -85,6 +86,7 @@ def test_split_set_finds_service_class_defined_in_non_base_split(tmp_path, monke
         "method_ordinal": 4,
         "library_literal": "libtun2socks.so",
         "invocation_kinds": ["runtime_exec", "system_load_library"],
+        "invocation_counts": {"runtime_exec": 1, "system_load_library": 1},
     }]
     assert report["system_load_library_references"] == [{
         "apk": "split_feature.apk",
