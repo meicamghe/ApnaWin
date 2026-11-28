@@ -550,3 +550,27 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
   [46129520043](https://github.com/meicamghe/ApnaWin/actions/runs/46129520043)
   passed on code head `5d7573e7ab6f64a6614ae2b7a8e7a189c15cc410`:
   **1007 passed, 1 skipped, 1 warning**. Windows packaging remained skipped.
+
+
+## Windows connectivity milestone — 2026-11-28
+
+The user has now explicitly authorized moving from reverse-engineering-only work toward a Windows build when the connection path is genuinely ready. This supersedes the earlier instruction not to build Windows until reverse engineering was complete. It does **not** authorize claiming APNA compatibility without evidence or enabling a false-positive Connected state.
+
+### Share-link to TUN configuration path
+
+- Added `services/xray_tun_config.py`: compose strict dual-stack TUN JSON from a parsed VLESS, VMess, Trojan, Shadowsocks or Hysteria2 share link.
+- The generated config uses the strict existing Windows TUN policy (IPv4/IPv6 default routes, explicit DNS, physical-interface binding for Xray's own outbound and both WFP leak filters).
+- The parsed proxy is the only outbound. No direct/freedom fallback is generated.
+- Added `services/proxy_profile_import.py`: bounded batch parse, collision checks, encrypted config writes, one metadata commit and cleanup attempts on failure. Cleanup failures remain explicit.
+- Added desktop **Import server links…** action. Imported secrets are stored through the existing current-user DPAPI config store; metadata exports remain credential-free.
+- Tests cover the builder, supported outbound families, no-direct-fallback policy, transactional failure cleanup and desktop import wiring.
+
+### Remaining connection gates
+
+- The desktop Connect button is still disabled. The elevated helper can start Xray and waits for stable Wintun adapter, dual-stack routes and configured DNS, but the desktop does not yet own a production connection engine/lifecycle.
+- Stable route/DNS readiness is not the same as successful end-to-end traffic. Do not mark CONNECTED until a real authorized traffic probe succeeds through the tunnel.
+- Need to wire `XrayTunnelSupervisor` to a production engine and asynchronous UI lifecycle; handle helper exit, cancellation, stop failures and cleanup ownership.
+- Need Windows 10/11 tests for graceful disconnect, helper/desktop crash, forced termination, route/DNS restoration and WFP leak behavior.
+- Generic Xray share-link compatibility is not evidence of APNA TUNNEL backend compatibility. APK native extraction artifact is still required to complete APNA protocol/launch-owner verification.
+- No Windows artifact has been built for this new import path yet. Packaging remains opt-in via workflow_dispatch; do not call a desktop preview a connectable VPN build.
+- PR #8 remains open and unmerged. SSH remains on hold.
