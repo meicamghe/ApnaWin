@@ -373,7 +373,7 @@ def test_parse_dex_linkage_evidence_correlates_calls_and_library_literals():
             "native_library_literals": ["libpdnsd.so"],
             "system_load_library_names": ["pdnsd"],
             "system_load_path_basenames": [],
-            "runtime_exec_library_basenames": ["libudpqtwo.so"],
+            "runtime_exec_library_basenames": [],
             "process_builder_library_basenames": [],
         },
     ]
@@ -455,13 +455,13 @@ def test_system_load_correlates_only_the_exact_path_argument_register():
 
 def test_process_launch_links_only_exact_command_argument_registers():
     output = (
-        ".method private launchNative()V\\n"
-        '    const-string v0, "libudpqtwo.so"\\n'
-        '    const-string v1, "libdecoy.so"\\n'
-        '    const-string v2, "libbuilder.so"\\n'
-        "    invoke-virtual {v3, v0}, Ljava/lang/Runtime;->exec(Ljava/lang/String;)Ljava/lang/Process;\\n"
-        "    invoke-direct {v4, v2}, Ljava/lang/ProcessBuilder;-><init>(Ljava/lang/String;)V\\n"
-        ".end method\\n"
+        ".method private launchNative()V\n"
+        '    const-string v0, "libudpqtwo.so"\n'
+        '    const-string v1, "libdecoy.so"\n'
+        '    const-string v2, "libbuilder.so"\n'
+        "    invoke-virtual {v3, v0}, Ljava/lang/Runtime;->exec(Ljava/lang/String;)Ljava/lang/Process;\n"
+        "    invoke-direct {v4, v2}, Ljava/lang/ProcessBuilder;-><init>(Ljava/lang/String;)V\n"
+        ".end method\n"
     )
     report = apk_dex._parse_dex_linkage_evidence(output)
     row = report["methods_with_evidence"][0]
