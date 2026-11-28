@@ -109,3 +109,25 @@ def test_worker_reports_unexpected_helper_exit_after_verified_connect():
     assert worker.wait(2000)
 
     assert events == [("connected", 4242), ("lost", 17)]
+
+
+def test_worker_retains_supervisor_when_cleanup_fails():
+    events = []
+
+    class FailingStopSupervisor(FakeSupervisor):
+        def stop(self):
+            raise OSError("stop event failed")
+
+    supervisor = FailingStopSupervisor()
+    worker = XrayConnectionWorker(
+        profile(), "helper.exe", FakeStore(),
+        supervisor_factory=lambda *_args, **_kwargs: supervisor,
+        traffic_probe=lambda: (_ for _ in ()).throw(RuntimeError("probe failed")),
+    )
+    worker.failed.connect(events.append)
+    worker.start()
+    assert worker.wait(2000)
+
+    assert worker.cleanup_failed is True
+    assert worker._supervisor is supervisor
+    assert "Do not reconnect" in events[0]
