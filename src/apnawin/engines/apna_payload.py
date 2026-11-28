@@ -39,14 +39,14 @@ class PayloadChunk:
 
 
 class PayloadRotation:
-    """Round-robin [rotate=...] state matching the related Android framework."""
+    """Round-robin [rotate=...] state recovered from APNA primary DEX."""
 
     def __init__(self) -> None:
         self._last_payload: str | None = None
         self._indices: dict[int, int] = {}
 
     def expand(self, payload: str) -> str:
-        # The related formatter applies host/token substitutions before rotate.
+        # APNA formatCustomPayload applies host/token substitutions before rotate.
         if payload != self._last_payload:
             self._indices.clear()
             self._last_payload = payload
