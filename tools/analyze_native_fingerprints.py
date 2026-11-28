@@ -35,7 +35,7 @@ _MARKERS = {
         "tls": re.compile(rb"tls", re.I),
         "dtls": re.compile(rb"dtls", re.I),
         "kcp": re.compile(rb"kcp", re.I),
-        "websocket": re.compile(rb"websocket|websocket", re.I),
+        "websocket": re.compile(rb"websocket", re.I),
         "grpc": re.compile(rb"grpc", re.I),
         "obfuscation": re.compile(rb"obfs|obfusc", re.I),
     },
@@ -59,7 +59,7 @@ _MARKERS = {
         "v2ray": re.compile(rb"v2ray", re.I),
     },
 }
-_APK_NAME = re.compile(r"^[A-Za-z0-9_.+-]{1,128}\\.apk$")
+_APK_NAME = re.compile(r"^[A-Za-z0-9_.+-]{1,128}\.apk$")
 _COMPONENT = re.compile(r"^[A-Za-z0-9_.+-]{1,120}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
