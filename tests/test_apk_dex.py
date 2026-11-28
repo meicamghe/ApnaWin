@@ -516,13 +516,13 @@ def test_linkage_scan_prioritizes_liapp_protector_class():
 
 def test_filled_string_array_is_not_linked_after_intervening_instruction():
     output = (
-        ".method private launchNative()V\\n"
-        '    const-string v0, "libdecoy.so"\\n'
-        "    filled-new-array {v0}, [Ljava/lang/String;\\n"
-        "    invoke-static {}, Lcom/example/Other;->run()V\\n"
-        "    move-result-object v5\\n"
-        "    invoke-direct {v4, v5}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V\\n"
-        ".end method\\n"
+        ".method private launchNative()V\n"
+        '    const-string v0, "libdecoy.so"\n'
+        "    filled-new-array {v0}, [Ljava/lang/String;\n"
+        "    invoke-static {}, Lcom/example/Other;->run()V\n"
+        "    move-result-object v5\n"
+        "    invoke-direct {v4, v5}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V\n"
+        ".end method\n"
     )
     report = apk_dex._parse_dex_linkage_evidence(output)
     row = report["methods_with_evidence"][0]
