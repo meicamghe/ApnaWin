@@ -29,7 +29,15 @@ def _dex(service, defined):
             "native_method_count": 1 if defined else None,
             "native_method_inspection_completed": defined,
         }],
-        "native_linkage_evidence": [],
+        "native_linkage_evidence": [{
+            "class_name": "com.example.vpn.TunnelService",
+            "methods_with_evidence": [{
+                "method_ordinal": 4,
+                "invocation_kinds": ["runtime_exec", "system_load_library"],
+                "native_library_literals": ["libtun2socks.so"],
+                "system_load_library_names": ["pdnsd"],
+            }],
+        }] if defined else [],
         "linkage_scan_classes_inspected": 1,
         "linkage_scan_truncated": False,
     }
@@ -70,6 +78,21 @@ def test_split_set_finds_service_class_defined_in_non_base_split(tmp_path, monke
         "resolved_class_name": "com.example.vpn.TunnelService",
         "defined_in_apks": ["split_feature.apk"],
         "native_method_counts_by_apk": {"split_feature.apk": 1},
+    }]
+    assert report["native_library_literal_references"] == [{
+        "apk": "split_feature.apk",
+        "class_name": "com.example.vpn.TunnelService",
+        "method_ordinal": 4,
+        "library_literal": "libtun2socks.so",
+        "invocation_kinds": ["runtime_exec", "system_load_library"],
+    }]
+    assert report["system_load_library_references"] == [{
+        "apk": "split_feature.apk",
+        "class_name": "com.example.vpn.TunnelService",
+        "method_ordinal": 4,
+        "library_name_argument": "pdnsd",
+        "mapped_library_basename": "libpdnsd.so",
+        "mapping_basis": "Android System.loadLibrary naming convention",
     }]
     assert report["static_analysis_only"] is True
     assert report["android_device_required"] is False
