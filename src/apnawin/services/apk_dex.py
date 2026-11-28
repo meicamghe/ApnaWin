@@ -395,8 +395,14 @@ def _select_linkage_scan_targets(
         item["resolved_class_name"] for item in service_matches
         if item["resolved_class_name"] and item["defined_in_dex"]
     })
-    candidate_targets = sorted(set(candidates) - set(service_targets))
-    ordered = service_targets + candidate_targets
+    protector_targets = sorted({
+        name for name in candidates
+        if re.search(r"(?:^|\\.)liapp(?:\\.|$)", name, re.IGNORECASE)
+    })
+    candidate_targets = sorted(
+        set(candidates) - set(service_targets) - set(protector_targets)
+    )
+    ordered = service_targets + protector_targets + candidate_targets
     return ordered[:_MAX_LINKAGE_CLASSES], len(ordered) > _MAX_LINKAGE_CLASSES
 
 
