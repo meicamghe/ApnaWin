@@ -10,7 +10,11 @@ from apnawin.engines.apna_tunnel_session import ApnaTunnelSessionConfig
 from apnawin.engines.apna_xray_config import build_apna_xray_tun_config
 from apnawin.engines.apna_tunnel_engine import ApnaTunnelEngine, ApnaTunnelEngineError
 from apnawin.engines.apna_ssh_session import ApnaSshConfig
-from apnawin.engines.apna_payload_socket import PayloadSocketConfig, PayloadSocketMode
+from apnawin.engines.apna_payload_socket import (
+    PayloadSocketConfig,
+    PayloadSocketMode,
+    PayloadTransportError,
+)
 
 
 def test_builder_creates_strict_dual_stack_tun_with_local_socks_outbound():
@@ -453,3 +457,31 @@ def test_engine_retries_encrypted_config_cleanup_without_restarting_network_reso
     assert engine.state is ConnectionState.DISCONNECTED
     assert not store.saved
     assert events[-2:] == ["config-remove-attempt", "config-remove"]
+
+
+def test_engine_preserves_payload_transport_failure_after_clean_rollback():
+    events = []
+
+    class FailingPayloadSession(_FakeSession):
+        def connect(self):
+            events.append("session-connect")
+            raise PayloadTransportError(
+                "Proxy returned HTTP 403. CloudFront returned an edge-level HTTP denial."
+            )
+
+    store = _FakeConfigStore(events)
+    supervisor = _FakeSupervisor(events)
+    engine = ApnaTunnelEngine(
+        lambda profile: _session_config(),
+        store,  # type: ignore[arg-type]
+        supervisor,  # type: ignore[arg-type]
+        session_factory=lambda config: FailingPayloadSession(config, events=events),
+        platform_name="nt",
+    )
+
+    with pytest.raises(PayloadTransportError, match="CloudFront returned an edge-level HTTP denial"):
+        engine.connect(_profile())
+
+    assert events == ["session-connect", "session-disconnect"]
+    assert engine.state is ConnectionState.DISCONNECTED
+    assert not store.saved
