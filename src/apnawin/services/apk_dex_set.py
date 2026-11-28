@@ -72,6 +72,8 @@ def inspect_apk_dex_set(
             for item in apk["dex"]["manifest_service_classes"]
             if item["manifest_name"] == service and item["resolved_class_name"]
         }
+        if len(resolved_names) > 1:
+            raise ValueError("APK splits resolve the same manifest service inconsistently")
         resolved_name = next(iter(resolved_names), None)
         matching_rows = [
             (apk["apk"], item)
