@@ -549,10 +549,14 @@ inputs it emits the cross-split report. This command still requires local
 The bounded DEX linkage scan also counts constructor callsites for
 `DexClassLoader`, `PathClassLoader`, and `InMemoryDexClassLoader`.
 For the first two, when the first String path argument is a direct literal
-in the exact constructor argument register, the report retains only its
-allowlisted file extension (`.dex`, `.apk`, or `.jar`); it never emits
-the path or arbitrary string. `InMemoryDexClassLoader` is counted but its
-ByteBuffer contents are not inspected. Register ranges, aliases, computed
-paths, reflection, encrypted/protected DEX, and dynamically generated
-buffers remain unresolved. A loader callsite or extension is not proof that
-the secondary code is decrypted, loaded successfully, or executed.
+in the exact constructor argument register, the report retains the loader
+type and only allowlisted archive extensions (`.dex`, `.apk`, or `.jar`).
+Colon-separated archive lists are scanned for each extension, but no path or
+arbitrary string is emitted. `InMemoryDexClassLoader` is reported as a
+distinct constructor type; its ByteBuffer contents are not inspected and it
+has no file-path argument. If a file-backed loader is seen but no allowlisted
+literal extension is resolved, the report states that limitation explicitly.
+Register ranges, aliases, computed paths, reflection, encrypted/protected
+DEX, and dynamically generated buffers remain unresolved. A loader callsite
+or extension is not proof that the secondary code is decrypted, loaded
+successfully, or executed.
