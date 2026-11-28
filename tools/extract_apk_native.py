@@ -16,7 +16,7 @@ from tools.inventory_apk_native import inventory_native_libraries  # noqa: E402
 
 _MAX_NATIVE_MEMBER_BYTES = 64 * 1024 * 1024
 _MAX_TOTAL_NATIVE_BYTES = 256 * 1024 * 1024
-_APK_BASENAME = re.compile(r"^[A-Za-z0-9_.+-]{1,128}\\.apk$")
+_APK_BASENAME = re.compile(r"^[A-Za-z0-9_.+-]{1,128}\.apk$")
 _SAFE_COMPONENT = re.compile(r"^[A-Za-z0-9_.+-]{1,120}$")
 
 
@@ -53,9 +53,13 @@ def extract_native_libraries(
                 library = item["library"]
                 if not _SAFE_COMPONENT.fullmatch(abi) or not _SAFE_COMPONENT.fullmatch(library):
                     raise ValueError("native member path contains an unsafe component")
-                target_dir = root / apk_name / abi
+                apk_dir = root / apk_name
+                if apk_dir.is_symlink():
+                    raise ValueError("native extraction path contains a symlink")
+                apk_dir.mkdir(parents=True, exist_ok=True)
+                target_dir = apk_dir / abi
                 target_dir.mkdir(parents=True, exist_ok=True)
-                if target_dir.is_symlink() or target_dir.parent.is_symlink():
+                if target_dir.is_symlink():
                     raise ValueError("native extraction path contains a symlink")
                 target = target_dir / library
                 digest = hashlib.sha256()
