@@ -448,3 +448,62 @@ def test_import_profiles_dialog_cancellation_is_noop(tmp_path, qapp, monkeypatch
     assert window.profiles == [existing]
     assert destination.read_bytes() == original
     window.close()
+
+
+def test_import_share_links_uses_transactional_importer_and_refreshes_profiles(
+    tmp_path, qapp, monkeypatch
+):
+    import apnawin.app as app_module
+
+    destination = tmp_path / "profiles.json"
+    source = tmp_path / "servers.txt"
+    source.write_text("vless://user@vpn.example:443?security=tls#Office", encoding="utf-8")
+    imported = ConnectionProfile("Office", Transport.XRAY, "vpn.example", 443)
+    observed = {}
+
+    def fake_import(document, existing, config_store, save):
+        observed["document"] = document
+        observed["existing"] = list(existing)
+        observed["store"] = config_store
+        save([*existing, imported])
+        return [imported]
+
+    monkeypatch.setattr(app_module, "import_proxy_profiles", fake_import)
+    monkeypatch.setattr(
+        app_module.QFileDialog,
+        "getOpenFileName",
+        lambda *_args, **_kwargs: (str(source), "Text"),
+    )
+    window = MainWindow(profiles_path=destination)
+
+    window._import_share_links()
+
+    assert observed["document"] == source.read_bytes()
+    assert observed["existing"] == []
+    assert observed["store"] is window.xray_config_store
+    assert window.profiles == [imported]
+    assert load_profiles(destination) == [imported]
+    assert window.profile_list.currentItem().text() == "Office"
+    assert "not yet been tested" in window.status_label.text()
+    window.close()
+
+
+def test_import_share_links_dialog_cancel_is_noop(tmp_path, qapp, monkeypatch):
+    import apnawin.app as app_module
+
+    destination = tmp_path / "profiles.json"
+    existing = ConnectionProfile("Existing", Transport.SOCKS, "localhost", 1080)
+    save_profiles(destination, [existing])
+    original = destination.read_bytes()
+    monkeypatch.setattr(
+        app_module.QFileDialog,
+        "getOpenFileName",
+        lambda *_args, **_kwargs: ("", ""),
+    )
+    window = MainWindow(profiles_path=destination)
+
+    window._import_share_links()
+
+    assert window.profiles == [existing]
+    assert destination.read_bytes() == original
+    window.close()
