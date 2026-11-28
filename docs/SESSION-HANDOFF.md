@@ -284,3 +284,13 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - New DEX linkage parser regression tests passed, including method-scoped Runtime.exec, System.loadLibrary, secondary-Dex loader detection, safe .so literal extraction, and exclusion of arbitrary strings.
 - Windows packaging remained skipped by the reverse-engineering gate.
 - No fresh APK extraction artifact was generated; the native inventory workflow remains manual-only.
+
+
+## All-split native binary extraction — 2026-11-28
+
+- Added tools/extract_apk_native.py to extract every inventoried lib/<abi>/lib*.so from the committed APK set into a deterministic APK/ABI/library directory tree.
+- Each extracted member is streamed with 64 MiB per-file and 256 MiB aggregate limits; SHA-256 and byte size are verified against the prior in-memory inventory before it is recorded.
+- The artifact manifest records relative path, hash, size, ELF parse error (if any), and executed=false. No native member is loaded or executed.
+- Wired the all-library extraction into the manual APK native-analysis workflow. This makes every ABI/split binary available for subsequent static strings, imports, relocations, Go metadata and protocol-family analysis after the manual workflow is run.
+- CI run [46110374404](https://github.com/meicamghe/ApnaWin/actions/runs/46110374404) passed on head 41779d545a70ca5f9885b03dc546e64e27fcceea: **951 passed, 1 skipped, 1 warning**. Windows packaging remained skipped.
+- The workflow remains manual-only and has not yet generated a fresh artifact; no new APNA binary findings are claimed from this tool change.
