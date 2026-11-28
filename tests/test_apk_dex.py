@@ -381,3 +381,30 @@ def test_parse_dex_linkage_evidence_ignores_unrelated_strings_and_calls():
     report = apk_dex._parse_dex_linkage_evidence(output)
     assert report["methods_with_evidence"] == []
     assert report["runtime_exec_calls"] == 0
+
+
+def test_linkage_scan_prioritizes_exact_manifest_service_classes():
+    candidates = [f"com.example.Candidate{i:03d}" for i in range(80)]
+    service = "org.example.vpn.TunnelService"
+    targets, truncated = apk_dex._select_linkage_scan_targets(
+        candidates,
+        [{
+            "resolved_class_name": service,
+            "defined_in_dex": True,
+        }],
+    )
+    assert targets[0] == service
+    assert len(targets) == apk_dex._MAX_LINKAGE_CLASSES
+    assert truncated is True
+
+
+def test_linkage_scan_ignores_unresolved_or_missing_manifest_classes():
+    targets, truncated = apk_dex._select_linkage_scan_targets(
+        ["com.example.TunnelService"],
+        [
+            {"resolved_class_name": None, "defined_in_dex": False},
+            {"resolved_class_name": "com.example.Missing", "defined_in_dex": False},
+        ],
+    )
+    assert targets == ["com.example.TunnelService"]
+    assert truncated is False
