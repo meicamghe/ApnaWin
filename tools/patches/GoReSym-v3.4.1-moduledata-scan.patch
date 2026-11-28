@@ -2,7 +2,7 @@ diff --git a/objfile/elf.go b/objfile/elf.go
 index 0000000..1111111 100644
 --- a/objfile/elf.go
 +++ b/objfile/elf.go
-@@ -298,6 +298,33 @@ func (f *elfFile) pcln() (candidates <-chan PclntabCandidate, err error) {
+@@ -298,3 +298,37 @@
  	return candidates, nil
  }
  
@@ -40,14 +40,13 @@ index 0000000..1111111 100644
 +	return -1
 +}
 +
- func (f *elfFile) moduledata_scan(pclntabVA uint64, is64bit bool, littleendian bool, ignorelist []uint64) (candidate *ModuleDataCandidate, err error) {
-@@ -304,7 +331,6 @@ func (f *elfFile) moduledata_scan(pclntabVA uint64, is64bit bool, littleendian bool, ignorelist []uint64) (candidate *ModuleDataCandidate, err error) {
+@@ -304,5 +338,4 @@
  	var secStart uint64
  	var moduledata []uint8
  	var moduledataVA uint64
 -scan:
  	for _, sec := range f.elf.Sections {
-@@ -335,16 +361,9 @@ scan:
+@@ -335,16 +368,8 @@
 -		moduledata_idx := bytes.Index(data, pclntabVA_bytes)
 +		moduledata_idx := findModuleDataOffset(data, pclntabVA_bytes, sec.Size, sec.Addr, ignorelist)
  		if moduledata_idx != -1 && moduledata_idx < int(sec.Size) {
