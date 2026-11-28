@@ -92,7 +92,7 @@ def test_rejects_ambiguous_overlapping_load_mapping():
     # Add a second overlapping PT_LOAD header; the table must not be read from
     # an arbitrary first matching segment.
     struct.pack_into("<IIQQQQQQ", data, 64 + 56, 1, 5, 0x100, 0x1000, 0, 0x1000, 0x1000, 0x1000)
-    struct.pack_into("<H", data, 64 + 40, 56)
-    struct.pack_into("<H", data, 64 + 44, 2)
+    struct.pack_into("<H", data, 54, 56)
+    struct.pack_into("<H", data, 56, 2)
     with pytest.raises(ValueError, match="unique file-backed"):
         recover_go_pclntab(bytes(data), 0x1100, allow_stomped_magic=True)
