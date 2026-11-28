@@ -744,3 +744,43 @@ def test_redacted_http_request_summary_exposes_routing_fields_without_query_or_l
     assert "SNI=front.example.test" in summary
     assert "do-not-log" not in summary
     assert "opaque-token" not in summary
+
+
+def test_cloudfront_403_reports_host_and_redacted_request_context():
+    def server(server_socket):
+        server_socket.recv(4096)
+        server_socket.sendall(
+            b"HTTP/1.1 403 Forbidden\\r\\n"
+            b"Server: CloudFront\\r\\n"
+            b"X-Cache: Error from cloudfront\\r\\n"
+            b"Content-Length: 0\\r\\n\\r\\n"
+        )
+        server_socket.close()
+
+    client, worker = _socket_pair_factory(server)
+    connector = ApnaPayloadSocketConnector(
+        socket_factory=lambda address, timeout: client
+    )
+    config = PayloadSocketConfig(
+        mode=PayloadSocketMode.HTTP_PROXY,
+        connect_host="front.example.test",
+        connect_port=80,
+        target_host="ssh.example.test",
+        target_port=1194,
+        payload=(
+            "GET /opaque-user-token-1234567890?access_token=do-not-log HTTP/1.1[crlf]"
+            "Host: [cf][crlf][crlf]"
+        ),
+    )
+    with pytest.raises(PayloadTransportError) as caught:
+        connector.connect(config)
+
+    message = str(caught.value)
+    assert "request=GET /<redacted> HTTP/1.1" in message
+    assert "Host=front.example.test" in message
+    assert "target=ssh.example.test:1194" in message
+    assert "access_token" not in message
+    assert "do-not-log" not in message
+    assert caught.value.stage == "http_proxy"
+    worker.join(timeout=1)
+    assert client.fileno() == -1
