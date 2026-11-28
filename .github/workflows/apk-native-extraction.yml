@@ -97,6 +97,7 @@ jobs:
             done
           } > analysis/apk-native-inventory.txt
 
+          python3 tools/inventory_apk_native.py APNA-APKs/*.apk --output analysis/native-elf-inventory.json
 
       - name: Inspect ELF and Go metadata
         shell: bash
