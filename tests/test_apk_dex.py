@@ -838,11 +838,11 @@ def test_dex_loader_does_not_link_a_path_literal_from_an_unrelated_register():
 
 def test_linkage_candidate_filter_includes_udp_quic_and_loader_classes():
     output = (
-        "C d 2 1 40 com.example.udp.NativeBridge\\n"
-        "C d 2 1 40 com.example.quic.Transport\\n"
-        "C d 2 1 40 com.example.hysteria.Client\\n"
-        "C d 2 1 40 com.example.DynamicLoader\\n"
-        "C d 2 1 40 com.example.UnrelatedScreen\\n"
+        "C d 2 1 40 com.example.udp.NativeBridge\n"
+        "C d 2 1 40 com.example.quic.Transport\n"
+        "C d 2 1 40 com.example.hysteria.Client\n"
+        "C d 2 1 40 com.example.DynamicLoader\n"
+        "C d 2 1 40 com.example.UnrelatedScreen\n"
     )
     _count, candidates = apk_dex.parse_defined_classes(output)
     assert candidates == [
