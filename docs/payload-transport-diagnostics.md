@@ -44,13 +44,15 @@ the mode default.
 
 ## Failure classification
 
-- `socket.gaierror`: DNS resolution failed before TCP. No HTTP request, TLS
-  handshake, SSH banner or SSH key exchange has happened.
-- `ConnectionRefusedError`, timeout, or other socket errors: TCP/network
-  stage failure. They are not SSH key-exchange failures.
-- `ssl.SSLCertVerificationError`: certificate-chain or hostname validation
-  failure during TLS. Do not relabel it as SSH and do not silently disable
-  certificate verification.
+- `socket.gaierror`: stage `dns`; resolution failed before TCP. No HTTP
+  request, TLS handshake, SSH banner or SSH key exchange has happened.
+- `ConnectionRefusedError`, timeout, or other socket errors: stage `tcp`;
+  they are not SSH key-exchange failures.
+- `ssl.SSLCertVerificationError` and other `ssl.SSLError`: stage `tls`;
+  certificate-chain, hostname/SNI or handshake failure. Do not relabel these
+  as SSH and do not silently disable certificate verification.
+- HTTP status and response parsing failures: stage `http_proxy`.
+- A malformed or rejected RFC 6455 upgrade after HTTP 101: stage `websocket`.
 - Other `ssl.SSLError`: TLS handshake failure, before HTTP/SSH.
 - HTTP 3xx: proxy redirect. It is reported but not followed because changing
   the request target can change provider routing.
@@ -65,10 +67,15 @@ the mode default.
 
 The host-key probe now raises `ApnaPayloadTransportProbeError` for
 `PayloadTransportError` failures and retains `ApnaHostKeyProbeError` for
-SSH negotiation failures. The typed `stage` field is `payload_transport`
-or `ssh_key_exchange`. Redacted payload diagnostics are preserved up to a
-bounded length so CloudFront response metadata and request routing context are
-not cut off at the former short SSH exception limit.
+SSH negotiation failures. The host-key error's `stage` field is `payload_transport` or
+`ssh_key_exchange`; payload-stage errors additionally expose
+`transport_stage` as `dns`, `tcp`, `tls`, `http_proxy`, `websocket`
+or `transport`. The lower-level `PayloadTransportError.stage` carries the
+same transport-stage value. These typed errors are preserved through the SSH
+session, tunnel session and tunnel engine when rollback succeeds. Redacted
+payload diagnostics are preserved up to a bounded length so CloudFront
+response metadata and request routing context are not cut off at the former
+short SSH exception limit.
 
 ## Current user-provided observations (2026-11-28)
 
