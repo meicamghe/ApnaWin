@@ -1,4 +1,4 @@
-""""Validated, transport-neutral connection profile model."""
+"""Validated, transport-neutral connection profile model."""
 
 import ipaddress
 import re
@@ -88,4 +88,3 @@ class ConnectionProfile:
             raise TypeError("Endpoint port must be an integer")
         if not 1 <= self.endpoint_port <= 65535:
             raise ValueError("Endpoint port must be between 1 and 65535")
-"
