@@ -75,8 +75,8 @@ _MARKERS = {
     },
     "transport_dependencies": {
         "quic_go": re.compile(rb"quic-go|quicgo", re.I),
-        "pion_dtls": re.compile(rb"pion[/_-]dtls|github\\.com/pion/dtls", re.I),
-        "txthinking_socks5": re.compile(rb"txthinking[/_-]socks5|github\\.com/txthinking/socks5", re.I),
+        "pion_dtls": re.compile(rb"pion[/_-]dtls|github\.com/pion/dtls", re.I),
+        "txthinking_socks5": re.compile(rb"txthinking[/_-]socks5|github\.com/txthinking/socks5", re.I),
         "goproxy": re.compile(rb"goproxy", re.I),
         "routedns": re.compile(rb"routedns", re.I),
         "tproxy": re.compile(rb"tproxy", re.I),
