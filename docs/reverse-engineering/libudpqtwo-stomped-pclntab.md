@@ -208,3 +208,36 @@ A separate regression-tested fix should iterate subsequent matches within the
 same section after an ignored candidate. Keep the existing section-boundary
 check and preserve the concatenated-section behavior. Do not combine this
 scanner fix with the guarded ftab fallback until each has isolated tests.
+
+
+## Upstream scanner status rechecked — 2026-11-28
+
+The independent moduledata scanner limitation was rechecked against both the
+GoReSym v3.4.1 tag (commit 722897e) and the current upstream master commit
+fa3f0577e6f5d5692cf98348ac512dec52bbc04b. Both versions still implement
+the same first-match behavior in elfFile.moduledata_scan:
+
+1. bytes.Index(data, pclntabVA_bytes) returns only the first pointer match
+   in the current section's concatenated data.
+2. If that match is present in ignorelist, continue scan jumps to the
+   outer section loop, abandoning the rest of the current section.
+3. Any later valid moduledata pointer occurrence in that same section is
+   therefore never considered during that scan attempt.
+
+This confirms that the limitation is still present upstream; it is not an
+ApnaWin-specific patch regression. It remains independent of the stomped
+pclntab/ftab fallback. A narrow fix should iterate successive matches with a
+moving byte offset inside the current section, preserve the existing
+moduledata_idx < int(sec.Size) section-boundary guard, and move to the next
+section only after exhausting the current one.
+
+Required regression cases for the GoReSym-side patch:
+
+- First occurrence is ignored and a second occurrence in the same section is
+  returned.
+- First occurrence is valid and remains the selected candidate.
+- Multiple ignored occurrences are skipped without abandoning the section.
+- No candidate in any section returns the existing not-found error.
+
+No GoReSym source has been modified in the ApnaWin repository, and no recovered
+symbol output is claimed from this source review.
