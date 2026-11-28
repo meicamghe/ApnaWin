@@ -243,3 +243,8 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - Updated the ELF32 and ELF64 expected dictionaries to include the zero-entry/no-interpreter shared_object_candidate classification.
 - Test-only correction committed as 8307b504b5c4752ce66426a82e194563e8220309; a fresh PR validation is pending.
 - The run did not reach Windows packaging; build-windows remained skipped by the reverse-engineering gate. No APK extraction artifact or Go symbol recovery is claimed.
+
+### ELF execution-model correction verified — 2026-11-28
+
+- GitHub Actions run [46108752727](https://github.com/meicamghe/ApnaWin/actions/runs/46108752727) passed on PR merge ref containing head 8307b504b5c4752ce66426a82e194563e8220309: **939 passed, 1 skipped, 1 warning**.
+- This confirms the ELF32/ELF64 JNI fixture expectations now include the new execution-model fields. The Windows packaging job was skipped by design; this was a test-suite run, not a Windows build.
