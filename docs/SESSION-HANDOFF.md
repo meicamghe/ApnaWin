@@ -658,3 +658,24 @@ Ported from `vpn/dual-stack-egress-readiness`:
 - If a critical input is missing, identify it precisely (e.g. authorized APNA test profile/host-key evidence or ability to run the local test suite), not a broad questionnaire.
 - When the user says “چک”, check the active branch's actual latest state and continue the task; do not repeat this handoff verbatim.
 - When user says “ادامه بده / مسیر را برو جلو”, perform concrete repo/tool work in this turn and report only verified changes and blockers.
+
+
+## HTTP Proxy / CloudFront and TLS Direct diagnostics — 2026-11-28
+
+- Added a typed `ApnaPayloadTransportProbeError` for DNS/TCP/TLS/HTTP/WebSocket
+  setup failures before SSH starts. `ApnaHostKeyProbeError` now remains the
+  SSH negotiation-stage error. Both expose a `stage` value.
+- The host-key probe preserves bounded, redacted `PayloadTransportError`
+  detail (up to 1600 characters) so HTTP 403 edge metadata and request
+  context are not truncated into an ambiguous SSH error.
+- Added regression cases for DNS failure, TLS certificate failure and
+  CloudFront HTTP 403 at the payload-transport stage.
+- Added [payload-transport-diagnostics.md](payload-transport-diagnostics.md)
+  documenting the four socket modes, endpoint/SNI/HTTP/SSH stage boundaries,
+  current mapper behavior, safe error classification and live acceptance gates.
+- These changes are committed but have **not** been run through pytest or
+  GitHub Actions in this session. No Windows build or CI was triggered.
+- No live CloudFront/TLS Direct acceptance is claimed. DNS failures still
+  require a functioning resolver and a resolvable provider endpoint; HTTP 403
+  still requires the provider-authorized catalog payload and matching edge
+  policy. Do not guess Host/SNI/path values or weaken TLS verification.
