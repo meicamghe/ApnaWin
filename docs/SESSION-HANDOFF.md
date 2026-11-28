@@ -420,3 +420,31 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - GitHub Actions run [46123931854](https://github.com/meicamghe/ApnaWin/actions/runs/46123931854) passed on head `e125dfdbcf8c5ff9d9c249053573743c3ca3cd09`: **975 passed, 1 skipped, 1 warning**. Windows packaging remained skipped.
 - The GoReSym v3.4.1 patch file has normalized unified-diff headers and four hunk counts matching their declared sizes. It remains prepared only; it has not been applied to upstream GoReSym or validated against APNA's binary.
 - The manual APK extraction workflow has not been dispatched. No fresh native inventory/fingerprint artifact or Go symbol recovery is claimed. PR #8 remains open and unmerged.
+
+
+## Parallel reverse-engineering update — 2026-11-28
+
+- DEX smali linkage now also tracks direct `new-array` allocations of
+  `[Ljava/lang/String;` and literal `aput-object` writes into the same
+  register. It reports only allowlisted native-library basenames for
+  `Runtime.exec(String[])` / `ProcessBuilder(String[])` argument matching.
+- The array tracker is bounded by **256 writes per array**, including
+  duplicate writes. Register overwrites invalidate the tracked array and its
+  write counter. Non-string arrays, aliases, `move-object`, computed values,
+  reflection and unresolved register ranges are not followed.
+- Tests cover direct array construction, non-string arrays, array-register
+  overwrite, multiple literal values, and the 256-write bound including
+  repeated identical values.
+- GoReSym v3.4.1 patch review found and fixed a missing closing brace in the
+  fifth section-boundary regression test. All four unified-diff hunk counts
+  now match; all five embedded Go tests have balanced braces. A Python
+  regression test now validates patch hunk counts and completeness.
+- GitHub Actions run [46125152362](https://github.com/meicamghe/ApnaWin/actions/runs/46125152362)
+  passed on code head `984b5a764913319dd863615edf28a2d66f5c4dd6`:
+  **980 passed, 1 skipped, 1 warning**. Windows packaging remained skipped.
+- A documentation/test-only follow-up commit adds the GoReSym patch artifact
+  validator. The patch itself remains unapplied to upstream GoReSym and has
+  not been tested against APNA's `libudpqtwo.so`; no Go symbols are claimed
+  recovered. The manual native extraction workflow remains undispatched.
+- PR #8 remains open and unmerged. No Windows/Linux build, Android build,
+  connection activation, or routing implementation was performed.
