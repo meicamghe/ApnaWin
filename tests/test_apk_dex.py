@@ -496,3 +496,19 @@ def test_invoke_range_calls_are_counted_but_not_mislinked():
     assert row["runtime_exec_library_basenames"] == []
     assert row["system_load_library_names"] == []
     assert row["native_library_literals"] == ["libactual.so", "libdecoy.so"]
+
+def test_parse_defined_classes_includes_liapp_protector_class():
+    count, candidates = apk_dex.parse_defined_classes(
+        "C d 1 1 20 com.liapp.x\n"
+    )
+    assert count == 1
+    assert candidates == ["com.liapp.x"]
+
+
+def test_linkage_scan_prioritizes_liapp_protector_class():
+    candidates = [f"com.example.Candidate{i:03d}" for i in range(80)]
+    candidates.append("com.liapp.x")
+    targets, truncated = apk_dex._select_linkage_scan_targets(candidates, [])
+    assert targets[0] == "com.liapp.x"
+    assert len(targets) == apk_dex._MAX_LINKAGE_CLASSES
+    assert truncated is True
