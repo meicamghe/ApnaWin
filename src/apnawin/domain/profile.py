@@ -1,4 +1,4 @@
-"""Validated, transport-neutral connection profile model."""
+""""Validated, transport-neutral connection profile model."""
 
 import ipaddress
 import re
@@ -45,6 +45,9 @@ class Transport(str, Enum):
     XRAY = "xray"
     OPENVPN = "openvpn"
     SOCKS = "socks"
+    # Read-only compatibility for profiles created by earlier ApnaWin builds.
+    # SSH is intentionally not enabled as a connection backend.
+    APNA_SSH = "apna_ssh"
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,3 +87,4 @@ class ConnectionProfile:
             raise TypeError("Endpoint port must be an integer")
         if not 1 <= self.endpoint_port <= 65535:
             raise ValueError("Endpoint port must be between 1 and 65535")
+"
