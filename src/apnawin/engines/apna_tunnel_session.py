@@ -12,7 +12,7 @@ import socket
 from dataclasses import dataclass
 from typing import Callable
 
-from apnawin.engines.apna_payload_socket import PayloadSocketConfig
+from apnawin.engines.apna_payload_socket import PayloadSocketConfig, PayloadTransportError
 from apnawin.engines.apna_ssh_session import ApnaSshConfig, ApnaSshSession
 from apnawin.engines.socks5_gateway import Socks5Gateway, Socks5GatewayConfig
 from apnawin.engines.udpgw_stream import (
@@ -206,7 +206,7 @@ class ApnaTunnelSession:
                     f"APNA transport startup failed: {exc}; cleanup also failed: "
                     + "; ".join(str(item) for item in cleanup_errors)
                 ) from exc
-            if isinstance(exc, (ValueError, TypeError, ApnaTunnelSessionError)):
+            if isinstance(exc, (ValueError, TypeError, ApnaTunnelSessionError, PayloadTransportError)):
                 raise
             raise ApnaTunnelSessionError(f"APNA transport startup failed: {exc}") from exc
 
