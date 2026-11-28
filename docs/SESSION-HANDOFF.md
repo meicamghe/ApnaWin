@@ -395,3 +395,9 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
   This lets the bounded scan record readable LIAPP loader callsites without
   attempting to decrypt or bypass protected DEX. A regression test covers
   both candidate inclusion and priority under the 64-class scan cap.
+
+- Final CI for this batch: run [46118934143](https://github.com/meicamghe/ApnaWin/actions/runs/46118934143)
+  passed on head `7ac87797161b358aad4056000d1d24dbec16d57f`: **967 passed,
+  1 skipped, 1 warning**. The Windows build job remains skipped by the
+  reverse-engineering gate. This includes the new LIAPP candidate/priority
+  tests and invoke-range false-link regression test.
