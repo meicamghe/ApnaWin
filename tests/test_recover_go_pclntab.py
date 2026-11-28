@@ -25,8 +25,8 @@ def _synthetic_go_elf(*, magic: int = 0x12345678) -> bytes:
     data[pclntab_offset:pclntab_offset + len(header)] = header
     data[pclntab_offset + 0x60:pclntab_offset + 0x60 + 24] = b"main.main\0runtime.goexit\0"
     struct.pack_into("<IIIII", data, pclntab_offset + 0xC0, 0, 0xE0, 0x10, 0xF0, 0x20)
-    struct.pack_into("<Ii", data, pclntab_offset + 0xE0, 0, 0)
-    struct.pack_into("<Ii", data, pclntab_offset + 0xF0, 0x10, 10)
+    struct.pack_into("<Ii", data, pclntab_offset + 0xC0 + 0xE0, 0, 0)
+    struct.pack_into("<Ii", data, pclntab_offset + 0xC0 + 0xF0, 0x10, 10)
     return bytes(data)
 
 
@@ -64,6 +64,7 @@ def test_rejects_functab_outside_file_backed_load_segment():
 
 def test_rejects_non_monotonic_function_entries():
     data = bytearray(_synthetic_go_elf())
+    struct.pack_into("<I", data, 0x2C0, 0x10)
     struct.pack_into("<I", data, 0x2C8, 0)
-    with pytest.raises(ValueError, match="strictly increasing"):
+    with pytest.raises(ValueError, match="non-decreasing"):
         recover_go_pclntab(bytes(data), 0x1100, allow_stomped_magic=True)
