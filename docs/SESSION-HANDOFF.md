@@ -410,3 +410,13 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
   1 skipped, 1 warning**. The Windows build job remains skipped by the
   reverse-engineering gate. This includes the new LIAPP candidate/priority
   tests and invoke-range false-link regression test.
+
+
+## Final validation — 2026-11-28
+
+- Dynamic DEX loader reporting now retains the exact constructor type for `DexClassLoader`, `PathClassLoader`, and `InMemoryDexClassLoader`.
+- Direct literal colon-separated archive lists are reduced to allowlisted `.dex`, `.apk`, and `.jar` extensions only. Split aggregation distinguishes in-memory ByteBuffer callsites from file-backed loaders with unresolved literal archive extensions.
+- Regression coverage includes multiple archive extensions in one path, loader-type attribution, unrelated-register exclusion and in-memory constructor boundaries.
+- GitHub Actions run [46123931854](https://github.com/meicamghe/ApnaWin/actions/runs/46123931854) passed on head `e125dfdbcf8c5ff9d9c249053573743c3ca3cd09`: **975 passed, 1 skipped, 1 warning**. Windows packaging remained skipped.
+- The GoReSym v3.4.1 patch file has normalized unified-diff headers and four hunk counts matching their declared sizes. It remains prepared only; it has not been applied to upstream GoReSym or validated against APNA's binary.
+- The manual APK extraction workflow has not been dispatched. No fresh native inventory/fingerprint artifact or Go symbol recovery is claimed. PR #8 remains open and unmerged.
