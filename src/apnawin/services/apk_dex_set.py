@@ -76,6 +76,7 @@ def inspect_apk_dex_set(
                         "method_ordinal": method["method_ordinal"],
                         "library_literal": library,
                         "invocation_kinds": method["invocation_kinds"],
+                        "invocation_counts": method["invocation_counts"],
                     })
                 for library_name in method["system_load_library_names"]:
                     system_load_library_references.append({
