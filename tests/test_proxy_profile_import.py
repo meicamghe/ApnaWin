@@ -17,9 +17,9 @@ class FakeConfigStore:
         return name in self.records
 
     def save(self, name, payload):
-        if self.fail_on_save == name:
-            raise OSError("save failed")
         self.records[name] = payload
+        if self.fail_on_save == name:
+            raise OSError("save failed after write")
 
     def remove(self, name):
         if self.fail_on_remove:
@@ -95,8 +95,8 @@ def test_import_surfaces_failed_secret_record_cleanup():
             store,
             lambda _profiles: None,
         )
-    assert len(error.value.cleanup_errors) == 1
-    assert "Office" in store.records
+    assert len(error.value.cleanup_errors) == 2
+    assert set(store.records) == {"Office", "Backup"}
 
 
 def test_import_rejects_existing_orphaned_encrypted_config():
