@@ -354,8 +354,9 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
                     )
 
         # Track only arrays allocated as String[] in this method and populated
-        # through direct aput-object register operands. No aliases, indices,
-        # reflection or computed strings are followed.
+        # through direct aput-object register operands. Direct move-object aliases
+        # share the same bounded state; indices, reflection and computed strings
+        # are not followed.
         allocated_array = new_string_array.search(line)
         if allocated_array:
             array_register = allocated_array.group(1)
@@ -396,8 +397,8 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             })
             continue
 
-        # Preserve only direct object moves of already-known string literals.
-        # Array/object aliases and computed values remain intentionally unresolved.
+        # Preserve direct object moves of known string literals or tracked String[]
+        # references. Other object types and computed values remain unresolved.
         move_match = move_object.match(line)
         if move_match:
             destination, source = move_match.groups()
