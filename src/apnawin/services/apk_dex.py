@@ -195,7 +195,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
     path_dex_loader_registers = re.compile(
         r'\{([^}]*)\},\s*Ldalvik/system/(?:DexClassLoader|PathClassLoader);-><init>\(([^)]*)\)'
     )
-    dex_archive_suffix = re.compile(r"\.(dex|apk|jar)$", re.IGNORECASE)
+    dex_archive_suffix = re.compile(r"\.(dex|apk|jar)(?=$|:)", re.IGNORECASE)
     move_result_object = re.compile(r'move-result-object\s+(v[0-9]+|p[0-9]+)')
     destination_register = re.compile(r'^\s+[a-z][a-z0-9/-]*\s+(v[0-9]+|p[0-9]+)\s*,')
     safe_library_name = re.compile(r"^[A-Za-z0-9_]{1,120}$")
@@ -228,6 +228,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
                 "runtime_exec_library_basenames": sorted(current["runtime_exec_library_basenames"]),
                 "process_builder_library_basenames": sorted(current["process_builder_library_basenames"]),
                 "dynamic_dex_loader_path_extensions": sorted(current["dynamic_dex_loader_path_extensions"]),
+                "dynamic_dex_loader_types": sorted(current["dynamic_dex_loader_types"]),
             })
 
     for line in output.splitlines():
@@ -249,6 +250,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
                 "string_array_registers": {},
                 "pending_string_array": None,
                 "dynamic_dex_loader_path_extensions": set(),
+                "dynamic_dex_loader_types": set(),
             }
             continue
         if line == ".end method":
@@ -323,17 +325,22 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             # DexClassLoader and PathClassLoader take a String path as their
             # first constructor argument (register 1 after the receiver).
             # Record only a bounded file extension, never the path itself.
+            if "Ldalvik/system/DexClassLoader;-><init>(" in line:
+                current["dynamic_dex_loader_types"].add("DexClassLoader")
+            elif "Ldalvik/system/PathClassLoader;-><init>(" in line:
+                current["dynamic_dex_loader_types"].add("PathClassLoader")
+            elif "Ldalvik/system/InMemoryDexClassLoader;-><init>(" in line:
+                current["dynamic_dex_loader_types"].add("InMemoryDexClassLoader")
             path_match = path_dex_loader_registers.search(line)
             if path_match:
                 registers = _explicit_invocation_registers(path_match.group(1))
                 descriptor = path_match.group(2)
                 if len(registers) > 1 and descriptor.startswith("Ljava/lang/String;"):
                     path_literal = current["string_registers"].get(registers[1], "")
-                    suffix = dex_archive_suffix.search(path_literal)
-                    if suffix:
-                        current["dynamic_dex_loader_path_extensions"].add(
-                            suffix.group(1).lower()
-                        )
+                    current["dynamic_dex_loader_path_extensions"].update(
+                        suffix.group(1).lower()
+                        for suffix in dex_archive_suffix.finditer(path_literal)
+                    )
 
         array_match = string_array_registers.search(line)
         if array_match:
