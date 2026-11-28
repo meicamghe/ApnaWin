@@ -61,7 +61,8 @@ def test_inventory_rejects_duplicate_archive_names(tmp_path):
     apk = tmp_path / "duplicate.apk"
     with zipfile.ZipFile(apk, "w") as archive:
         archive.writestr("lib/arm64-v8a/libone.so", b"one")
-        archive.writestr("lib/arm64-v8a/libone.so", b"two")
+        with pytest.warns(UserWarning, match="Duplicate name"):
+            archive.writestr("lib/arm64-v8a/libone.so", b"two")
     with pytest.raises(ValueError, match="duplicate ZIP entry"):
         inventory_apk_native.inventory_native_libraries([apk])
 
