@@ -542,10 +542,15 @@ def test_filled_string_array_is_not_linked_after_intervening_instruction():
 def test_dynamic_dex_loader_links_only_exact_path_argument_and_reports_extension(
     loader, descriptor, path, expected
 ):
+    registers = (
+        "v0, v1, v2"
+        if loader == "PathClassLoader"
+        else "v0, v1, v2, v3, v4"
+    )
     output = (
         ".method private loadSecondary()V\\n"
         f'    const-string v1, "{path}"\\n'
-        f"    invoke-direct {{v0, v1, v2, v3, v4}}, Ldalvik/system/{loader};-><init>{descriptor}\\n"
+        f"    invoke-direct {{{{{registers}}}}}, Ldalvik/system/{loader};-><init>{descriptor}\\n"
         ".end method\\n"
     )
     report = apk_dex._parse_dex_linkage_evidence(output)
