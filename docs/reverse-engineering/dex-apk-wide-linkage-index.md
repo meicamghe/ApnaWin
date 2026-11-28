@@ -1,10 +1,13 @@
-# APK-wide DEX linkage index — implementation specification
+# APK split-set DEX linkage scan — implementation status and remaining index gap
 
 ## Purpose
 
-The current DEX inspector prioritizes a bounded set of candidate classes (including manifest services and classes whose names match networking/protector keywords). That is useful triage, but class-name selection can miss obfuscated classes whose methods call JNI or load secondary DEX files.
+The current implementation has two layers:
 
-The next DEX pass should index exact linkage callsites across every DEX file in the APK/split set, independent of class names.
+1. `apk_dex.py` scans a bounded set of class candidates, prioritizing manifest services and names matching networking/protector keywords. It tracks selected smali register flows for `System.loadLibrary`, `System.load`, `Runtime.exec`, `ProcessBuilder`, and secondary DEX loaders.
+2. `apk_dex_set.py` aggregates manifest and linkage evidence across every supplied base/split APK, joins manifest service classes to the APK in which each class is actually defined, and retains per-APK provenance.
+
+This is a useful split-set audit, but it is **not yet an exhaustive APK-wide callsite index**: class-name selection can miss obfuscated classes, and each APK's code scan remains capped at 64 selected classes.
 
 ## Required indexed references
 
@@ -19,13 +22,16 @@ The next DEX pass should index exact linkage callsites across every DEX file in 
 
 ## Output contract
 
-Each evidence row should preserve:
-- APK/split filename and DEX filename;
-- class descriptor and method signature;
-- exact referenced API and invocation kind;
-- bounded literal arguments, where statically recoverable;
-- register-flow classification (`direct-literal`, `move-alias`, `array-literal`, `computed-or-unknown`);
-- evidence source and parser/tool version.
+The current split-set output preserves:
+- APK/split filename and class name;
+- per-method ordinal within the exact class output;
+- invocation kind and call counts;
+- bounded library basenames and `System.loadLibrary` names when the argument register can be traced;
+- process command basenames where direct string or string-array arguments can be traced;
+- dynamic DEX loader type and allowlisted archive extension;
+- explicit notes where `ProcessBuilder.start()` is not correlated to a specific constructor instance.
+
+The future exhaustive index should additionally preserve DEX filename, stable method signature/descriptor and invoke offset, exact API reference, register-flow confidence, and parser/tool version.
 
 Do not emit complete method bodies, arbitrary string pools, credentials, filesystem paths or unrelated application data. Library names may be emitted only when they match a strict basename allowlist pattern.
 
@@ -43,4 +49,10 @@ Add fixtures for obfuscated class names, class names with no signal keywords, mu
 
 ## Current status
 
-This file specifies the next implementation slice. It does not claim that the APK-wide index has been implemented or run. Existing candidate-class linkage scanning remains heuristic and bounded.
+Implemented on `research/parallel-re-audit-20261128`:
+- bounded linkage scanning in `src/apnawin/services/apk_dex.py`;
+- cross-split aggregation in `src/apnawin/services/apk_dex_set.py`;
+- CLI in `tools/inspect_apk_dex_set.py`;
+- mocked regression tests in `tests/test_apk_dex.py` and `tests/test_apk_dex_set.py`.
+
+The implementation is static and bounded. The newly ported tests have **not yet been executed**. The exhaustive, class-name-independent APK-wide callsite index described above remains unimplemented. No result from this scanner should be presented as proof that a callsite executes at runtime.
