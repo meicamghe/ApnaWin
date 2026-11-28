@@ -6,6 +6,7 @@ selected Windows route to that probe target belongs to the ApnaWin adapter.
 """
 from __future__ import annotations
 
+import math
 import threading
 from pathlib import Path
 from typing import Callable
@@ -40,8 +41,13 @@ class XrayConnectionWorker(QThread):
         super().__init__(parent)
         if not isinstance(profile, ConnectionProfile):
             raise TypeError("profile must be a ConnectionProfile")
-        if not isinstance(poll_interval, (int, float)) or isinstance(poll_interval, bool) or poll_interval <= 0:
-            raise ValueError("poll_interval must be positive")
+        if (
+            not isinstance(poll_interval, (int, float))
+            or isinstance(poll_interval, bool)
+            or not math.isfinite(poll_interval)
+            or poll_interval <= 0
+        ):
+            raise ValueError("poll_interval must be a positive finite number")
         self.profile = profile
         self.helper_path = Path(helper_path)
         self.config_store = config_store
