@@ -180,3 +180,10 @@ Static AArch64 callsites confirm `main.executeRun` → `main.startXray` → `mai
 5. Implement the class-name-independent DEX callsite index; current 64-class candidate scan is only triage.
 
 Keep static evidence, source integration, and runtime proof as separate statuses. Do not claim the VPN is operational from symbol recovery alone.
+
+
+## Native library static audit — 2026-11-28 (additional pass)
+
+A separate report was added at `docs/reverse-engineering/native-library-static-audit-2026-11-28.md`. It records direct static inspection of the repository's `libbxdtcxfzx.so`, `libpdnsd.so`, `libtun2socks.so`, `libtoolChecker.so` and `libdatastore_shared_counter.so` bytes returned by GitHub. Confirmed observations: BadVPN tun2socks 1.999.127 command surface; pdnsd DNS/cache/EDNS/TCP-UDP code; RootBeer JNI exports; AndroidX DataStore shared counter exports; and LIAPP-associated loader indicators in `libbxdtcxfzx.so`. Git blob SHA-1 values are recorded as object IDs, not SHA-256 hashes.
+
+The current GitHub connector still does not return binary bytes for `base.apk`, `split_config.arm64_v8a.apk`, `libudpqtwo.so` or `libsalamander.so`. No fresh DEX run or Go pclntab analysis of those unavailable binaries is claimed. The bounded 64-class DEX scan and unexecuted tests remain as previously documented. No native binary was executed; no CI, Windows build, SSH change or merge was performed.
