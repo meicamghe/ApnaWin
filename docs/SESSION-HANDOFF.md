@@ -473,9 +473,12 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
   `new-array` support and no longer lists it as unsupported.
 - Latest source/test commits: `37643e6`, `c963daf`, `d1a8502`, `654fa2f`;
   preceding test/docs commits: `07b0a76`, `ff92fc5`.
-- CI for the final head must be checked before treating these changes as
-  validated. Earlier successful CI run `46125411246` applies only to head
-  `24cd91d8f3882bd41dff611ba5a5bf41df26dea9`, before these new regressions.
+- Final CI run [46125957108](https://github.com/meicamghe/ApnaWin/actions/runs/46125957108)
+  passed on head `f229f6b84cbf78dc18bbd99e429f6568f276e3a1`:
+  **986 passed, 1 skipped, 1 warning**. The Windows build job was skipped
+  by the reverse-engineering gate. An earlier run failed because four new
+  fixtures contained escaped literal `\\n` sequences instead of newline
+  characters; the fixtures were corrected and the final run passed.
 - No fresh APK extraction, native fingerprint artifact, GoReSym execution
   against the sample, Go symbol recovery, provider handshake, or live traffic
   validation is claimed. PR #8 remains open and unmerged; all product builds
