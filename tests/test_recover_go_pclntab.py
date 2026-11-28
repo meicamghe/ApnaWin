@@ -41,6 +41,32 @@ def test_recovers_names_and_checks_executable_entries():
     assert report["binary_executed"] is False
 
 
+
+def _fixture_with_zero_text_start() -> bytes:
+    data = bytearray(_fixture(magic=0xFFFFFFF1))
+    # PIE Go binaries can store textStart=0; resolve the base from ELF .text.
+    struct.pack_into("<Q", data, 0x218, 0)
+    struct.pack_into("<Q", data, 40, 0x1600)  # e_shoff
+    struct.pack_into("<HHH", data, 58, 64, 3, 2)  # e_shentsize, e_shnum, e_shstrndx
+    struct.pack_into(
+        "<IIQQQQIIQQ", data, 0x1600 + 64,
+        1, 1, 0x6, 0x3000, 0x1200, 0x400, 0, 0, 16, 0,
+    )
+    shstr = b"\\0.text\\0.shstrtab\\0"
+    data[0x1700:0x1700 + len(shstr)] = shstr
+    struct.pack_into(
+        "<IIQQQQIIQQ", data, 0x1600 + 128,
+        7, 3, 0, 0, 0x1700, len(shstr), 0, 0, 1, 0,
+    )
+    return bytes(data)
+
+
+def test_zero_text_start_uses_unique_executable_text_section():
+    report = recover_go_pclntab(_fixture_with_zero_text_start(), 0x1000)
+    assert report["text_start"] == "0x0"
+    assert report["resolved_text_start"] == "0x3000"
+    assert [f["name"] for f in report["functions"]] == ["main.main", "runtime.goexit"]
+
 def test_stomped_magic_requires_opt_in():
     with pytest.raises(ValueError, match="stomped-magic"):
         recover_go_pclntab(_fixture(), 0x1000)
