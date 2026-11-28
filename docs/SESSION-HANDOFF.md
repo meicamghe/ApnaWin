@@ -111,7 +111,7 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 ### Active research branch
 
 - Branch: `research/parallel-re-audit-20261128`
-- Based on `main`; currently 24 commits ahead, 0 behind.
+- Based on `main`; currently 28 commits ahead, 0 behind.
 - Research-only. Do not merge wholesale from `re/apk-native-extract`; only selectively ported DEX files were added.
 - No new Windows build, CI dispatch, SSH work, or PR merge.
 
