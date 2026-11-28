@@ -50,15 +50,17 @@ class XrayConnectionWorker(QThread):
         self._poll_interval = float(poll_interval)
         self._stop_requested = threading.Event()
         self._supervisor: XrayTunnelSupervisor | None = None
+        self.cleanup_failed = False
 
     def request_stop(self) -> None:
         """Request graceful helper shutdown; safe to call from the GUI thread."""
         self._stop_requested.set()
 
     def run(self) -> None:
-        supervisor = self._supervisor_factory(self.helper_path, self.config_store)
-        self._supervisor = supervisor
+        supervisor = None
         try:
+            supervisor = self._supervisor_factory(self.helper_path, self.config_store)
+            self._supervisor = supervisor
             pid = supervisor.start(self.profile)
             if self._stop_requested.is_set():
                 supervisor.stop()
@@ -83,16 +85,22 @@ class XrayConnectionWorker(QThread):
             self.disconnected.emit()
         except Exception as exc:
             cleanup_error = None
-            try:
-                supervisor.stop()
-            except Exception as cleanup_exc:
-                cleanup_error = cleanup_exc
+            if supervisor is not None:
+                try:
+                    supervisor.stop()
+                except Exception as cleanup_exc:
+                    cleanup_error = cleanup_exc
             message = f"{type(exc).__name__}: {exc}"
             if cleanup_error is not None:
+                self.cleanup_failed = True
+                # Retain the supervisor and its process handle. The helper also
+                # watches the desktop parent handle and will unwind on app exit.
+                self._supervisor = supervisor
                 message += (
                     f"; cleanup also failed ({type(cleanup_error).__name__}). "
-                    "Network state may require administrator recovery."
+                    "Do not reconnect; close ApnaWin to trigger helper parent-exit cleanup."
                 )
             self.failed.emit(message)
         finally:
-            self._supervisor = None
+            if not self.cleanup_failed:
+                self._supervisor = None
