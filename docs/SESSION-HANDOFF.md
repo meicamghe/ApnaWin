@@ -248,3 +248,10 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 
 - GitHub Actions run [46108752727](https://github.com/meicamghe/ApnaWin/actions/runs/46108752727) passed on PR merge ref containing head 8307b504b5c4752ce66426a82e194563e8220309: **939 passed, 1 skipped, 1 warning**.
 - This confirms the ELF32/ELF64 JNI fixture expectations now include the new execution-model fields. The Windows packaging job was skipped by design; this was a test-suite run, not a Windows build.
+
+### All-split native ELF inventory expansion — 2026-11-28
+
+- Added `tools/inventory_apk_native.py`: bounded in-memory SHA-256 and ELF metadata inspection for every `lib/<abi>/lib*.so` member across supplied APK splits. It records malformed/non-ELF members explicitly and never writes, loads or executes native code.
+- Added regression tests for multi-split enumeration, hash correctness, PIE/PT_INTERP classification, malformed ELF reporting, duplicate ZIP entries, aggregate-size bounds and empty input.
+- Wired `native-elf-inventory.json` into the manual APK extraction artifact and documented its fields and safety limits.
+- Validation is pending on the current branch head; no new APK artifact or runtime protocol acceptance is claimed.
