@@ -332,3 +332,11 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - Documented clean-checkout application and validation commands. This is a prepared upstream-tool patch only; it has not been applied to GoReSym or run against the APNA binary.
 - It fixes the independently confirmed ignored-first-match bug, not the separate unreadable ftab pointer in the suspected APNA moduledata candidate.
 - DEX linkage reports now include exact string-register correlation for System.loadLibrary and accurate invocation-site counts (not merely methods containing a call).
+
+
+## Latest validation of parallel static-analysis changes — 2026-11-28
+
+- GitHub Actions run [46111339042](https://github.com/meicamghe/ApnaWin/actions/runs/46111339042) passed on head 20fa3c581e89717728b82b8766e64d14b35255e3: **961 passed, 1 skipped, 1 warning**.
+- The new checks cover verified allowlisted native fingerprint scanning, exact System.loadLibrary register correlation, accurate per-invocation DEX counts, cross-split DEX/native linkage aggregation and the prepared GoReSym patch artifact's repository-side integrity.
+- The build-windows job was skipped by the reverse-engineering gate.
+- PR #8 remains open and unmerged. The manual APK extraction workflow has not been dispatched, so there is still no fresh native inventory artifact or new binary-level discovery.
