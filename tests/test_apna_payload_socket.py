@@ -445,6 +445,12 @@ def test_transport_errors_are_classified_with_endpoint_and_sni(error, expected):
         connector.connect(config)
     assert expected in str(caught.value)
     assert "front.example.test:443" in str(caught.value)
+    expected_stage = (
+        "dns" if isinstance(error, socket.gaierror)
+        else "tcp" if isinstance(error, ConnectionRefusedError)
+        else "tls"
+    )
+    assert caught.value.stage == expected_stage
     if config.mode is PayloadSocketMode.TLS_DIRECT:
         assert "SNI sni.example.test" in str(caught.value)
 
@@ -481,6 +487,7 @@ def test_cloudfront_403_identifies_edge_denial_without_accepting_it():
     assert "no SSH stream was established" in message
     assert "server=CloudFront" in message
     assert "x-cache=Error from cloudfront" in message
+    assert caught.value.stage == "http_proxy"
     worker.join(timeout=1)
     assert client.fileno() == -1
 
