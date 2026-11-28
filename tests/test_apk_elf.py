@@ -661,6 +661,8 @@ def test_inspect_elf_bytes_counts_only_exported_jni_symbol_names():
     assert result == {
         "elf_valid": True, "elf_class": 64, "endianness": "little",
         "machine": 183, "machine_name": "aarch64", "file_type": 3,
+        "entry_point": 0, "interpreter_present": False,
+        "execution_model": "shared_object_candidate",
         "dynamic_symbol_table_present": True, "dynamic_symbol_count": 4,
         "jni_exported_symbol_count": 1, "jni_onload_exported": True,
         "inspection_status": "complete",
@@ -915,6 +917,8 @@ def test_inspect_elf32_bytes_counts_exported_jni_function_symbols():
     assert result == {
         "elf_valid": True, "elf_class": 32, "endianness": "little",
         "machine": 3, "machine_name": "x86", "file_type": 3,
+        "entry_point": 0, "interpreter_present": False,
+        "execution_model": "shared_object_candidate",
         "dynamic_symbol_table_present": True, "dynamic_symbol_count": 4,
         "jni_exported_symbol_count": 1, "jni_onload_exported": True,
         "inspection_status": "complete",
