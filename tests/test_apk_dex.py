@@ -548,10 +548,10 @@ def test_dynamic_dex_loader_links_only_exact_path_argument_and_reports_extension
         else "v0, v1, v2, v3, v4"
     )
     output = (
-        ".method private loadSecondary()V\\n"
-        f'    const-string v1, "{path}"\\n'
-        f"    invoke-direct {{{{{registers}}}}}, Ldalvik/system/{loader};-><init>{descriptor}\\n"
-        ".end method\\n"
+        ".method private loadSecondary()V\n"
+        f'    const-string v1, "{path}"\n'
+        f"    invoke-direct {{{registers}}}, Ldalvik/system/{loader};-><init>{descriptor}\n"
+        ".end method\n"
     )
     report = apk_dex._parse_dex_linkage_evidence(output)
     row = report["methods_with_evidence"][0]
