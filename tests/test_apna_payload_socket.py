@@ -750,10 +750,10 @@ def test_cloudfront_403_reports_host_and_redacted_request_context():
     def server(server_socket):
         server_socket.recv(4096)
         server_socket.sendall(
-            b"HTTP/1.1 403 Forbidden\\r\\n"
-            b"Server: CloudFront\\r\\n"
-            b"X-Cache: Error from cloudfront\\r\\n"
-            b"Content-Length: 0\\r\\n\\r\\n"
+            b"HTTP/1.1 403 Forbidden\r\n"
+            b"Server: CloudFront\r\n"
+            b"X-Cache: Error from cloudfront\r\n"
+            b"Content-Length: 0\r\n\r\n"
         )
         server_socket.close()
 
