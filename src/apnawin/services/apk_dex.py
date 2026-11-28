@@ -199,6 +199,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             rows.append({
                 "method_ordinal": current["method_ordinal"],
                 "invocation_kinds": sorted(current["invocation_kinds"]),
+                "invocation_counts": dict(sorted(current["invocation_counts"].items())),
                 "native_library_literals": sorted(current["native_library_literals"]),
                 "system_load_library_names": sorted(current["system_load_library_names"]),
             })
@@ -212,6 +213,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             current = {
                 "method_ordinal": method_ordinal,
                 "invocation_kinds": set(),
+                "invocation_counts": {},
                 "native_library_literals": set(),
                 "system_load_library_names": set(),
                 "string_registers": {},
@@ -226,10 +228,13 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
 
         if "Ljava/lang/Runtime;->exec(" in line:
             current["invocation_kinds"].add("runtime_exec")
+            current["invocation_counts"]["runtime_exec"] = current["invocation_counts"].get("runtime_exec", 0) + 1
         if "Ljava/lang/ProcessBuilder;-><init>(" in line:
             current["invocation_kinds"].add("process_builder")
+            current["invocation_counts"]["process_builder"] = current["invocation_counts"].get("process_builder", 0) + 1
         if "Ljava/lang/System;->loadLibrary(" in line:
             current["invocation_kinds"].add("system_load_library")
+            current["invocation_counts"]["system_load_library"] = current["invocation_counts"].get("system_load_library", 0) + 1
             register_match = load_library_registers.search(line)
             if register_match:
                 registers = re.findall(r"\b(?:v|p)[0-9]+\b", register_match.group(1))
@@ -239,12 +244,14 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
                         current["system_load_library_names"].add(literal)
         if "Ljava/lang/System;->load(" in line:
             current["invocation_kinds"].add("system_load")
+            current["invocation_counts"]["system_load"] = current["invocation_counts"].get("system_load", 0) + 1
         if any(token in line for token in (
             "Ldalvik/system/DexClassLoader;-><init>(",
             "Ldalvik/system/PathClassLoader;-><init>(",
             "Ldalvik/system/InMemoryDexClassLoader;-><init>(",
         )):
             current["invocation_kinds"].add("dynamic_dex_loader")
+            current["invocation_counts"]["dynamic_dex_loader"] = current["invocation_counts"].get("dynamic_dex_loader", 0) + 1
 
         register_match = string_register.search(line)
         if register_match:
@@ -270,8 +277,8 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
         "dynamic_dex_loader": "dynamic_dex_loader_calls",
     }
     for row in rows:
-        for kind in row["invocation_kinds"]:
-            totals[kind_to_total[kind]] += 1
+        for kind, count in row["invocation_counts"].items():
+            totals[kind_to_total[kind]] += count
     return {
         **totals,
         "methods_with_evidence": rows,
