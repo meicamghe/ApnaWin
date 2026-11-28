@@ -86,7 +86,7 @@ def test_probe_completes_tls_http_only_after_dns_and_destination_routes_use_tun(
         def sendall(self, payload):
             self.request = payload
         def recv(self, _size):
-            return b"HTTP/1.1 204 No Content\\r\\nConnection: close\\r\\n\\r\\n"
+            return b"HTTP/1.1 204 No Content\r\nConnection: close\\r\\n\\r\\n"
 
     class Context:
         def __init__(self):
