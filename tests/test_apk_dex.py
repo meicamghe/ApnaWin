@@ -525,6 +525,27 @@ def test_new_string_array_ignores_non_string_array_and_unresolved_values():
     report = apk_dex._parse_dex_linkage_evidence(output)
     assert report["methods_with_evidence"] == []
 
+
+def test_new_string_array_tracking_is_bounded_to_256_writes():
+    lines = [
+        ".method private launchNative()V",
+        "    const/4 v0, 0x1",
+        "    new-array v2, v0, [Ljava/lang/String;",
+    ]
+    for index in range(257):
+        value_register = f"v{index + 3}"
+        lines.extend([
+            f'    const-string {value_register}, "libnative{index}.so"',
+            f"    aput-object {value_register}, v2, v0",
+        ])
+    lines.extend([
+        "    invoke-direct {v1, v2}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V",
+        ".end method",
+    ])
+    report = apk_dex._parse_dex_linkage_evidence("\n".join(lines))
+    row = report["methods_with_evidence"][0]
+    assert row["process_builder_library_basenames"] == []
+
 def test_invoke_range_calls_are_counted_but_not_mislinked():
     output = (
         ".method private launchRange()V\n"
