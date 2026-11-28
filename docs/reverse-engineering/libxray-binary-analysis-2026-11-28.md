@@ -25,6 +25,10 @@
 
 در جدول نمادهای پویا 123 نماد وجود دارد. `_start`، `main` و `main.main` دیده می‌شوند؛ `JNI_OnLoad` و نمادهای `Java_*` مشاهده نشدند. این شواهد با اجرای باینری به‌عنوان پردازه سازگار است، اما مسیر واقعی اجرای آن باید از DEX/Java و لاگ runtime تأیید شود.
 
+## منشأ فایل و تطبیق با APK
+
+در فهرست فعلی پوشه `APNA-APKs` در مخزن، فایل مستقلی با نام `libxray.so` وجود ندارد؛ این پوشه شامل `base.apk`، splitهای APK و کتابخانه‌های native دیگر است. بنابراین فایل آپلودشده در این گفتگو با SHA-256 بالا ثبت می‌شود، اما هنوز مسیر دقیق آن در ZIP داخلی base/split یا روش استخراجش به‌صورت مستقل تطبیق داده نشده است. نباید آن را بدون تطبیق hash و member path به یک APK خاص نسبت داد.
+
 ## منشأ و metadata ساخت
 
 - module path: `github.com/xtls/xray-core/main`
@@ -47,6 +51,23 @@
 | Built-in handlers | freedom، blackhole، DNS، dokodemo، loopback، TUN |
 | Transports | TCP، TLS، REALITY، WebSocket، gRPC، HTTP Upgrade، SplitHTTP/XHTTP، KCP، UDP، Hysteria |
 | Tunnel/network stack | Xray TUN، AndroidTun، gVisor network stack |
+
+تعداد رکوردهای تابع در namespaceهای اصلی (شمارش نام‌های pclntab، نه شمارش پروتکل‌های فعال):
+
+| Namespace | تعداد تابع |
+|---|---:|
+| VLESS | 189 |
+| VMess | 203 |
+| Trojan | 127 |
+| Shadowsocks | 281 |
+| Hysteria | 95 |
+| WireGuard | 181 |
+| Xray TUN | 60 |
+| REALITY transport | 154 |
+| SplitHTTP transport | 211 |
+| gRPC transport | 101 |
+| WebSocket transport | 62 |
+| KCP transport | 269 |
 
 نمونه‌های مشخص از نام توابع بازیابی‌شده:
 - `proxy/vless/encryption.(*ClientInstance).Handshake`
