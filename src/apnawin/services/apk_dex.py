@@ -184,11 +184,16 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
         r'\{([^}]*)\},\s*Ljava/lang/System;->load\('
     )
     runtime_exec_registers = re.compile(
-        r'\{([^}]*)\},\s*Ljava/lang/Runtime;->exec\('
+        r'\{([^}]*)\},\s*Ljava/lang/Runtime;->exec\(([^)]*)\)'
     )
     process_builder_registers = re.compile(
-        r'\{([^}]*)\},\s*Ljava/lang/ProcessBuilder;-><init>\('
+        r'\{([^}]*)\},\s*Ljava/lang/ProcessBuilder;-><init>\(([^)]*)\)'
     )
+    string_array_registers = re.compile(
+        r'filled-new-array(?:/range)?\s+\{([^}]*)\},\s*\[Ljava/lang/String;'
+    )
+    move_result_object = re.compile(r'move-result-object\s+(v[0-9]+|p[0-9]+)')
+    destination_register = re.compile(r'^\s+[a-z][a-z0-9/-]*\s+(v[0-9]+|p[0-9]+)\s*,')
     safe_library_name = re.compile(r"^[A-Za-z0-9_]{1,120}$")
     native_basename = re.compile(r"(lib[A-Za-z0-9_.+-]{1,120}\.so)$")
     rows: list[dict[str, Any]] = []
@@ -235,6 +240,8 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
                 "runtime_exec_library_basenames": set(),
                 "process_builder_library_basenames": set(),
                 "string_registers": {},
+                "string_array_registers": {},
+                "pending_string_array": None,
             }
             continue
         if line == ".end method":
@@ -251,10 +258,10 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             if register_match:
                 registers = re.findall(r"\b(?:v|p)[0-9]+\b", register_match.group(1))
                 # Runtime.exec is an instance call: register zero is the Runtime receiver.
-                for register in registers[1:2]:
-                    basename = native_basename.search(current["string_registers"].get(register, ""))
-                    if basename:
-                        current["runtime_exec_library_basenames"].add(basename.group(1))
+                if len(registers) > 1:
+                    current["runtime_exec_library_basenames"].update(
+                        _command_argument_libraries(current, registers[1], register_match.group(2), native_basename)
+                    )
         if "Ljava/lang/ProcessBuilder;-><init>(" in line:
             current["invocation_kinds"].add("process_builder")
             current["invocation_counts"]["process_builder"] = current["invocation_counts"].get("process_builder", 0) + 1
@@ -262,10 +269,10 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             if register_match:
                 registers = re.findall(r"\b(?:v|p)[0-9]+\b", register_match.group(1))
                 # ProcessBuilder constructors are instance calls; inspect only the first argument.
-                for register in registers[1:2]:
-                    basename = native_basename.search(current["string_registers"].get(register, ""))
-                    if basename:
-                        current["process_builder_library_basenames"].add(basename.group(1))
+                if len(registers) > 1:
+                    current["process_builder_library_basenames"].update(
+                        _command_argument_libraries(current, registers[1], register_match.group(2), native_basename)
+                    )
         if "Ljava/lang/System;->loadLibrary(" in line:
             current["invocation_kinds"].add("system_load_library")
             current["invocation_counts"]["system_load_library"] = current["invocation_counts"].get("system_load_library", 0) + 1
@@ -295,13 +302,38 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             current["invocation_kinds"].add("dynamic_dex_loader")
             current["invocation_counts"]["dynamic_dex_loader"] = current["invocation_counts"].get("dynamic_dex_loader", 0) + 1
 
+        array_match = string_array_registers.search(line)
+        if array_match:
+            registers = re.findall(r"\b(?:v|p)[0-9]+\b", array_match.group(1))
+            current["pending_string_array"] = sorted({
+                basename.group(1)
+                for register in registers
+                if (basename := native_basename.search(current["string_registers"].get(register, "")))
+            })
+            continue
+
+        result_match = move_result_object.search(line)
+        if result_match and current["pending_string_array"] is not None:
+            current["string_array_registers"][result_match.group(1)] = current["pending_string_array"]
+            current["pending_string_array"] = None
+            continue
+
         register_match = string_register.search(line)
         if register_match:
             register, literal = register_match.groups()
             current["string_registers"][register] = literal
+            current["string_array_registers"].pop(register, None)
             basename = native_basename.search(literal)
             if basename:
                 current["native_library_literals"].add(basename.group(1))
+            continue
+
+        destination_match = destination_register.match(line)
+        if destination_match:
+            destination = destination_match.group(1)
+            current["string_registers"].pop(destination, None)
+            current["string_array_registers"].pop(destination, None)
+            current["pending_string_array"] = None
 
     finish()
     totals = {
@@ -326,6 +358,21 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
         "methods_with_evidence": rows,
         "raw_smali_included": False,
     }
+
+
+
+def _command_argument_libraries(
+    current: dict[str, Any],
+    register: str,
+    descriptor: str,
+    native_basename: re.Pattern[str],
+) -> list[str]:
+    """Return safe library basenames from one direct string or filled string-array argument."""
+    if descriptor == "[Ljava/lang/String;":
+        return list(current["string_array_registers"].get(register, []))
+    literal = current["string_registers"].get(register, "")
+    match = native_basename.search(literal)
+    return [match.group(1)] if match else []
 
 
 def _select_linkage_scan_targets(
