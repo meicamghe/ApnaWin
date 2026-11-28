@@ -241,3 +241,33 @@ Required regression cases for the GoReSym-side patch:
 
 No GoReSym source has been modified in the ApnaWin repository, and no recovered
 symbol output is claimed from this source review.
+
+
+## Prepared GoReSym v3.4.1 scanner patch
+
+A narrowly scoped patch is now stored at
+`tools/patches/GoReSym-v3.4.1-moduledata-scan.patch`. It changes only the
+moduledata candidate search:
+
+- Searches successive pointer occurrences within the same section.
+- Skips ignored candidate VAs without abandoning the section.
+- Preserves the existing `sectionSize` boundary guard.
+- Returns the first non-ignored candidate, preserving first-valid-match
+  behavior.
+- Adds four regression cases: ignored first match, first valid match,
+  multiple ignored matches, and no match.
+
+To apply it in a clean GoReSym v3.4.1 checkout, copy the patch file into that
+checkout and run:
+
+```sh
+git apply --check GoReSym-v3.4.1-moduledata-scan.patch
+git apply GoReSym-v3.4.1-moduledata-scan.patch
+gofmt -w objfile/elf.go objfile/elf_moduledata_scan_test.go
+go test ./objfile
+```
+
+The patch is prepared but has **not** been applied to upstream GoReSym or
+validated against the APNA binary. It addresses the independently confirmed
+scanner bug only; it does not yet solve the separate unreadable ftab pointer
+in the suspected APNA moduledata candidate.
