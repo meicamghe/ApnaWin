@@ -251,11 +251,11 @@ moduledata candidate search:
 
 - Searches successive pointer occurrences within the same section.
 - Skips ignored candidate VAs without abandoning the section.
-- Preserves the existing `sectionSize` boundary guard.
+- Requires the full pointer signature to fit inside the current section, not merely its first byte.
 - Returns the first non-ignored candidate, preserving first-valid-match
   behavior.
-- Adds four regression cases: ignored first match, first valid match,
-  multiple ignored matches, and no match.
+- Adds five regression cases: ignored first match, first valid match,
+  multiple ignored matches, no match, and a signature crossing the section boundary.
 
 To apply it in a clean GoReSym v3.4.1 checkout, copy the patch file into that
 checkout and run:
