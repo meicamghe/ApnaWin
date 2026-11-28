@@ -84,3 +84,13 @@ References: [Xray VLESS outbound](https://xtls.github.io/en/config/outbounds/vle
 ### Hysteria2 Xray schema verification
 
 The Hysteria2 transport selector is emitted as `streamSettings.method: "hysteria"`. Authentication remains in `streamSettings.hysteriaSettings.auth`, while endpoint address and port remain in outbound `settings`. This follows the current [Project X transport schema](https://xtls.github.io/en/config/transport.html) and [Hysteria transport object](https://xtls.github.io/en/config/transports/hysteria.html).
+
+
+## Windows TUN config composition — 2026-11-28
+
+- Added `src/apnawin/services/xray_tun_config.py` to compose a strict dual-stack Windows TUN config from an already parsed VLESS, VMess, Trojan, Shadowsocks or Hysteria2 share link.
+- The generated inbound requires IPv4 and IPv6 default routes, explicit dual-stack DNS, automatic physical-interface binding for Xray's own server connection, and both WFP leak filters (`allexceptlan` and `dns`).
+- The parsed proxy is the sole/default outbound. No `freedom`/direct fallback is emitted, so a failed proxy cannot silently fall back to a direct WAN route.
+- Serialization is bounded UTF-8 JSON with non-finite values disabled. The builder re-runs the existing strict TUN policy validator before returning the config.
+- Tests cover all five supported outbound families, Hysteria2 auth/obfuscation preservation, no-direct-fallback behavior, default isolation and JSON round-trip.
+- This is configuration composition only. It does not verify credentials or server compatibility, persist secrets, start Xray, or prove end-to-end traffic. UI import and connection lifecycle integration remain pending.
