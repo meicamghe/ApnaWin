@@ -69,7 +69,7 @@ new file mode 100644
 index 0000000..2222222
 --- /dev/null
 +++ b/objfile/elf_moduledata_scan_test.go
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,36 @@
 +package objfile
 +
 +import "testing"
