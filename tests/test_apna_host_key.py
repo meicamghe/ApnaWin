@@ -155,7 +155,7 @@ def test_probe_keeps_payload_transport_failures_out_of_ssh_key_exchange_stage(
 ):
     class FailingConnector:
         def connect(self, config):
-            raise PayloadTransportError(transport_detail)
+            raise PayloadTransportError(transport_detail, stage=transport_stage)
 
     with pytest.raises(ApnaHostKeyProbeError) as error:
         scan_apna_ssh_host_key(_config(), connector=FailingConnector())
