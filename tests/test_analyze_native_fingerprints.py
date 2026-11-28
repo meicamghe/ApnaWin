@@ -83,3 +83,36 @@ def test_rejects_unsafe_manifest_relative_path(tmp_path):
 
     with pytest.raises(ValueError, match="unsafe row"):
         analyze_native_fingerprints(tmp_path)
+
+
+def test_reports_allowlisted_starudp_wire_types_config_and_dependencies(tmp_path):
+    payload = (
+        b"clientHello serverHello clientRequest serverResponse udpMessage "
+        b"sizeof=Auth sizeof=Host sizeof=Message sizeof=Data "
+        b"server protocol auth alpn server_name insecure socks5 tun up down "
+        b"obfs fast_open lazy_start quic-go github.com/pion/dtls "
+        b"github.com/txthinking/socks5 goproxy routedns tproxy "
+        b"provider-secret.example:443"
+    )
+    _fixture(tmp_path, payload=payload)
+    report = analyze_native_fingerprints(tmp_path)
+    groups = report["libraries"][0]["marker_groups"]
+
+    assert groups["starudp_wire_types"] == {
+        "client_hello": 1,
+        "server_hello": 1,
+        "client_request": 1,
+        "server_response": 1,
+        "udp_message": 1,
+        "sizeof_auth": 1,
+        "sizeof_host": 1,
+        "sizeof_message": 1,
+        "sizeof_data": 1,
+    }
+    assert groups["starudp_config_keys"]["server_name"] == 1
+    assert groups["starudp_config_keys"]["upload_rate"] == 1
+    assert groups["starudp_config_keys"]["download_rate"] == 1
+    assert groups["transport_dependencies"]["quic_go"] == 1
+    assert groups["transport_dependencies"]["pion_dtls"] == 1
+    assert groups["transport_dependencies"]["txthinking_socks5"] == 1
+    assert "provider-secret.example" not in json.dumps(report)
