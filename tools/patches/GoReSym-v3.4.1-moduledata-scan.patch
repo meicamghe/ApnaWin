@@ -1,0 +1,108 @@
+diff --git a/objfile/elf.go b/objfile/elf.go
+index 0000000..1111111 100644
+--- a/objfile/elf.go
++++ b/objfile/elf.go
+@@ -390,6 +390,33 @@ func (f *elfFile) pcln() (candidates <-chan PclntabCandidate, err error) {
+ 	return candidates, nil
+ }
+ 
++// findModuleDataOffset returns the first non-ignored occurrence of the
++// pclntab pointer that begins inside the current section. Unlike bytes.Index,
++// it continues searching the same section when an earlier occurrence is in
++// ignorelist. sectionAddr is the section's virtual address.
++func findModuleDataOffset(data, signature []byte, sectionSize, sectionAddr uint64, ignorelist []uint64) int {
++	if len(signature) == 0 {
++		return -1
++	}
++	searchFrom := 0
++	for searchFrom < len(data) {
++		relative := bytes.Index(data[searchFrom:], signature)
++		if relative < 0 {
++			return -1
++		}
++		idx := searchFrom + relative
++		if uint64(idx) >= sectionSize {
++			return -1
++		}
++		candidateVA := sectionAddr + uint64(idx)
++		ignored := false
++		for _, ignore := range ignorelist {
++			if ignore == candidateVA {
++				ignored = true
++				break
++			}
++		}
++		if !ignored {
++			return idx
++		}
++		searchFrom = idx + 1
++	}
++	return -1
++}
++
+ func (f *elfFile) moduledata_scan(pclntabVA uint64, is64bit bool, littleendian bool, ignorelist []uint64) (candidate *ModuleDataCandidate, err error) {
+ 	found := false
+ 
+@@ -450,19 +477,10 @@ scan:
+ 		}
+ 
+ 		// fall back to scanning for structure using address of pclntab, which is first value in struc
+-		moduledata_idx := bytes.Index(data, pclntabVA_bytes)
++		moduledata_idx := findModuleDataOffset(data, pclntabVA_bytes, sec.Size, sec.Addr, ignorelist)
+ 		if moduledata_idx != -1 && moduledata_idx < int(sec.Size) {
+ 			moduledata = data[moduledata_idx:]
+ 			moduledataVA = sec.Addr + uint64(moduledata_idx)
+ 			secStart = sec.Addr
+-
+-			// optionally consult ignore list, to skip past previous (bad) scan results
+-			for _, ignore := range ignorelist {
+-				if ignore == secStart+uint64(moduledata_idx) {
+-					continue scan
+-				}
+-			}
+-
+ 			found = true
+ 			break
+ 		}
+diff --git a/objfile/elf_moduledata_scan_test.go b/objfile/elf_moduledata_scan_test.go
+new file mode 100644
+index 0000000..2222222
+--- /dev/null
++++ b/objfile/elf_moduledata_scan_test.go
+@@ -0,0 +1,46 @@
++package objfile
++
++import "testing"
++
++func TestFindModuleDataOffsetSkipsIgnoredFirstMatch(t *testing.T) {
++	data := []byte("xPCLNyyPCLNz")
++	got := findModuleDataOffset(data, []byte("PCLN"), uint64(len(data)), 0x1000, []uint64{0x1001})
++	if got != 7 {
++		t.Fatalf("got offset %d, want 7", got)
++	}
++}
++
++func TestFindModuleDataOffsetKeepsFirstValidMatch(t *testing.T) {
++	data := []byte("xPCLNyyPCLNz")
++	got := findModuleDataOffset(data, []byte("PCLN"), uint64(len(data)), 0x1000, nil)
++	if got != 1 {
++		t.Fatalf("got offset %d, want 1", got)
++	}
++}
++
++func TestFindModuleDataOffsetSkipsMultipleIgnoredMatches(t *testing.T) {
++	data := []byte("xPCLNyPCLNzPCLN")
++	ignored := []uint64{0x1001, 0x1006}
++	got := findModuleDataOffset(data, []byte("PCLN"), uint64(len(data)), 0x1000, ignored)
++	if got != 11 {
++		t.Fatalf("got offset %d, want 11", got)
++	}
++}
++
++func TestFindModuleDataOffsetReturnsNotFound(t *testing.T) {
++	data := []byte("no candidate here")
++	got := findModuleDataOffset(data, []byte("PCLN"), uint64(len(data)), 0x1000, nil)
++	if got != -1 {
++		t.Fatalf("got offset %d, want -1", got)
++	}
++}
