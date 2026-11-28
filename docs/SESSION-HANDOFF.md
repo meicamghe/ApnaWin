@@ -534,3 +534,14 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
   passed on head `2b132cde198dbfd9f43f733529686d60df29243e`:
   **1002 passed, 1 skipped, 1 warning**. The Windows packaging job was
   skipped by the reverse-engineering gate.
+
+
+## APK native inventory path-safety follow-up — 2026-11-28
+
+- Inventory rejects symlinked APK inputs, repeated input paths, and ambiguous
+  duplicate basenames before scanning ZIP contents.
+- CLI report output rejects symlinks and any destination resolving to one of
+  the APK source files, preventing accidental source-archive overwrite.
+- Added regression tests, including platform-aware skips where symlink creation
+  is unavailable. This is static tooling hardening; no fresh APK artifact was
+  generated and no native library was executed.
