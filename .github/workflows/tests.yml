@@ -29,7 +29,10 @@ jobs:
       - name: Run unit tests
         run: python -m pytest -q
 
+  # Build a Windows validation artifact for PRs after the full test suite passes.
+  # This is a generic Xray client preview, not proof of APNA server compatibility.
   build-windows:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     needs: test
     runs-on: windows-latest
     steps:

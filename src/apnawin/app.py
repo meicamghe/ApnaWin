@@ -4,6 +4,7 @@ Tunnel connection remains disabled until the privileged lifecycle, route/DNS
 rollback, leak protection and end-to-end Windows acceptance tests pass.
 """
 
+import os
 import sys
 from html import escape
 from pathlib import Path
@@ -31,7 +32,12 @@ from PySide6.QtWidgets import (
 from apnawin.domain.profile import ConnectionProfile, Transport
 from apnawin.engines.xray_process import MAX_XRAY_CONFIG_BYTES
 from apnawin.storage.profile_store import load_profiles, save_profiles
+from apnawin.services.proxy_profile_import import (
+    ProxyProfileImportError,
+    import_proxy_profiles,
+)
 from apnawin.storage.xray_config_store import XrayConfigStore
+from apnawin.services.xray_connection_worker import XrayConnectionWorker
 
 
 def profile_file_path() -> Path:
@@ -134,6 +140,8 @@ class MainWindow(QMainWindow):
         self.remove_button.clicked.connect(self._remove_profile)
         self.import_button = QPushButton("Import…")
         self.import_button.clicked.connect(self._import_profiles)
+        self.import_share_links_button = QPushButton("Import server links…")
+        self.import_share_links_button.clicked.connect(self._import_share_links)
         self.export_button = QPushButton("Export…")
         self.export_button.clicked.connect(self._export_profiles)
         self.import_xray_config_button = QPushButton("Import Xray config…")
@@ -147,15 +155,19 @@ class MainWindow(QMainWindow):
         profile_actions.addWidget(self.edit_button)
         profile_actions.addWidget(self.remove_button)
         profile_actions.addWidget(self.import_button)
+        profile_actions.addWidget(self.import_share_links_button)
         profile_actions.addWidget(self.export_button)
         profile_actions.addWidget(self.import_xray_config_button)
         profile_actions.addStretch(1)
 
+        self._connection_worker: XrayConnectionWorker | None = None
+        self._connection_state = "disconnected"
         self.connect_button = QPushButton("Connect")
         self.connect_button.setEnabled(False)
         self.connect_button.setToolTip(
-            "Connection remains disabled until the UAC supervisor is wired into the UI and route/DNS, leak-protection and end-to-end VPN tests pass."
+            "Select an Xray profile with an encrypted TUN config and install ApnaWin under Program Files first."
         )
+        self.connect_button.clicked.connect(self._toggle_connection)
 
         layout = QVBoxLayout()
         layout.addWidget(heading)
@@ -182,6 +194,7 @@ class MainWindow(QMainWindow):
             self.profile_storage_writable = False
             self.add_button.setEnabled(False)
             self.import_button.setEnabled(False)
+            self.import_share_links_button.setEnabled(False)
             self.import_xray_config_button.setEnabled(False)
             self.status_label.setText(
                 "Profile storage is unavailable — editing is disabled to protect existing data."
@@ -242,6 +255,13 @@ class MainWindow(QMainWindow):
             self.profile_storage_writable
             and config_store_ok
             and profile.transport == Transport.XRAY
+        )
+        self.connect_button.setEnabled(
+            self._connection_worker is None
+            and config_store_ok
+            and profile.transport == Transport.XRAY
+            and has_xray_config
+            and self._installed_helper_path() is not None
         )
         details = (
             f"{profile.transport.value.upper()}  •  "
@@ -356,6 +376,195 @@ class MainWindow(QMainWindow):
         if self._save_profiles(updated):
             self._refresh_profiles(len(updated) - 1)
             self.status_label.setText(f"Imported {len(imported)} profile(s).")
+
+    def _import_share_links(self) -> None:
+        """Import standard Xray share links and persist their TUN configs with DPAPI."""
+        if not self.profile_storage_writable:
+            return
+        filename, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Import server links",
+            "",
+            "Server link lists (*.txt *.conf *.links);;Text files (*.txt);;All files (*)",
+        )
+        if not filename:
+            return
+        try:
+            with Path(filename).open("rb") as stream:
+                document = stream.read(1024 * 1024 + 1)
+            if len(document) > 1024 * 1024:
+                raise ValueError("Server-link document exceeds the 1 MiB limit")
+            imported = import_proxy_profiles(
+                document,
+                self.profiles,
+                self.xray_config_store,
+                lambda profiles: save_profiles(self.profiles_path, profiles),
+            )
+        except ProxyProfileImportError as exc:
+            if exc.cleanup_errors:
+                self.status_label.setText(
+                    "Share-link import failed; encrypted-config cleanup is incomplete. "
+                    "Do not retry until the local config store is inspected."
+                )
+                QMessageBox.critical(
+                    self,
+                    "Import cleanup incomplete",
+                    "The import failed and one or more encrypted records could not be removed. "
+                    "The affected records are retained; no credentials are shown.",
+                )
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Server-link import failed",
+                    "No profile batch was committed. Check the file and available disk space.",
+                )
+            return
+        except (OSError, TypeError, ValueError) as exc:
+            QMessageBox.warning(
+                self,
+                "Server-link import failed",
+                f"No profiles were imported. ({type(exc).__name__})",
+            )
+            return
+
+        self.profiles = [*self.profiles, *imported]
+        self._refresh_profiles(len(self.profiles) - 1)
+        self.status_label.setText(
+            f"Imported {len(imported)} server profile(s); Xray configs are encrypted for this Windows user. "
+            "Server compatibility has not yet been tested."
+        )
+
+    @staticmethod
+    def _installed_helper_path() -> Path | None:
+        """Return only the protected Program Files helper installation path."""
+        program_files = os.environ.get("ProgramFiles")
+        if not program_files:
+            return None
+        helper = Path(program_files) / "ApnaWin" / "ApnaWinElevator.exe"
+        return helper if helper.is_file() and not helper.is_symlink() else None
+
+    def _set_connection_controls(self, active: bool) -> None:
+        self.profile_list.setEnabled(not active)
+        buttons = (
+            self.add_button, self.edit_button, self.remove_button,
+            self.import_button, self.import_share_links_button,
+            self.export_button, self.import_xray_config_button,
+        )
+        if active:
+            for button in buttons:
+                button.setEnabled(False)
+            return
+        self.add_button.setEnabled(self.profile_storage_writable)
+        self.import_button.setEnabled(self.profile_storage_writable)
+        self.import_share_links_button.setEnabled(self.profile_storage_writable)
+        self.export_button.setEnabled(bool(self.profiles))
+        self._show_selected_profile(self.profile_list.currentRow())
+
+    def _toggle_connection(self) -> None:
+        worker = self._connection_worker
+        if worker is not None and worker.isRunning():
+            worker.request_stop()
+            self._connection_state = "stopping"
+            self.connect_button.setText("Stopping…")
+            self.connect_button.setEnabled(False)
+            self.status_label.setText("Disconnect requested — restoring network state…")
+            return
+
+        row = self.profile_list.currentRow()
+        if not 0 <= row < len(self.profiles):
+            return
+        profile = self.profiles[row]
+        if profile.transport != Transport.XRAY:
+            QMessageBox.warning(self, "Connect", "Only Xray profiles can use the Windows TUN engine.")
+            return
+        helper = self._installed_helper_path()
+        if helper is None:
+            QMessageBox.warning(
+                self, "ApnaWin helper not installed",
+                "Install ApnaWin from its extracted application folder using Install-ApnaWin.ps1 "
+                "as Administrator, then launch the installed ApnaWin.exe.",
+            )
+            return
+        if not self.xray_config_store.has_config(profile.name):
+            QMessageBox.warning(self, "Missing Xray config", "Import server links or an Xray TUN config first.")
+            return
+
+        worker = XrayConnectionWorker(
+            profile,
+            helper,
+            self.xray_config_store,
+            parent=self,
+        )
+        worker.connected.connect(self._on_connection_connected)
+        worker.failed.connect(self._on_connection_failed)
+        worker.disconnected.connect(self._on_connection_disconnected)
+        worker.lost.connect(self._on_connection_lost)
+        worker.finished.connect(self._on_connection_worker_finished)
+        self._connection_worker = worker
+        self._connection_state = "starting"
+        self._set_connection_controls(True)
+        self.connect_button.setText("Cancel")
+        self.connect_button.setEnabled(True)
+        self.status_label.setText("Starting elevated Xray helper and waiting for tunnel traffic verification…")
+        worker.start()
+
+    def _on_connection_connected(self, pid: int) -> None:
+        self._connection_state = "connected"
+        self.connect_button.setText("Disconnect")
+        self.connect_button.setEnabled(True)
+        self.status_label.setText(
+            f"Connected — HTTPS traffic verified through the ApnaWin tunnel (helper PID {pid})."
+        )
+
+    def _on_connection_failed(self, message: str) -> None:
+        self._connection_state = "failed"
+        self.connect_button.setText("Connect")
+        self.connect_button.setEnabled(False)
+        self.status_label.setText(f"Connection failed — {message}")
+
+    def _on_connection_disconnected(self) -> None:
+        self._connection_state = "disconnected"
+        self.status_label.setText("Disconnected — helper confirmed tunnel shutdown.")
+
+    def _on_connection_lost(self, exit_code: int) -> None:
+        self._connection_state = "lost"
+        self.status_label.setText(
+            f"Connection lost — elevated helper exited unexpectedly (code {exit_code})."
+        )
+
+    def _on_connection_worker_finished(self) -> None:
+        worker = self._connection_worker
+        if worker is not None and worker.cleanup_failed:
+            self._connection_state = "cleanup-error"
+            self.connect_button.setText("Cleanup required")
+            self.connect_button.setEnabled(False)
+            self.status_label.setText(
+                "Tunnel cleanup could not be confirmed. Do not reconnect. "
+                "Close ApnaWin so the elevated helper can detect parent exit and unwind."
+            )
+            return
+        self._connection_worker = None
+        if worker is not None:
+            worker.deleteLater()
+        self._set_connection_controls(False)
+        self.connect_button.setText("Connect")
+        self.connect_button.setEnabled(False)
+        self._refresh_profiles(self.profile_list.currentRow())
+
+    def closeEvent(self, event) -> None:
+        worker = self._connection_worker
+        if worker is not None and worker.isRunning():
+            worker.request_stop()
+            if not worker.wait(20000):
+                self.status_label.setText(
+                    "The tunnel helper is still stopping. Keep ApnaWin open until cleanup completes."
+                )
+                event.ignore()
+                return
+        # If cleanup failed, closing the desktop is the final recovery signal:
+        # the elevated helper owns a wait handle on this process and unwinds
+        # its Xray Job Object when the parent exits.
+        event.accept()
 
     def _import_xray_config(self) -> None:
         """Import a full-tunnel Xray JSON config and encrypt it with current-user DPAPI."""

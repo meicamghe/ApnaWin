@@ -44,7 +44,7 @@ candidate class names. It does not include method names, field names, bytecode,
 raw command output, URLs, credentials, or extracted files. Candidate matching
 is heuristic: a class name containing "vpn", "tunnel", "xray", "socks", "dns",
 "proxy", or related terms is a lead for later review, not proof of behavior.
-Obfuscated or dynamically loaded classes may not be detected.
+The known `com.liapp.*` protector package is also included as a candidate and its classes are prioritized for the bounded linkage scan, so readable LIAPP loader callsites can be counted without bypassing protected DEX. Obfuscated or dynamically loaded classes outside the readable DEX may not be detected.
 
 Both decoders invoke local SDK tooling with argument arrays, no shell, and a
 30-second timeout. Standard output and standard error are drained concurrently
@@ -79,8 +79,13 @@ the manifest name is aliased, obfuscated, or loaded through other mechanisms.
 ## Native library metadata and engine-name leads
 
 The safe ZIP inventory records bounded `.so` basenames, ABI labels and
-uncompressed sizes from entries matching `lib/<abi>/lib*.so`. It never reads
-or extracts their contents. The combined report includes per-ABI library
+uncompressed sizes from entries matching `lib/<abi>/lib*.so`. The manual
+native-extraction workflow additionally reads each matching member in bounded
+memory to hash it and inspect ELF headers; it does not write members to disk,
+load them, or execute them. Its `native-elf-inventory.json` output reports
+per-split/per-ABI hashes, ELF class, machine, entry point, interpreter presence,
+and a conservative execution-model candidate. Invalid ELF data is retained as
+a bounded per-file error rather than being mistaken for a valid library. The combined report includes per-ABI library
 counts and filename-only engine candidates.
 
 Candidate matching uses name-token boundaries rather than arbitrary substring
@@ -142,8 +147,9 @@ The combined report reads selected native-library members in bounded memory
 (no archive member is written to disk and no native code is executed). It
 parses ELF identification and section metadata for supported 32-bit and
 64-bit, little- or big-endian ELF layouts. It records machine architecture,
-file type, whether a dynamic symbol table is available, and counts of
-exported function symbols using the JNI-style `Java_...` naming convention and an exported function symbol named `JNI_OnLoad`. Data objects with those names are not counted as callable JNI entry points.
+file type, ELF entry-point address, whether a PT_INTERP segment is present,
+whether a dynamic symbol table is available, and counts of exported function
+symbols using the JNI-style `Java_...` naming convention and an exported function symbol named `JNI_OnLoad`. Data objects with those names are not counted as callable JNI entry points.
 Raw symbol names, symbol values, addresses, and binary contents are never
 included in the report. Per-library reads are capped at 64 MiB, aggregate
 reads at 256 MiB, analysis at 256 libraries, and each dynamic symbol table
@@ -155,6 +161,14 @@ ELF string-table section. The section-name string-table index is checked; refere
 must be in range and NUL-terminated. A missing section-name table
 (`SHN_UNDEF`) remains valid. `SHN_XINDEX` section-name indexes are rejected
 because their reserved index range exceeds this parser's 4096-section limit.
+
+A conservative `execution_model` hint distinguishes an ELF `ET_DYN`
+file with a nonzero entry point and a valid interpreter segment
+(`pie_executable_candidate`) from an `ET_DYN` file with no entry point and no
+interpreter (`shared_object_candidate`). Other combinations are
+`other_or_ambiguous`. These are structural candidates, not loader acceptance
+or runtime proof; a filename ending in `.so` does not prove that a file is a
+JNI library or that Java loads it through JNI.
 
 A matching exported `Java_...` name is evidence of a JNI-style export, not
 proof that a particular DEX native method resolves to it. An exported
@@ -370,3 +384,198 @@ their separate 16 MiB byte-size ceiling. These limits bound parser CPU work
 for untrusted APK-native ELF metadata; exceeding a limit classifies the
 library as invalid for this analysis and does not imply anything about
 Android loader acceptance.
+
+
+## Static DEX process and native-loader linkage scan
+
+The DEX inspector also examines a bounded set of network/service candidate
+classes (up to 64 per APK) using `apkanalyzer dex code --class`. It processes
+smali only in memory and emits allowlisted evidence grouped by anonymous
+method ordinal:
+
+- `Runtime.exec` calls, `ProcessBuilder` construction, and separate
+  `ProcessBuilder.start()` invocation counts;
+- `System.load` and `System.loadLibrary` calls;
+- `DexClassLoader`, `PathClassLoader`, and
+  `InMemoryDexClassLoader` construction;
+- literal native-library basenames matching `lib*.so`.
+
+Method names, descriptors, arbitrary strings, bytecode and raw smali are not
+included in the report. Native-library literals are correlated only to the
+method in which they appear; class-level co-presence is not promoted to a
+method-level link. The report marks whether the bounded candidate scan was
+truncated. A callsite is static evidence only: it does not prove execution,
+successful loading, process ownership, or traffic use. Protected/obfuscated
+DEX may remain unresolved without bypassing application protections.
+
+This is offline APK analysis. It does not require an Android device, install
+the APK, or create an Android version of ApnaWin.
+
+
+## Cross-split DEX and manifest correlation
+
+A base APK does not necessarily contain every class in an installed split
+package. To inspect all committed APK splits and locate manifest-declared VPN
+service classes across the complete set, run the split-set analyzer:
+
+Linux/macOS:
+
+```sh
+python3 tools/inspect_apk_dex.py APNA-APKs/*.apk > analysis/dex-split-report.json
+```
+
+PowerShell:
+
+```powershell
+$apks = Get-ChildItem .\APNA-APKs\*.apk | ForEach-Object FullName
+py -3 tools/inspect_apk_dex.py @apks > analysis\dex-split-report.json
+```
+
+The command requires the Android SDK's `apkanalyzer` on PATH, but does not
+install or execute the APK and does not require an Android device. It verifies
+that all readable split manifests agree on package name, gathers declared VPN
+services, inspects each split's DEX files, and reports which APK actually
+defines each service class. Candidate process/native-loader callsites are
+reported per APK. A service-class definition or method reference is static
+evidence only; it does not establish runtime invocation or successful loading.
+
+
+## All-library native protocol fingerprinting
+
+After extracting all native libraries with `tools/extract_apk_native.py`, run
+the allowlisted fingerprint analyzer:
+
+```sh
+python3 tools/analyze_native_fingerprints.py analysis/native-libs \
+  --output analysis/native-fingerprints.json
+```
+
+The analyzer first verifies every extracted library's relative path, size and
+SHA-256 against `native-libs/manifest.json`. It then counts only predefined
+protocol-family, Go-runtime and known-engine markers across every ABI and
+split. It does not emit arbitrary strings, credentials, raw binary data or
+code, and never loads or executes a native library. Marker hits are leads for
+manual correlation, not proof that a protocol is active or used by a specific
+service. Common transport words such as UDP/TCP/TLS are deliberately weaker
+evidence than protocol-specific fingerprints.
+
+
+The split-set DEX report builds explicit native-linkage indexes:
+`native_library_literal_references` records safe `lib*.so` literals found
+within a method, while `system_load_library_references` records the exact
+string register passed to `System.loadLibrary`. Its conventional
+`lib{name}.so` mapping is labeled as an Android API naming convention, not
+as a separately observed filename.
+
+The report also distinguishes exact argument-register correlations:
+`system_load_path_references` links a basename to the path argument of
+`System.load`; `runtime_exec_library_references` links a basename to the
+command argument of `Runtime.exec`; and
+`process_builder_library_references` links a basename to the first command
+argument of a `ProcessBuilder` constructor. The split-set report also
+aggregates `ProcessBuilder.start()` call counts by class/method; it does not
+claim that a particular constructor instance reaches a particular start call.
+Receiver registers are excluded for instance calls. These indexes are emitted only when a bounded direct
+string-register argument or a bounded String[] argument is observed. Arrays
+created by `filled-new-array` are associated with their destination only when
+the immediately following instruction is `move-result-object`; arrays created
+by `new-array` are tracked only through direct `aput-object` writes to the same
+register, with a 256-write cap. Direct `move-object`, `move-object/from16`, and `move-object/16` copies of
+known string literals and tracked String[] references are followed within the
+same method. Array aliases share one 256-write budget and are invalidated
+together when that budget is exceeded; values loaded from files, reflection,
+and obfuscated/protected code may remain unresolved. A callsite
+proves static argument linkage only, not that the method runs, the child
+starts, the library loads, or traffic uses it.
+
+## Exact DEX native-loader and process-launch linkage
+
+The optional DEX inspection also performs a bounded, in-memory scan of selected
+classes for exact invocation-site relationships. It records allowlisted
+invocation counts and correlates only the argument register passed to these
+APIs:
+
+- `System.loadLibrary(String)`: the exact argument register is matched to a
+  preceding string literal. The reported `lib<name>.so` mapping is the
+  Android API naming convention, not a literal binary path.
+- `System.load(String)`: the exact path argument register is matched to a
+  preceding string literal, and only a safe native-library basename is kept.
+- `Runtime.exec(String)` and `Runtime.exec(String[])`: the command argument
+  register is inspected, excluding the receiver register.
+- `ProcessBuilder(String[])`: the first constructor argument is inspected,
+  excluding the receiver register. Constructor and `start()` callsites are
+  counted separately; the scanner does not prove that a particular builder
+  instance reaches a particular `start()` call. A `String[]` created by a fully enumerated
+  `filled-new-array {v...}` instruction and immediately captured by
+  `move-result-object` is supported. A `new-array` String[] followed by direct
+  `aput-object` writes to the same register is also supported with a 256-write
+  cap. For either form, only safe library basenames from the exact array
+  argument are retained.
+
+For process-launch calls, the report keeps the library basename only when it
+is present in that exact argument value. An unrelated string elsewhere in the
+same method is not treated as a link. Cross-split aggregation preserves the
+APK split, class name, method ordinal, and evidence basis for each reference.
+The report does not expose arbitrary strings, method names, command arguments,
+paths, raw smali, or bytecode.
+
+This is intentionally a conservative partial data-flow analysis, not a full
+DEX interpreter. Invoke instructions using the compressed `invoke-*/range`
+register form are counted but deliberately excluded from argument correlation;
+expanding their register ranges is not yet implemented. It does **not** currently resolve `filled-new-array/range`,
+`general move chains beyond direct `move-object` aliases, reflection,
+dynamically generated commands, interprocedural values, or
+obfuscated/protected DEX. A missing reference therefore means “not established
+by this bounded scan,” not “the APK cannot load or launch that library.”
+Invocation evidence is static only and does not prove that the call executes,
+the process starts, or a native engine establishes a connection.
+
+The scan is optional and requires the local Android SDK `apkanalyzer` tool.
+It is static-only and does not require an Android device. It never loads or
+executes APK code.
+
+For a base APK plus all of its configuration/feature splits, pass every APK
+to the same CLI invocation. The tool aggregates service/class and native
+loader/process-launch references across the split set:
+
+```powershell
+py -3 tools/inspect_apk_dex.py `
+  .\APNA-APKs\base.apk `
+  .\APNA-APKs\split_config.arm64_v8a.apk `
+  .\APNA-APKs\split_config.de.apk `
+  .\APNA-APKs\split_config.en.apk `
+  .\APNA-APKs\split_config.fa.apk `
+  .\APNA-APKs\split_config.xxhdpi.apk `
+  --output .\analysis\dex-linkage.json
+```
+
+Use the actual APK filenames present in the sample; do not omit feature or
+ABI splits. With one APK the CLI emits the single-APK DEX report; with multiple
+inputs it emits the cross-split report. This command still requires local
+`apkanalyzer` and performs no Android-device or product-build operation.
+
+
+## Dynamic secondary-DEX loader callsites
+
+The bounded DEX linkage scan also counts constructor callsites for
+`DexClassLoader`, `PathClassLoader`, and `InMemoryDexClassLoader`.
+For the first two, when the first String path argument is a direct literal
+in the exact constructor argument register, the report retains the loader
+type and only allowlisted archive extensions (`.dex`, `.apk`, or `.jar`).
+Colon-separated archive lists are scanned for each extension, but no path or
+arbitrary string is emitted. `InMemoryDexClassLoader` is reported as a
+distinct constructor type; its ByteBuffer contents are not inspected and it
+has no file-path argument. If a file-backed loader is seen but no allowlisted
+literal extension is resolved, the report states that limitation explicitly.
+Register ranges, aliases, computed paths, reflection, encrypted/protected
+DEX, and dynamically generated buffers remain unresolved. The bounded smali parser also tracks a direct `new-array` allocation of
+`[Ljava/lang/String;` followed by `aput-object` writes into the same exact
+register. It records only literal native-library basenames and caps tracked
+writes at 256; overwriting the array register invalidates the evidence.
+Index/value computation, non-string arrays and other array construction
+patterns are not followed. Direct moves of known string literals are tracked
+for `System.load` and `System.loadLibrary`; direct String[] aliases share the
+same bounded array evidence for process-launch correlation.
+A loader callsite
+or extension is not proof that the secondary code is decrypted, loaded
+successfully, or executed.
