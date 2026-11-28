@@ -420,14 +420,14 @@ service classes across the complete set, run the split-set analyzer:
 Linux/macOS:
 
 ```sh
-python3 tools/inspect_apk_dex_set.py APNA-APKs/*.apk > analysis/dex-split-report.json
+python3 tools/inspect_apk_dex.py APNA-APKs/*.apk > analysis/dex-split-report.json
 ```
 
 PowerShell:
 
 ```powershell
 $apks = Get-ChildItem .\APNA-APKs\*.apk | ForEach-Object FullName
-py -3 tools/inspect_apk_dex_set.py @apks > analysis\dex-split-report.json
+py -3 tools/inspect_apk_dex.py @apks > analysis\dex-split-report.json
 ```
 
 The command requires the Android SDK's `apkanalyzer` on PATH, but does not
