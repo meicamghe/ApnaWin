@@ -4,11 +4,12 @@ A native Windows 10/11 desktop client project inspired by the workflow of APNA T
 
 ## Current status
 
-**M2 profile workflow and M2a/M2b engine-process foundations are implemented; M2c remote-configuration discovery is documented but awaits APK/runtime evidence.** The repository includes:
+**The Windows desktop/profile foundation and generic Xray share-link import path are implemented; live tunnel connectivity and APNA-specific compatibility remain unverified.** The repository includes:
 - A native PySide6 desktop application.
 - Add, edit, select and remove connection profiles.
 - Strict local JSON persistence for non-secret profile metadata, with unique same-directory atomic temp files, flush/fsync, duplicate-key/schema validation and duplicate-name rejection.
 - Import of complete Xray TUN JSON configs for XRAY profiles, encrypted at rest with current-user Windows DPAPI; profile metadata exports exclude credentials.
+- Import of VLESS, VMess, Trojan, Shadowsocks and Hysteria2 share links; bounded batch parsing, strict full-tunnel Xray config composition and encrypted config persistence.
 - A dedicated fixed-path UAC helper, a desktop-side Xray tunnel supervisor wrapper, read-only Windows adapter/route/DNS diagnostics, and a Program Files installer script; the helper keeps the desktop at normal integrity and supervises Xray in a Job Object.
 - Strict Xray config parsing that rejects duplicate JSON keys and non-finite constants before execution.
 - A transport-neutral profile model and tunnel-engine contract.
@@ -17,7 +18,7 @@ A native Windows 10/11 desktop client project inspired by the workflow of APNA T
 - Windows GitHub Actions tests and a PyInstaller build job that publishes a portable Windows x64 application-folder artifact (14-day retention).
 - A pinned runtime packaging step for Xray-core v26.11.9 and Wintun 0.14.1, with archive hash, PE architecture, Authenticode and version checks.
 
-The Connect button is intentionally disabled. The Xray process runner now validates both a local SOCKS config and a strict full-tunnel TUN config. Xray-core itself has a native Windows TUN implementation through Wintun, including route/DNS and WFP controls; this is the preferred path over a separate Python tunnel stack. The app is not yet a complete, verified VPN client; the runtime package is pinned and packaged, and imported Xray configs are encrypted. The UAC helper now has a graceful CTRL_BREAK shutdown request with Job Object fallback, but is not yet integrated into the Connect UI; route/DNS restoration tests, a verified APNA configuration source and end-to-end connection tests remain outstanding. The CI build artifact is an early portable application build, not a signed installer and not a VPN client with working tunnel connectivity. No APNA TUNNEL server compatibility is claimed.
+The Connect button remains disabled. Share links are now converted into strict dual-stack Xray TUN configurations with no direct fallback, but parsing and config composition do not validate credentials or establish a remote session. Xray-core owns the Windows Wintun adapter, packet I/O, routes, DNS and WFP leak filters. The fixed-path UAC helper can start Xray and waits for stable adapter/routes/DNS, but the helper is not yet integrated into the desktop Connect lifecycle. A production engine adapter, end-to-end traffic probe, graceful/forced-disconnect restoration tests, clean Windows 10/11 acceptance and an authorized APNA-compatible config source remain outstanding. Any portable build produced before those gates pass is a desktop/config-import preview, not a connectable VPN client. No APNA TUNNEL server compatibility is claimed.
 
 The Android app may refresh its server catalog and connection parameters remotely. This is a first-class requirement for the Windows product, but the actual API, schema, authentication and refresh policy have not yet been verified. See [remote configuration discovery](docs/remote-configuration.md); no guessed backend endpoint or static replacement server list will be shipped.
 
@@ -35,7 +36,7 @@ python -m apnawin
 
 ## Build artifact
 
-On pushes to `main` and pull requests, the Windows workflow runs tests first, then builds the native desktop app with PyInstaller. On a successful run, download the `ApnaWin-Windows-x64` artifact from the workflow run's **Artifacts** section. Extract the ZIP and launch `ApnaWin.exe` from the extracted `ApnaWin` folder. The artifact is temporary CI output (14-day retention), not a signed installer. For the elevated TUN helper, extract the folder and run Install-ApnaWin.ps1 as Administrator; it installs under Program Files with standard-user read/execute ACLs. The helper is not Authenticode-signed.
+The Windows workflow runs unit tests on pushes and pull requests. The packaging job is opt-in through **Actions → Windows tests and build → Run workflow** while live tunnel acceptance is pending. On a successful run, download the `ApnaWin-Windows-x64` artifact from the workflow run's **Artifacts** section. Extract the ZIP and launch `ApnaWin.exe` from the extracted `ApnaWin` folder. The artifact is temporary CI output (14-day retention), not a signed installer. For the elevated TUN helper, extract the folder and run Install-ApnaWin.ps1 as Administrator; it installs under Program Files with standard-user read/execute ACLs. The helper is not Authenticode-signed.
 
 Run tests:
 
