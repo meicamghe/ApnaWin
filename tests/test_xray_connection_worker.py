@@ -64,7 +64,7 @@ def test_worker_stops_if_traffic_probe_fails_and_never_emits_connected():
         supervisor_factory=lambda *_args, **_kwargs: supervisor,
         traffic_probe=lambda: (_ for _ in ()).throw(RuntimeError("route mismatch")),
     )
-    worker.connected.connect(lambda _pid: events.append("connected"))
+    worker.connected.connect(lambda _pid: events.append("connected"), Qt.ConnectionType.DirectConnection)
     worker.failed.connect(events.append, Qt.ConnectionType.DirectConnection)
     worker.start()
     assert worker.wait(2000)
@@ -105,8 +105,8 @@ def test_worker_reports_unexpected_helper_exit_after_verified_connect():
         traffic_probe=lambda: None,
         poll_interval=0.001,
     )
-    worker.connected.connect(lambda pid: events.append(("connected", pid)))
-    worker.lost.connect(lambda code: events.append(("lost", code)))
+    worker.connected.connect(lambda pid: events.append(("connected", pid)), Qt.ConnectionType.DirectConnection)
+    worker.lost.connect(lambda code: events.append(("lost", code)), Qt.ConnectionType.DirectConnection)
     worker.start()
     assert worker.wait(2000)
 
