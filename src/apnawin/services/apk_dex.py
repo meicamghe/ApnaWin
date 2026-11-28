@@ -251,6 +251,18 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
         if current is None:
             continue
 
+        # DEX requires move-result-object to immediately consume the result
+        # of filled-new-array. Clear stale pending data before analyzing any
+        # invocation on the next instruction.
+        if current["pending_string_array"] is not None:
+            result_match = move_result_object.search(line)
+            if result_match:
+                current["string_array_registers"][result_match.group(1)] = current["pending_string_array"]
+                current["pending_string_array"] = None
+                continue
+            if line.strip() and not line.lstrip().startswith("#"):
+                current["pending_string_array"] = None
+
         if "Ljava/lang/Runtime;->exec(" in line:
             current["invocation_kinds"].add("runtime_exec")
             current["invocation_counts"]["runtime_exec"] = current["invocation_counts"].get("runtime_exec", 0) + 1
@@ -311,18 +323,6 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
                 if (basename := native_basename.search(current["string_registers"].get(register, "")))
             })
             continue
-
-        # DEX requires move-result-object to immediately consume the result
-        # of filled-new-array. Never let an intervening instruction attach a
-        # stale array value to an unrelated result register.
-        if current["pending_string_array"] is not None:
-            result_match = move_result_object.search(line)
-            if result_match:
-                current["string_array_registers"][result_match.group(1)] = current["pending_string_array"]
-                current["pending_string_array"] = None
-                continue
-            if line.strip() and not line.lstrip().startswith("#"):
-                current["pending_string_array"] = None
 
         register_match = string_register.search(line)
         if register_match:
