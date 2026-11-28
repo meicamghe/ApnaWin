@@ -125,8 +125,9 @@ def test_split_set_finds_service_class_defined_in_non_base_split(tmp_path, monke
         "apk": "split_feature.apk",
         "class_name": "com.example.vpn.TunnelService",
         "method_ordinal": 4,
+        "loader_types": ["DexClassLoader"],
         "path_extensions": ["dex"],
-        "path_basis": "exact DexClassLoader/PathClassLoader constructor path argument when directly literal",
+        "path_basis": "exact DexClassLoader/PathClassLoader constructor path argument; allowlisted archive extensions only",
     }]
     assert report["static_analysis_only"] is True
     assert report["android_device_required"] is False
