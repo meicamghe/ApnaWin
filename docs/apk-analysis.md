@@ -517,3 +517,16 @@ the process starts, or a native engine establishes a connection.
 The scan is optional and requires the local Android SDK `apkanalyzer` tool.
 It is static-only and does not require an Android device. It never loads or
 executes APK code.
+
+For a base APK plus all of its configuration/feature splits, pass every APK
+to the same CLI invocation. The tool aggregates service/class and native
+loader/process-launch references across the split set:
+
+```powershell
+py -3 tools/inspect_apk_dex.py .\APNA-APKs\base.apk .\APNA-APKs\split_config.arm64_v8a.apk .\APNA-APKs\split_config.xxhdpi.apk --output .\analysis\dex-linkage.json
+```
+
+Use the actual APK filenames present in the sample; do not omit feature or
+ABI splits. With one APK the CLI emits the single-APK DEX report; with multiple
+inputs it emits the cross-split report. This command still requires local
+`apkanalyzer` and performs no Android-device or product-build operation.
