@@ -24,8 +24,9 @@ class ApnaHostKeyProbeError(RuntimeError):
 class ApnaPayloadTransportProbeError(ApnaHostKeyProbeError):
     """DNS, TCP, TLS, HTTP proxy or WebSocket setup failed before SSH began."""
 
-    def __init__(self, message: str) -> None:
+    def __init__(self, message: str, *, transport_stage: str = "transport") -> None:
         super().__init__(message, stage="payload_transport")
+        self.transport_stage = transport_stage
 
 
 def scan_apna_ssh_host_key(
@@ -79,6 +80,8 @@ def scan_apna_ssh_host_key(
             if isinstance(exc, PayloadTransportError)
             else ApnaHostKeyProbeError
         )
+        if error_type is ApnaPayloadTransportProbeError:
+            raise error_type(message, transport_stage=exc.stage) from exc
         raise error_type(message) from exc
     finally:
         try:
