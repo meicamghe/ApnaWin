@@ -523,3 +523,7 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
   malformed/non-object JSON and manifest size limits.
 - These changes improve the offline analysis boundary only; they do not produce
   a new APK extraction artifact or add protocol/runtime evidence.
+
+- Final validation for this hardening batch also rejects boolean values where an
+  integer byte size is required and converts deeply nested JSON parser failures
+  into a bounded validation error.
