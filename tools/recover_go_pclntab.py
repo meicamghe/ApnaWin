@@ -92,12 +92,11 @@ def recover_go_pclntab(data: bytes, pclntab_va: int, allow_stomped_magic: bool =
     table = image.read_va(table_va, table_size)
     records: list[dict[str, Any]] = []
     previous_entry = -1
-    previous_func = -1
     for index in range(nfunc):
         entry_off, func_off = struct.unpack_from("<II", table, index * 8)
-        if entry_off <= previous_entry or func_off <= previous_func or func_off < 8:
-            raise ValueError("Go functab entries are not strictly increasing or valid")
-        func_va = pclntab_va + func_off
+        if entry_off < previous_entry or func_off < 8:
+            raise ValueError("Go functab entries are not non-decreasing or valid")
+        func_va = table_va + func_off
         func_record = image.read_va(func_va, 8)
         name_off = struct.unpack_from("<i", func_record, 4)[0]
         name_va = pclntab_va + funcname_off + name_off
@@ -108,7 +107,7 @@ def recover_go_pclntab(data: bytes, pclntab_va: int, allow_stomped_magic: bool =
         if any(ord(char) < 0x20 for char in name):
             raise ValueError("Go function name contains control characters")
         records.append({"index": index, "entry_offset": entry_off, "function_offset": func_off, "name": name})
-        previous_entry, previous_func = entry_off, func_off
+        previous_entry = entry_off
     end_entry = struct.unpack_from("<I", table, nfunc * 8)[0]
     if end_entry <= previous_entry:
         raise ValueError("Go functab terminal PC offset is invalid")
