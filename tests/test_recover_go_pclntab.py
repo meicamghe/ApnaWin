@@ -56,8 +56,10 @@ def test_rejects_invalid_pclntab_header_byte_fields():
 
 
 def test_rejects_functab_outside_file_backed_load_segment():
+    data = bytearray(_synthetic_go_elf())
+    struct.pack_into("<Q", data, 0x248, 0x1000)
     with pytest.raises(ValueError, match="PT_LOAD"):
-        recover_go_pclntab(_synthetic_go_elf(), 0x1800, allow_stomped_magic=True)
+        recover_go_pclntab(bytes(data), 0x1100, allow_stomped_magic=True)
 
 
 def test_rejects_non_monotonic_function_entries():
