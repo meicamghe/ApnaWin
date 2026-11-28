@@ -43,6 +43,28 @@ class _ElfImage:
             self.loads.append((p_vaddr, p_filesz, p_offset, flags))
         if not self.loads:
             raise ValueError("ELF has no file-backed PT_LOAD segment")
+        self.text_sections: list[tuple[int, int]] = []
+        shoff, shentsize, shnum, shstrndx = header[6], header[11], header[12], header[13]
+        if shoff and shnum and shentsize >= 64 and shnum <= 65535:
+            if shoff <= len(data) and shnum * shentsize <= len(data) - shoff and shstrndx < shnum:
+                section_headers = [
+                    struct.unpack_from("<IIQQQQIIQQ", data, shoff + index * shentsize)
+                    for index in range(shnum)
+                ]
+                name_header = section_headers[shstrndx]
+                names_off, names_size = name_header[4], name_header[5]
+                if names_off <= len(data) and names_size <= len(data) - names_off:
+                    names = data[names_off:names_off + names_size]
+                    for section in section_headers:
+                        name_off, _kind, flags, address, _offset, size = section[:6]
+                        if not (flags & 0x4) or not size or name_off >= len(names):
+                            continue
+                        end = names.find(b"\\0", name_off)
+                        if end < 0 or names[name_off:end] != b".text":
+                            continue
+                        matches = self._matches(address, size)
+                        if len(matches) == 1 and matches[0][3] & _PF_X:
+                            self.text_sections.append((address, size))
 
     def _matches(self, address: int, size: int) -> list[tuple[int, int, int, int]]:
         if address < 0 or size < 0:
@@ -116,18 +138,23 @@ def recover_go_pclntab(data: bytes, pclntab_va: int, allow_stomped_magic: bool =
     table_size = (2 * nfunc + 1) * 4
     table_va = pclntab_va + pcln_off
     table = image.read_va(table_va, table_size)
-    # The function records must be inside the same mapped metadata segment as
-    # pclntab; a readable arbitrary PT_LOAD elsewhere is not sufficient.
+    # Go 1.18+ functab func offsets are relative to pclntab's pcln table,
+    # not to the beginning of the ELF image or the pclntab header.
     metadata_segment = image._unique_mapping(pclntab_va, 72)
     metadata_end = metadata_segment[0] + metadata_segment[1]
+    text_base = text_start
+    if text_base == 0:
+        if len(image.text_sections) != 1:
+            raise ValueError("Go pclntab textStart is zero and ELF has no unique executable .text section")
+        text_base = image.text_sections[0][0]
     records: list[dict[str, Any]] = []
     previous_entry = -1
     for index in range(nfunc):
         entry_off, func_off = struct.unpack_from("<II", table, index * 8)
-        if entry_off <= previous_entry or func_off < pcln_off + table_size:
+        if entry_off <= previous_entry or func_off < table_size:
             raise ValueError("Go functab entries are not strictly ordered or function offsets are invalid")
-        func_va = pclntab_va + func_off
-        if func_va + 8 > metadata_end:
+        func_va = pclntab_va + pcln_off + func_off
+        if func_va < metadata_segment[0] or func_va + 8 > metadata_end:
             raise ValueError("Go function record is outside the pclntab metadata segment")
         func_record = image.read_va(func_va, 8)
         name_off = struct.unpack_from("<i", func_record, 4)[0]
@@ -138,13 +165,13 @@ def recover_go_pclntab(data: bytes, pclntab_va: int, allow_stomped_magic: bool =
         name = name_bytes.decode("utf-8", errors="strict")
         if any(ord(char) < 0x20 for char in name):
             raise ValueError("Go function name contains control characters")
-        code_va = text_start + entry_off
+        code_va = text_base + entry_off
         if not image.is_executable_va(code_va):
             raise ValueError("Go function entry does not map uniquely to executable PT_LOAD")
         records.append({"index": index, "entry_offset": entry_off, "function_offset": func_off, "name": name})
         previous_entry = entry_off
     end_entry = struct.unpack_from("<I", table, nfunc * 8)[0]
-    if end_entry <= previous_entry or not image.is_executable_va(text_start + end_entry - 1):
+    if end_entry <= previous_entry or not image.is_executable_va(text_base + end_entry - 1):
         raise ValueError("Go functab terminal PC offset is outside the executable code range")
     return {
         "format": "apnawin-go-pclntab-recovery-v2",
@@ -153,6 +180,7 @@ def recover_go_pclntab(data: bytes, pclntab_va: int, allow_stomped_magic: bool =
         "magic_stomped": magic not in _GO_MAGIC,
         "go_pc_quantum": quantum, "pointer_size": pointer_size,
         "nfunc": nfunc, "nfiles": nfiles, "text_start": hex(text_start),
+        "resolved_text_start": hex(text_base),
         "functab_va": hex(table_va), "functab_bytes": table_size,
         "terminal_entry_offset": end_entry, "recovered_function_count": len(records),
         "functions": records, "binary_executed": False,
