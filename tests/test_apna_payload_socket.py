@@ -208,8 +208,9 @@ def test_http_101_rejects_invalid_websocket_accept_value() -> None:
         ),
         expected_http_statuses=(101,),
     )
-    with pytest.raises(PayloadTransportError, match="Sec-WebSocket-Accept does not match"):
+    with pytest.raises(PayloadTransportError, match="Sec-WebSocket-Accept does not match") as caught:
         connector.connect(config)
+    assert caught.value.stage == "websocket"
     worker.join(timeout=1)
     assert client.fileno() == -1
 
