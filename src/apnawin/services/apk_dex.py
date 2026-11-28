@@ -393,6 +393,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             register, literal = register_match.groups()
             current["string_registers"][register] = literal
             current["string_array_registers"].pop(register, None)
+            current["string_array_write_counts"].pop(register, None)
             basename = native_basename.search(literal)
             if basename:
                 current["native_library_literals"].add(basename.group(1))
