@@ -69,6 +69,7 @@ def inspect_apk_dex_set(
     system_load_path_references: list[dict[str, Any]] = []
     runtime_exec_library_references: list[dict[str, Any]] = []
     process_builder_library_references: list[dict[str, Any]] = []
+    process_builder_start_references: list[dict[str, Any]] = []
     dynamic_dex_loader_references: list[dict[str, Any]] = []
     for apk in per_apk:
         for class_row in apk["dex"]["native_linkage_evidence"]:
@@ -105,6 +106,18 @@ def inspect_apk_dex_set(
                         "method_ordinal": method["method_ordinal"],
                         "library_basename": library,
                         "launch_basis": "exact ProcessBuilder constructor argument register",
+                    })
+                start_count = method["invocation_counts"].get("process_builder_start", 0)
+                if start_count:
+                    process_builder_start_references.append({
+                        "apk": apk["apk"],
+                        "class_name": class_row["class_name"],
+                        "method_ordinal": method["method_ordinal"],
+                        "call_count": start_count,
+                        "evidence_basis": (
+                            "ProcessBuilder.start() invocation count; not correlated "
+                            "to a specific constructor instance"
+                        ),
                     })
                 if "dynamic_dex_loader" in method["invocation_kinds"]:
                     dynamic_dex_loader_references.append({
@@ -180,6 +193,7 @@ def inspect_apk_dex_set(
         "system_load_path_references": system_load_path_references,
         "runtime_exec_library_references": runtime_exec_library_references,
         "process_builder_library_references": process_builder_library_references,
+        "process_builder_start_references": process_builder_start_references,
         "dynamic_dex_loader_references": dynamic_dex_loader_references,
         "per_apk": per_apk,
         "static_analysis_only": True,
