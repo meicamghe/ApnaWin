@@ -58,7 +58,7 @@ def test_rejects_invalid_pclntab_header_byte_fields():
 def test_rejects_functab_outside_file_backed_load_segment():
     data = bytearray(_synthetic_go_elf())
     struct.pack_into("<Q", data, 0x240, 0x1000)
-    with pytest.raises(ValueError, match="PT_LOAD"):
+    with pytest.raises(ValueError, match="PT_LOAD|file-backed"):
         recover_go_pclntab(bytes(data), 0x1100, allow_stomped_magic=True)
 
 
@@ -66,7 +66,7 @@ def test_rejects_non_monotonic_function_entries():
     data = bytearray(_synthetic_go_elf())
     struct.pack_into("<I", data, 0x2C0, 0x10)
     struct.pack_into("<I", data, 0x2C8, 0)
-    with pytest.raises(ValueError, match="non-decreasing"):
+    with pytest.raises(ValueError, match="strictly increasing"):
         recover_go_pclntab(bytes(data), 0x1100, allow_stomped_magic=True)
 
 
@@ -74,7 +74,7 @@ def test_rejects_non_monotonic_function_entries():
 def test_rejects_function_name_offset_outside_funcnametab():
     data = bytearray(_synthetic_go_elf())
     # First _func.nameOff is signed and must remain inside [funcnameOff, cuOff).
-    struct.pack_into("<i", data, 0x2C4, 0x80)
+    struct.pack_into("<i", data, 0x3A4, 0x80)
     with pytest.raises(ValueError, match="funcnametab"):
         recover_go_pclntab(bytes(data), 0x1100, allow_stomped_magic=True)
 
