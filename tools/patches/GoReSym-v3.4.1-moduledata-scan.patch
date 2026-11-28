@@ -2,7 +2,7 @@ diff --git a/objfile/elf.go b/objfile/elf.go
 index 0000000..1111111 100644
 --- a/objfile/elf.go
 +++ b/objfile/elf.go
-@@ -390,6 +390,33 @@ func (f *elfFile) pcln() (candidates <-chan PclntabCandidate, err error) {
+@@ -298,6 +298,33 @@ func (f *elfFile) pcln() (candidates <-chan PclntabCandidate, err error) {
  	return candidates, nil
  }
  
@@ -41,12 +41,13 @@ index 0000000..1111111 100644
 +}
 +
  func (f *elfFile) moduledata_scan(pclntabVA uint64, is64bit bool, littleendian bool, ignorelist []uint64) (candidate *ModuleDataCandidate, err error) {
- 	found := false
- 
-@@ -450,19 +477,10 @@ scan:
- 		}
- 
- 		// fall back to scanning for structure using address of pclntab, which is first value in struc
+@@ -304,7 +331,6 @@ func (f *elfFile) moduledata_scan(pclntabVA uint64, is64bit bool, littleendian bool, ignorelist []uint64) (candidate *ModuleDataCandidate, err error) {
+ 	var secStart uint64
+ 	var moduledata []uint8
+ 	var moduledataVA uint64
+-scan:
+ 	for _, sec := range f.elf.Sections {
+@@ -335,16 +361,9 @@ scan:
 -		moduledata_idx := bytes.Index(data, pclntabVA_bytes)
 +		moduledata_idx := findModuleDataOffset(data, pclntabVA_bytes, sec.Size, sec.Addr, ignorelist)
  		if moduledata_idx != -1 && moduledata_idx < int(sec.Size) {
