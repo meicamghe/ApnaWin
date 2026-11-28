@@ -409,3 +409,31 @@ DEX may remain unresolved without bypassing application protections.
 
 This is offline APK analysis. It does not require an Android device, install
 the APK, or create an Android version of ApnaWin.
+
+
+## Cross-split DEX and manifest correlation
+
+A base APK does not necessarily contain every class in an installed split
+package. To inspect all committed APK splits and locate manifest-declared VPN
+service classes across the complete set, run the split-set analyzer:
+
+Linux/macOS:
+
+```sh
+python3 tools/inspect_apk_dex_set.py APNA-APKs/*.apk > analysis/dex-split-report.json
+```
+
+PowerShell:
+
+```powershell
+$apks = Get-ChildItem .\\APNA-APKs\\*.apk | ForEach-Object FullName
+py -3 tools/inspect_apk_dex_set.py @apks > analysis\\dex-split-report.json
+```
+
+The command requires the Android SDK's `apkanalyzer` on PATH, but does not
+install or execute the APK and does not require an Android device. It verifies
+that all readable split manifests agree on package name, gathers declared VPN
+services, inspects each split's DEX files, and reports which APK actually
+defines each service class. Candidate process/native-loader callsites are
+reported per APK. A service-class definition or method reference is static
+evidence only; it does not establish runtime invocation or successful loading.
