@@ -44,7 +44,7 @@ candidate class names. It does not include method names, field names, bytecode,
 raw command output, URLs, credentials, or extracted files. Candidate matching
 is heuristic: a class name containing "vpn", "tunnel", "xray", "socks", "dns",
 "proxy", or related terms is a lead for later review, not proof of behavior.
-Obfuscated or dynamically loaded classes may not be detected.
+The known `com.liapp.*` protector package is also included as a candidate and its classes are prioritized for the bounded linkage scan, so readable LIAPP loader callsites can be counted without bypassing protected DEX. Obfuscated or dynamically loaded classes outside the readable DEX may not be detected.
 
 Both decoders invoke local SDK tooling with argument arrays, no shell, and a
 30-second timeout. Standard output and standard error are drained concurrently
