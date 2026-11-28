@@ -106,6 +106,22 @@ Added XrayTunnelSupervisor as the desktop-side lifecycle abstraction: XRAY-only,
 CI run 43724914682 completed successfully: 848 tests passed, one skipped, and the Windows build, elevated helper build, pinned Xray/Wintun runtime installation, packaged-app smoke test and artifact upload all succeeded. Artifact ApnaWin-Windows-x64: ID 14165469958, 75,925,661 bytes, not expired. Commit 6410a2cf5b0b651dd48519bcdca299f246e64143 includes the desktop-side XrayTunnelSupervisor wrapper. The latest commit adds read-only adapter/route/DNS diagnostics. Connect remains disabled; no APNA endpoint/auth format has been established, and live route/DNS/WFP/e2e acceptance is still pending.
 
 
+
+
+### Independent revalidation — current `libxray.so` attachment
+
+- Recomputed SHA-256 from the locally mounted file: `e796e24eece84ab28ab9e20710a8581fbcb1044c6720db5f9c79fecc839f68b5`; it matches the dedicated Xray report and the parallel-audit report.
+- Re-read Go build metadata with `go version -m`: Go 1.26.2, `github.com/xtls/xray-core/main`, `-buildmode=exe`, Android/ARM64, and module version `(devel)`.
+- A second independent offline pclntab pass again recovered 39,856 function records and 2,574 file entries; 39,823 names are unique. The PIE header has `textStart=0`; the executable `.text` section resolves to VA `0x3860a0`.
+- The earlier checksum discrepancy was a reading/summary error, not a different binary. Do not retain any claim that two distinct Xray attachments were observed.
+- Fixed the synthetic Go parser fixture so writing the 27-byte function-name string no longer replaces a 32-byte slice and shifts all later ELF offsets. The regression tests remain unexecuted; no CI was run.
+
+### APK/native binary availability
+
+- GitHub inventory confirms `APNA-APKs/base.apk`, `split_config.arm64_v8a.apk`, language/density splits, and root-level `libudpqtwo.so` and `libsalamander.so` are present in the repository.
+- The GitHub text connector can enumerate these binary files and their sizes, but cannot materialize their bytes into this runtime. `apkanalyzer`, `jadx`, and `apktool` are not installed in the current runtime. The DEX split-set CLI therefore has not been run against the real APKs.
+- The next binary-analysis path is to materialize the repository binaries through a supported binary download/attachment route, then hash-match native libraries to exact APK members before assigning provenance.
+
 ## Reverse-engineering handoff — 2026-11-28 (current)
 
 ### Active research branch
