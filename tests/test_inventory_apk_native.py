@@ -87,7 +87,10 @@ def test_inventory_rejects_symlink_apk_input(tmp_path):
     with zipfile.ZipFile(apk, "w") as archive:
         archive.writestr("assets/empty", b"x")
     alias = tmp_path / "alias.apk"
-    alias.symlink_to(apk)
+    try:
+        alias.symlink_to(apk)
+    except OSError:
+        pytest.skip("symlink creation is unavailable on this platform")
 
     with pytest.raises(ValueError, match="non-symlink regular file"):
         inventory_apk_native.inventory_native_libraries([alias])
@@ -137,7 +140,10 @@ def test_inventory_cli_refuses_symlink_output(tmp_path, capsys):
     target = tmp_path / "target.json"
     target.write_text("keep", encoding="utf-8")
     output = tmp_path / "report.json"
-    output.symlink_to(target)
+    try:
+        output.symlink_to(target)
+    except OSError:
+        pytest.skip("symlink creation is unavailable on this platform")
 
     result = inventory_apk_native.main([str(apk), "--output", str(output)])
 
