@@ -102,7 +102,7 @@ def extract_native_libraries(
         "native_code_executed": False,
     }
     (root / "manifest.json").write_text(
-        json.dumps(result, indent=2, sort_keys=True) + "\\n",
+        json.dumps(result, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     return result
