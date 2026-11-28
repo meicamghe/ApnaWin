@@ -93,3 +93,37 @@ The Library root inventory currently exposes base.apk but no exact-title split_c
 ## GitHub object identity cross-check
 
 The Library-backed base.apk was independently matched to the repository's main-branch Git object. GitHub reports blob SHA-1 329a7f7482c54d008e31cc9b7a4858d68d4a719c for APNA-APKs/base.apk; computing the Git blob SHA-1 locally over the materialized Library bytes produces the exact same value. Therefore the Library file analyzed above is byte-for-byte identical to the committed repository base.apk, not merely a same-named APK.
+
+
+## DEX-wide native-loader and process-launch callsite audit — 2026-11-28
+
+A separate pass walked method definitions and direct invoke references across the primary classes.dex, rather than relying only on the bounded candidate-class scanner. The pass is static and class-name independent for direct method-reference matches; it does not resolve reflection, dynamically computed strings, or invoke-custom call graphs.
+
+### Application bootstrap / LIAPP boundary
+
+- The manifest Application class is `com.liapp.x`. Its DEX constructor invokes `android.app.Application.<init>`.
+- `com.liapp.x.attachBaseContext(Context)` invokes an obfuscated static initializer on `com.liapp.x` before delegating to `Application.attachBaseContext`. This places LIAPP-related initialization on the application bootstrap path.
+- Direct references to `System.loadLibrary` in the primary DEX resolve to five callsites. Two load the explicit AndroidX DataStore library `datastore_shared_counter` (in unrelated framework/helper classes). Three are inside obfuscated `com.liapp.x` methods; their library-name strings are passed through an obfuscated `com.liapp.k` string decoder and are not plaintext in the DEX.
+- Direct references to `System.load` occur in two obfuscated `com.liapp.x` methods. Their paths are likewise derived through the obfuscated string helper.
+- LIAPP classes `com.liapp.x`, `com.liapp.n`, `com.liapp.i`, `com.liapp.a`, and `com.liapp.v` contain reflective access to ClassLoader internals, fields/methods, lists and ZIP files. This supports a custom class/native loading or runtime-patching layer. It does not establish which native payloads are loaded, nor prove anti-tamper behavior without decoding the string/branch logic and correlating with the split/native files.
+
+### Direct process-launch callsites
+
+The primary DEX contains direct `Runtime.exec` callsites in:
+
+- `Pdnsd.run`: builds and executes a command for `libpdnsd.so` after writing the pdnsd config/cache.
+- `Tun2Socks.run`: builds and executes a command for `libtun2socks.so`, starts stdout/stderr reader threads, calls `sendFd`, then waits for the process. The code references `libtun2socks.so` and a data-directory `sock_path`; exact full command strings include obfuscated string-helper results and are not fully recoverable from plaintext constants alone.
+- `VpnUtils.findProcessId` and `VpnUtils.killProcess`: use shell/process commands for process discovery/termination; these are lifecycle helpers, not evidence of Xray launch.
+- Additional obfuscated/support callsites exist in unrelated classes and require per-callsite review before attribution.
+
+There are two direct `ProcessBuilder.start()` callsites in the primary DEX, in obfuscated classes `LU10;` and `Lz70;`. Neither is yet linked to Xray, Salamander, or a particular native library. No attribution is made from method names alone.
+
+### Service class resolution status
+
+The primary DEX class-def table contains the Java tunnel manager and helper classes documented above. It does not define the manifest-referenced `XRayDNSService`, `SalamanderService`, or `TunnelVpnService` class descriptors found in the manifest/type references. The required ABI/density split(s), any additional DEX containers, and dynamic class-loader paths must be inspected to locate their implementations. This is consistent with (but does not prove) split or dynamically loaded service implementations.
+
+### Reproducibility and caveats
+
+- Direct invoke-reference inventory was generated from the actual primary DEX bytes in the Library-backed base APK.
+- The lightweight local decoder used for this pass is not yet committed as a general-purpose tool and has not been validated against the full DEX opcode corpus. Treat the callsite counts as a targeted static triage, not a complete verifier.
+- The existing production DEX scanner's tests remain unexecuted. No APK code was run and no Android runtime behavior is claimed.
