@@ -275,7 +275,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             if result_match:
                 array_register = result_match.group(1)
                 current["string_registers"].pop(array_register, None)
-                current["string_array_registers"][array_register] = current["pending_string_array"]
+                current["string_array_registers"][array_register] = {"values": current["pending_string_array"], "writes": 0}
                 current["string_array_write_counts"][array_register] = 0
                 current["pending_string_array"] = None
                 continue
@@ -359,7 +359,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
         if allocated_array:
             array_register = allocated_array.group(1)
             current["string_registers"].pop(array_register, None)
-            current["string_array_registers"][array_register] = []
+            current["string_array_registers"][array_register] = {"values": [], "writes": 0}
             current["string_array_write_counts"][array_register] = 0
             continue
 
@@ -367,17 +367,22 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
         if array_put:
             value_register, array_register, _index_register = array_put.groups()
             if array_register in current["string_array_registers"]:
-                writes = current["string_array_write_counts"].get(array_register, 0) + 1
-                if writes > 256:
-                    current["string_array_registers"].pop(array_register, None)
-                    current["string_array_write_counts"].pop(array_register, None)
+                state = current["string_array_registers"][array_register]
+                state["writes"] += 1
+                if state["writes"] > 256:
+                    aliases = [
+                        register for register, candidate in current["string_array_registers"].items()
+                        if candidate is state
+                    ]
+                    for register in aliases:
+                        current["string_array_registers"].pop(register, None)
+                        current["string_array_write_counts"].pop(register, None)
                 else:
-                    current["string_array_write_counts"][array_register] = writes
-                    values = current["string_array_registers"][array_register]
+                    current["string_array_write_counts"][array_register] = state["writes"]
                     literal = current["string_registers"].get(value_register, "")
                     basename = native_basename.search(literal)
-                    if basename and basename.group(1) not in values:
-                        values.append(basename.group(1))
+                    if basename and basename.group(1) not in state["values"]:
+                        state["values"].append(basename.group(1))
             continue
 
         array_match = string_array_registers.search(line)
@@ -396,11 +401,15 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
         if move_match:
             destination, source = move_match.groups()
             literal = current["string_registers"].get(source)
+            array_state = current["string_array_registers"].get(source)
             current["string_registers"].pop(destination, None)
             current["string_array_registers"].pop(destination, None)
             current["string_array_write_counts"].pop(destination, None)
             if literal is not None:
                 current["string_registers"][destination] = literal
+            elif array_state is not None:
+                current["string_array_registers"][destination] = array_state
+                current["string_array_write_counts"][destination] = array_state["writes"]
             continue
 
         register_match = string_register.search(line)
@@ -467,7 +476,7 @@ def _command_argument_libraries(
 ) -> list[str]:
     """Return safe library basenames from one direct string or filled string-array argument."""
     if descriptor == "[Ljava/lang/String;":
-        return list(current["string_array_registers"].get(register, []))
+        return list(current["string_array_registers"].get(register, {}).get("values", []))
     literal = current["string_registers"].get(register, "")
     match = native_basename.search(literal)
     return [match.group(1)] if match else []
