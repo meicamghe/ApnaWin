@@ -99,12 +99,20 @@ def analyze_native_fingerprints(extraction_dir: str | Path) -> dict[str, Any]:
         ):
             raise ValueError("native extraction manifest contains an unsafe row")
         seen_paths.add(relative)
-        path = root / apk / abi / library
-        if path.is_symlink() or not path.is_file():
+        apk_dir = root / apk
+        abi_dir = apk_dir / abi
+        path = abi_dir / library
+        if (
+            apk_dir.is_symlink() or abi_dir.is_symlink()
+            or path.is_symlink() or not path.is_file()
+        ):
             raise ValueError("an extracted native library is missing or unsafe")
+        actual_size = path.stat().st_size
+        total += actual_size
+        if actual_size > _MAX_FILE_BYTES or total > _MAX_TOTAL_BYTES:
+            raise ValueError("native analysis exceeds the configured size limit")
         data = path.read_bytes()
-        total += len(data)
-        if len(data) != expected_size or hashlib.sha256(data).hexdigest() != expected_hash:
+        if len(data) != expected_size or len(data) != actual_size or hashlib.sha256(data).hexdigest() != expected_hash:
             raise ValueError("an extracted native library failed manifest verification")
         if len(data) > _MAX_FILE_BYTES or total > _MAX_TOTAL_BYTES:
             raise ValueError("native analysis exceeds the configured size limit")
@@ -124,7 +132,7 @@ def analyze_native_fingerprints(extraction_dir: str | Path) -> dict[str, Any]:
             "library": library,
             "size_bytes": len(data),
             "sha256": expected_hash,
-            "elf_magic": data.startswith(b"\\x7fELF"),
+            "elf_magic": data.startswith(b"\x7fELF"),
             "marker_groups": marker_groups,
             "native_code_executed": False,
         })
@@ -150,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"native fingerprint analysis failed: {exc}", file=sys.stderr)
         return 2
-    encoded = json.dumps(report, indent=2, sort_keys=True) + "\\n"
+    encoded = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(encoded, encoding="utf-8")
