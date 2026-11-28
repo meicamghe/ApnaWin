@@ -88,3 +88,8 @@ These findings establish a concrete Android VPNService → Builder.establish →
 ## Library inventory limitation
 
 The Library root inventory currently exposes base.apk but no exact-title split_config.arm64_v8a.apk, libudpqtwo.so, or libsalamander.so entries. The required ABI/density splits are therefore still missing from the accessible Library inventory; the base APK is sufficient for the Java-side TUN path above but not for native payload analysis.
+
+
+## GitHub object identity cross-check
+
+The Library-backed base.apk was independently matched to the repository's main-branch Git object. GitHub reports blob SHA-1 329a7f7482c54d008e31cc9b7a4858d68d4a719c for APNA-APKs/base.apk; computing the Git blob SHA-1 locally over the materialized Library bytes produces the exact same value. Therefore the Library file analyzed above is byte-for-byte identical to the committed repository base.apk, not merely a same-named APK.
