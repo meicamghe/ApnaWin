@@ -312,11 +312,17 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
             })
             continue
 
-        result_match = move_result_object.search(line)
-        if result_match and current["pending_string_array"] is not None:
-            current["string_array_registers"][result_match.group(1)] = current["pending_string_array"]
-            current["pending_string_array"] = None
-            continue
+        # DEX requires move-result-object to immediately consume the result
+        # of filled-new-array. Never let an intervening instruction attach a
+        # stale array value to an unrelated result register.
+        if current["pending_string_array"] is not None:
+            result_match = move_result_object.search(line)
+            if result_match:
+                current["string_array_registers"][result_match.group(1)] = current["pending_string_array"]
+                current["pending_string_array"] = None
+                continue
+            if line.strip() and not line.lstrip().startswith("#"):
+                current["pending_string_array"] = None
 
         register_match = string_register.search(line)
         if register_match:
