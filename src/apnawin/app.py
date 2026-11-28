@@ -260,7 +260,7 @@ class MainWindow(QMainWindow):
             self._connection_worker is None
             and config_store_ok
             and profile.transport == Transport.XRAY
-            and self.xray_config_store.has_config(profile.name)
+            and has_xray_config
             and self._installed_helper_path() is not None
         )
         details = (
@@ -445,12 +445,20 @@ class MainWindow(QMainWindow):
 
     def _set_connection_controls(self, active: bool) -> None:
         self.profile_list.setEnabled(not active)
-        for button in (
+        buttons = (
             self.add_button, self.edit_button, self.remove_button,
             self.import_button, self.import_share_links_button,
             self.export_button, self.import_xray_config_button,
-        ):
-            button.setEnabled(not active and button.isEnabled() if not active else False)
+        )
+        if active:
+            for button in buttons:
+                button.setEnabled(False)
+            return
+        self.add_button.setEnabled(self.profile_storage_writable)
+        self.import_button.setEnabled(self.profile_storage_writable)
+        self.import_share_links_button.setEnabled(self.profile_storage_writable)
+        self.export_button.setEnabled(bool(self.profiles))
+        self._show_selected_profile(self.profile_list.currentRow())
 
     def _toggle_connection(self) -> None:
         worker = self._connection_worker
