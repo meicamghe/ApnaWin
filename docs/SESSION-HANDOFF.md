@@ -115,6 +115,10 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - Research-only. Do not merge wholesale from `re/apk-native-extract`; only selectively ported DEX files were added.
 - No new Windows build, CI dispatch, SSH work, or PR merge.
 
+### Re-upload identity check — 2026-11-28
+
+A later attachment with the same filename and byte length (32,740,552 bytes) was present in the working session, but its SHA-256 is **`e796e24eece84ab28ab9e20710a8581fbcb1044c6720db5f9c79fecc839f68b5`**, which differs from the hash in the earlier analysis report (**`e796e24eece84ab28ab9e20710a8581fbcb1044c6720db5f9cfecc839f68b5`**). The re-upload was independently checked as ELF64 AArch64 ET_DYN with interpreter `/system/bin/linker64` and entry point `0x3860a0`. Do not automatically transfer the earlier 39,856-function recovery, build metadata, or protocol counts to this re-upload until its pclntab and build info are revalidated. Keep both hashes distinct in provenance records.
+
 ### Uploaded `libxray.so`
 
 - SHA-256: `e796e24eece84ab28ab9e20710a8581fbcb1044c6720db5f9c79fecc839f68b5`
