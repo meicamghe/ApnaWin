@@ -81,3 +81,11 @@ The next practical requirement is a binary-safe retrieval path for the exact APK
 - No PR #8 merge or wholesale branch merge.
 - SSH remains paused.
 - No claim of runtime success from static inspection alone.
+
+
+## Additional source review — protocol parser and APK inventory
+
+- The share-link parser's Hysteria2 path explicitly forces TLS verification (`allowInsecure: false`), accepts only the supported Salamander obfuscation form, and rejects unsupported query options. The generic parser's supported transport subset remains RAW/TCP, WebSocket and gRPC; this is intentionally not complete coverage of every Xray transport.
+- VMess parsing type-checks textual JSON fields, gates the link version, rejects non-zero legacy alterId, and rejects unsupported network/header/security values. The parser audit did not establish live compatibility with a particular server or Xray binary version.
+- The APK inventory implementation hashes the opened APK via SHA-256, validates ZIP entry paths and expansion bounds, detects duplicate ZIP names, and records native ABI/library path and size without extracting or executing members. This is a useful reproducible inventory layer; it does not itself inspect split APKs as a set or discover dynamically unpacked libraries.
+- The source review did not find a safe basis to claim that the proprietary APNA protocol is one of the generic Xray protocols. Keep protocol identification evidence separate from share-link parser capability.
