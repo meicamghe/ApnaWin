@@ -234,3 +234,9 @@ The static binary usage text confirms that `libtun2socks.so` accepts `--tunfd`/`
 - Two ProcessBuilder.start callsites in obfuscated classes LU10 and Lz70 are not yet linked to any particular engine; do not attribute them to Xray or Salamander.
 - Manifest-referenced XRayDNSService, SalamanderService and TunnelVpnService class definitions are still absent from the base DEX class-def table. Required splits/dynamic DEX loading remain the next dependency.
 - Detailed appendix added to docs/reverse-engineering/base-apk-library-analysis-2026-11-28.md. Local lightweight DEX decoder is a targeted triage script, not yet committed or opcode-corpus validated; official scanner tests remain unexecuted.
+
+
+### Library data inventory side track
+
+- Rechecked the full recursive Library listing. /ApnaWin contains base.apk and Apna server list.txt but no exact-title ABI split or libudpqtwo.so/libsalamander.so. A 405,128-byte opaque Library item exists under a hash-like title but raw-byte materialization is denied; its format/content are unknown.
+- Apna server list.txt is 32,750 Base64 characters and decodes to 24,561 bytes. Decoded Shannon entropy is 7.9928 bits/byte; printable ratio 0.3824; initial bytes 14a2cec160e8805b1a781d6ede7f07ed. Treat as opaque high-entropy data (cipher/compression/custom envelope unresolved); do not claim encryption or store the payload in Git.
