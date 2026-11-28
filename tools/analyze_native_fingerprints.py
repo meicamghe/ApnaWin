@@ -17,6 +17,7 @@ from typing import Any
 _MAX_FILES = 4096
 _MAX_FILE_BYTES = 64 * 1024 * 1024
 _MAX_TOTAL_BYTES = 256 * 1024 * 1024
+_MAX_MANIFEST_BYTES = 4 * 1024 * 1024
 _MARKERS = {
     "protocol_family": {
         "vless": re.compile(rb"vless", re.I),
@@ -94,7 +95,8 @@ _MARKERS = {
     },
 }
 _APK_NAME = re.compile(r"^[A-Za-z0-9_.+-]{1,128}\.apk$")
-_COMPONENT = re.compile(r"^[A-Za-z0-9_.+-]{1,120}$")
+_ABI_COMPONENT = re.compile(r"^[A-Za-z0-9_+-]{1,64}$")
+_LIBRARY_NAME = re.compile(r"^lib[A-Za-z0-9_.+-]{1,120}\.so$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -105,7 +107,15 @@ def analyze_native_fingerprints(extraction_dir: str | Path) -> dict[str, Any]:
     manifest_path = root / "manifest.json"
     if manifest_path.is_symlink() or not manifest_path.is_file():
         raise ValueError("native extraction manifest is missing or unsafe")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_size = manifest_path.stat().st_size
+    if manifest_size > _MAX_MANIFEST_BYTES:
+        raise ValueError("native extraction manifest exceeds the analysis limit")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("native extraction manifest is not valid UTF-8 JSON") from exc
+    if not isinstance(manifest, dict):
+        raise ValueError("native extraction manifest root must be an object")
     if manifest.get("format") != "apnawin-native-extraction-v1":
         raise ValueError("unsupported native extraction manifest")
     entries = manifest.get("libraries")
@@ -123,8 +133,8 @@ def analyze_native_fingerprints(extraction_dir: str | Path) -> dict[str, Any]:
         expected_size, expected_hash = item.get("size_bytes"), item.get("sha256")
         if (
             not isinstance(apk, str) or not _APK_NAME.fullmatch(apk)
-            or not isinstance(abi, str) or not _COMPONENT.fullmatch(abi)
-            or not isinstance(library, str) or not _COMPONENT.fullmatch(library)
+            or not isinstance(abi, str) or not _ABI_COMPONENT.fullmatch(abi)
+            or not isinstance(library, str) or not _LIBRARY_NAME.fullmatch(library)
             or not isinstance(relative, str)
             or relative != f"{apk}/{abi}/{library}"
             or not isinstance(expected_size, int) or not 0 <= expected_size <= _MAX_FILE_BYTES
@@ -136,9 +146,16 @@ def analyze_native_fingerprints(extraction_dir: str | Path) -> dict[str, Any]:
         apk_dir = root / apk
         abi_dir = apk_dir / abi
         path = abi_dir / library
+        resolved_root = root.resolve()
+        try:
+            resolved_path = path.resolve(strict=True)
+            resolved_path.relative_to(resolved_root)
+        except (OSError, RuntimeError, ValueError):
+            raise ValueError("an extracted native library is missing or unsafe") from None
         if (
             apk_dir.is_symlink() or abi_dir.is_symlink()
             or path.is_symlink() or not path.is_file()
+            or not resolved_path.is_file()
         ):
             raise ValueError("an extracted native library is missing or unsafe")
         actual_size = path.stat().st_size
