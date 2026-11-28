@@ -342,7 +342,7 @@ def test_parse_dex_linkage_evidence_correlates_calls_and_library_literals():
         ".class public Lcom/example/Launcher;\n"
         ".method public start()V\n"
         '    const-string v0, "libudpqtwo.so"\n'
-        "    invoke-virtual {v1, v0}, Ljava/lang/Runtime;->exec([Ljava/lang/String;)Ljava/lang/Process;\n"
+        "    invoke-virtual {v1, v0}, Ljava/lang/Runtime;->exec(Ljava/lang/String;)Ljava/lang/Process;\n"
         ".end method\n"
         ".method private load()V\n"
         '    const-string v0, "libpdnsd.so"\n'
@@ -363,7 +363,7 @@ def test_parse_dex_linkage_evidence_correlates_calls_and_library_literals():
             "native_library_literals": ["libudpqtwo.so"],
             "system_load_library_names": [],
             "system_load_path_basenames": [],
-            "runtime_exec_library_basenames": [],
+            "runtime_exec_library_basenames": ["libudpqtwo.so"],
             "process_builder_library_basenames": [],
         },
         {
