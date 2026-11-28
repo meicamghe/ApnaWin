@@ -83,6 +83,19 @@ class WindowsTunnelTrafficProbe:
         snapshot = self._diagnostics_factory(adapter_name="ApnaWin", timeout=self.timeout).snapshot()
         if not snapshot.routing_ready or snapshot.interface_index is None:
             raise RuntimeError("ApnaWin adapter, dual-stack routes or DNS are not ready")
+        for dns_server in snapshot.dns_servers:
+            try:
+                dns_route = self._route_interface(dns_server)
+            except RuntimeError as exc:
+                raise RuntimeError(
+                    f"Could not verify the route to configured DNS server {dns_server}"
+                ) from exc
+            if dns_route != snapshot.interface_index:
+                raise RuntimeError(
+                    f"Configured DNS server {dns_server} selects interface {dns_route}, "
+                    "not the ApnaWin tunnel"
+                )
+
         answers = self._resolver(
             self.host, 443, type=socket.SOCK_STREAM,
             proto=socket.IPPROTO_TCP,

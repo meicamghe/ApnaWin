@@ -587,3 +587,12 @@ The user has now explicitly authorized moving from reverse-engineering-only work
 - Added worker, traffic-probe and UI prerequisite tests. These are mocked/unit tests; they do not constitute live Windows network acceptance.
 - Remaining release gates: run CI on this exact head; test on clean Windows 10 and Windows 11 x64 with an authorized Xray server; verify successful IPv4/IPv6 traffic, DNS behavior, endpoint route pinning, WFP leak prevention, normal disconnect and helper/desktop crash recovery. Verify the pinned Xray/Wintun runtime is present and signed as expected.
 - No APNA TUNNEL protocol compatibility is claimed. The current path is generic Xray share-link connectivity only. APK native extraction and `libudpqtwo.so` ownership/revision analysis remain separate workstreams. PR #8 stays open/unmerged; SSH stays on hold.
+
+
+## Windows CI validation artifact — 2026-11-28
+
+- Enabled the Windows packaging job on pull requests, gated behind a successful full Windows test job. This is a validation artifact for the generic Xray client path, not an APNA-compatible product release or signed installer.
+- Strengthened the traffic probe to require the configured DNS server routes and the HTTPS destination route to select the ApnaWin interface before issuing the TLS/HTTP request.
+- Added a successful mocked TLS/HTTP probe test plus a DNS-route leak rejection test.
+- The first full Windows CI attempt on head `4f19169710a195f836148556401621dc5e38d728` reported **1038 passed, 1 skipped, 1 failed**. The sole failure was a test observer connected with Qt's default queued delivery while the test blocked the main thread in `QThread.wait()`; the observer now uses an explicit direct connection. This was a test-harness issue, not a production worker failure.
+- Next required result is a green Windows test job followed by the new `build-windows` job and its artifact. No claim of live VPN acceptance is made until the resulting executable is tested against an authorized server on Windows 10/11.

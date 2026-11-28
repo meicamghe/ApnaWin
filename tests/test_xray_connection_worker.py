@@ -126,7 +126,7 @@ def test_worker_retains_supervisor_when_cleanup_fails():
         supervisor_factory=lambda *_args, **_kwargs: supervisor,
         traffic_probe=lambda: (_ for _ in ()).throw(RuntimeError("probe failed")),
     )
-    worker.failed.connect(events.append)
+    worker.failed.connect(events.append, Qt.ConnectionType.DirectConnection)
     worker.start()
     assert worker.wait(2000)
 

@@ -36,7 +36,7 @@ python -m apnawin
 
 ## Build artifact
 
-The Windows workflow runs unit tests on pushes and pull requests. The packaging job is opt-in through **Actions → Windows tests and build → Run workflow** while live tunnel acceptance is pending. On a successful run, download the `ApnaWin-Windows-x64` artifact from the workflow run's **Artifacts** section. Extract the ZIP and launch `ApnaWin.exe` from the extracted `ApnaWin` folder. The artifact is temporary CI output (14-day retention), not a signed installer. For the elevated TUN helper, extract the folder and run Install-ApnaWin.ps1 as Administrator; it installs under Program Files with standard-user read/execute ACLs. The helper is not Authenticode-signed.
+The Windows workflow runs unit tests on pushes and pull requests, then builds a portable Windows x64 validation artifact for pull requests after tests pass. Download `ApnaWin-Windows-x64` from the workflow run's **Artifacts** section. Extract the ZIP and run `Install-ApnaWin.ps1` as Administrator; it installs the protected helper and runtime under Program Files. Launch the installed `ApnaWin.exe` normally. This artifact is not a signed installer, and the helper is not Authenticode-signed. It is a generic Xray client build: use an authorized, compatible Xray share link. It does not establish APNA TUNNEL protocol compatibility. Actual Windows 10/11 traffic, route/DNS rollback, WFP leak and crash-recovery acceptance is still required.
 
 Run tests:
 

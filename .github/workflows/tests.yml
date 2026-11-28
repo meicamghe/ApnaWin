@@ -29,10 +29,10 @@ jobs:
       - name: Run unit tests
         run: python -m pytest -q
 
-  # Windows packaging is opt-in while APK reverse engineering is in progress.
-  # Keep PR unit tests, but do not spend CI on a new Windows build automatically.
+  # Build a Windows validation artifact for PRs after the full test suite passes.
+  # This is a generic Xray client preview, not proof of APNA server compatibility.
   build-windows:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     needs: test
     runs-on: windows-latest
     steps:
