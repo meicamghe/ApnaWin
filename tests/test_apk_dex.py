@@ -472,3 +472,27 @@ def test_process_launch_links_only_exact_command_argument_registers():
     assert row["native_library_literals"] == [
         "libbuilder.so", "libdecoy.so", "libudpqtwo.so"
     ]
+
+def test_invoke_range_calls_are_counted_but_not_mislinked():
+    output = (
+        ".method private launchRange()V\n"
+        '    const-string v4, "libactual.so"\n'
+        "    filled-new-array {v4}, [Ljava/lang/String;\n"
+        "    move-result-object v1\n"
+        '    const-string v5, "libdecoy.so"\n'
+        "    filled-new-array {v5}, [Ljava/lang/String;\n"
+        "    move-result-object v3\n"
+        "    invoke-virtual/range {v0 .. v3}, Ljava/lang/Runtime;->exec([Ljava/lang/String;[Ljava/lang/String;Ljava/io/File;)Ljava/lang/Process;\n"
+        '    const-string v6, "udpqtwo"\n'
+        "    invoke-static/range {v6 .. v6}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    row = report["methods_with_evidence"][0]
+    assert row["invocation_counts"] == {
+        "runtime_exec": 1,
+        "system_load_library": 1,
+    }
+    assert row["runtime_exec_library_basenames"] == []
+    assert row["system_load_library_names"] == []
+    assert row["native_library_literals"] == ["libactual.so", "libdecoy.so"]
