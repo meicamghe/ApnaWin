@@ -359,12 +359,14 @@ def test_parse_dex_linkage_evidence_correlates_calls_and_library_literals():
         {
             "method_ordinal": 1,
             "invocation_kinds": ["runtime_exec"],
+            "invocation_counts": {"runtime_exec": 1},
             "native_library_literals": ["libudpqtwo.so"],
             "system_load_library_names": [],
         },
         {
             "method_ordinal": 2,
             "invocation_kinds": ["dynamic_dex_loader", "system_load_library"],
+            "invocation_counts": {"dynamic_dex_loader": 1, "system_load_library": 1},
             "native_library_literals": ["libpdnsd.so"],
             "system_load_library_names": ["pdnsd"],
         },
