@@ -41,6 +41,7 @@ def _dex(service, defined):
                 "runtime_exec_library_basenames": ["libtun2socks.so"],
                 "process_builder_library_basenames": ["libpdnsd.so"],
                 "dynamic_dex_loader_path_extensions": ["dex"],
+                "dynamic_dex_loader_types": ["DexClassLoader"],
             }],
         }] if defined else [],
         "linkage_scan_classes_inspected": 1,
