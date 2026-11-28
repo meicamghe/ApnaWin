@@ -102,6 +102,6 @@ The exported JNI names in `libtoolChecker.so` match the public RootBeer source A
 
 - Upstream `RootBeerNative.java` calls `System.loadLibrary("toolChecker")` and declares `checkForRoot(Object[])` and `setLogDebugMessages(boolean)`: [source](https://github.com/scottyab/rootbeer/blob/master/rootbeerlib/src/main/java/com/scottyab/rootbeer/RootBeerNative.java).
 - Upstream `toolChecker.cpp` exports the same JNI methods; `checkForRoot` iterates the supplied path array and checks each path with `fopen`, returning whether any path is visible: [source](https://github.com/scottyab/rootbeer/blob/master/rootbeerlib/src/main/cpp/toolChecker.cpp).
-- Upstream `RootBeer.java` uses this native method for the native `su)-binary check as one component of a broader root-indication routine: [source](https://github.com/scottyab/rootbeer/blob/master/rootbeerlib/src/main/java/com/scottyab/rootbeer/RootBeer.java).
+- Upstream `RootBeer.java` uses this native method for the native `su`-binary check as one component of a broader root-indication routine: [source](https://github.com/scottyab/rootbeer/blob/master/rootbeerlib/src/main/java/com/scottyab/rootbeer/RootBeer.java).
 
 This is a strong source/API correlation for the library's purpose. It does not prove that the ApnaWin target APK includes the matching Java wrapper or invokes this check; that still requires DEX linkage evidence. RootBeer itself documents these as root *indicators*, not a perfect root verdict.
