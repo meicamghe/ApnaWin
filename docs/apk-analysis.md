@@ -477,8 +477,10 @@ string-register argument or a bounded String[] argument is observed. Arrays
 created by `filled-new-array` are associated with their destination only when
 the immediately following instruction is `move-result-object`; arrays created
 by `new-array` are tracked only through direct `aput-object` writes to the same
-register, with a 256-write cap. Aliases, values loaded from files, reflection,
-and obfuscated/protected code may remain unresolved. A callsite
+register, with a 256-write cap. Direct `move-object`, `move-object/from16`, and
+`move-object/16` copies of known string literals are followed within the same
+method; array aliases, values loaded from files, reflection, and
+obfuscated/protected code may remain unresolved. A callsite
 proves static argument linkage only, not that the method runs, the child
 starts, the library loads, or traffic uses it.
 
@@ -515,8 +517,8 @@ This is intentionally a conservative partial data-flow analysis, not a full
 DEX interpreter. Invoke instructions using the compressed `invoke-*/range`
 register form are counted but deliberately excluded from argument correlation;
 expanding their register ranges is not yet implemented. It does **not** currently resolve `filled-new-array/range`,
-`new-array` plus `aput-object`, register aliases or general move chains,
-reflection, dynamically generated commands, interprocedural values, or
+``new-array` plus `aput-object` aliases, general move chains, reflection,
+dynamically generated commands, interprocedural values, or
 obfuscated/protected DEX. A missing reference therefore means “not established
 by this bounded scan,” not “the APK cannot load or launch that library.”
 Invocation evidence is static only and does not prove that the call executes,
@@ -564,8 +566,9 @@ DEX, and dynamically generated buffers remain unresolved. The bounded smali pars
 `[Ljava/lang/String;` followed by `aput-object` writes into the same exact
 register. It records only literal native-library basenames and caps tracked
 writes at 256; overwriting the array register invalidates the evidence.
-Array aliases, `move-object`, index/value computation, non-string arrays and
-other array construction patterns are not followed.
+Array aliases, index/value computation, non-string arrays and other array
+construction patterns are not followed. Direct moves of known string literals
+are tracked for `System.load` and `System.loadLibrary` argument correlation.
 A loader callsite
 or extension is not proof that the secondary code is decrypted, loaded
 successfully, or executed.
