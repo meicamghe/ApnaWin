@@ -25,7 +25,7 @@ class _ElfImage:
         if data[4] != 2 or data[5] != 1 or data[6] != 1:
             raise ValueError("only ELF64 little-endian images are supported")
         header = struct.unpack_from("<16sHHIQQQIHHHHHH", data, 0)
-        if header[2] != 183 or header[3] not in (2, 3) or header[8] != 64:
+        if header[2] != 183 or header[1] not in (2, 3) or header[3] != 1 or header[8] != 64:
             raise ValueError("input is not a supported AArch64 ET_EXEC/ET_DYN image")
         phoff, phentsize, phnum = header[5], header[9], header[10]
         if phentsize < 56 or phnum > 4096 or phoff > len(data) or phnum * phentsize > len(data) - phoff:
