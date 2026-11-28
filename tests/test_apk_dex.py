@@ -834,3 +834,20 @@ def test_dex_loader_does_not_link_a_path_literal_from_an_unrelated_register():
     assert row["dynamic_dex_loader_path_extensions"] == []
     assert row["dynamic_dex_loader_types"] == ["DexClassLoader"]
     assert "decoy.dex" not in str(report)
+
+
+def test_linkage_candidate_filter_includes_udp_quic_and_loader_classes():
+    output = (
+        "C d 2 1 40 com.example.udp.NativeBridge\\n"
+        "C d 2 1 40 com.example.quic.Transport\\n"
+        "C d 2 1 40 com.example.hysteria.Client\\n"
+        "C d 2 1 40 com.example.DynamicLoader\\n"
+        "C d 2 1 40 com.example.UnrelatedScreen\\n"
+    )
+    _count, candidates = apk_dex.parse_defined_classes(output)
+    assert candidates == [
+        "com.example.DynamicLoader",
+        "com.example.hysteria.Client",
+        "com.example.quic.Transport",
+        "com.example.udp.NativeBridge",
+    ]
