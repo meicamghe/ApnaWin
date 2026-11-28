@@ -99,6 +99,7 @@ jobs:
 
           PYTHONPATH=src python3 tools/inventory_apk_native.py APNA-APKs/*.apk --output analysis/native-elf-inventory.json
           PYTHONPATH=src python3 tools/extract_apk_native.py APNA-APKs/*.apk --output analysis/native-libs
+          PYTHONPATH=src python3 tools/analyze_native_fingerprints.py analysis/native-libs --output analysis/native-fingerprints.json
 
       - name: Inspect ELF and Go metadata
         shell: bash
