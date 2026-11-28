@@ -138,3 +138,10 @@ The dedicated report `docs/reverse-engineering/libxray-binary-analysis-2026-11-2
 ## Provenance note
 
 The current `APNA-APKs` repository directory does not contain a standalone `libxray.so` file. The uploaded binary's SHA-256 is recorded, but its exact member path inside `base.apk` or a split has not yet been matched. The binary must remain an externally supplied artifact until that provenance check is completed.
+
+
+## Additional native-library pass — 2026-11-28
+
+A further byte-level static pass is recorded in [native-library-static-audit-2026-11-28.md](native-library-static-audit-2026-11-28.md). Five repository libraries were returned and inspected: `libtun2socks.so` (BadVPN 1.999.127 command surface), `libpdnsd.so` (DNS cache/EDNS/TCP-UDP implementation), `libtoolChecker.so` (RootBeer JNI exports), `libdatastore_shared_counter.so` (AndroidX DataStore shared-counter JNI exports), and `libbxdtcxfzx.so` (LIAPP-associated loader indicators). Findings are static only; Git blob SHA-1 values are not presented as SHA-256 checksums.
+
+The connector did not return the bytes for APK archives, `libudpqtwo.so` or `libsalamander.so`; therefore this pass did not execute the DEX split-set scanner or validate Go pclntab against those two distinct libraries. Existing bounded DEX scan remains limited to 64 candidate classes/APK and the new tests remain unexecuted. No native execution, CI, Windows build, SSH change or merge was performed.
