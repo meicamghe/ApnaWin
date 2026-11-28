@@ -29,3 +29,13 @@ Artifacts are retained for seven days. The extracted library is a temporary anal
 ## Current reverse-engineering hypothesis
 
 The current candidate addresses and recovery hypothesis are documented in [libudpqtwo-stomped-pclntab.md](libudpqtwo-stomped-pclntab.md). The workflow is intended to produce the exact binary and fresh structural evidence needed to validate or reject that hypothesis before changing GoReSym.
+
+
+## Input-boundary hardening
+
+The fingerprint reader rejects manifests larger than 4 MiB before parsing, malformed
+or non-object JSON, ABI/library path components outside their allowlists, symlink
+escapes, and resolved library paths outside the extraction root. These checks
+protect the offline analysis stage from a malformed or substituted extraction
+manifest; they do not change the APK extraction workflow or imply fresh binary
+analysis.
