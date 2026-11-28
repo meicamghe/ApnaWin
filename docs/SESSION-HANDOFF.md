@@ -328,10 +328,18 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 ## GoReSym moduledata patch prepared — 2026-11-28
 
 - Added tools/patches/GoReSym-v3.4.1-moduledata-scan.patch against the exact v3.4.1 moduledata_scan implementation.
-- The patch iterates successive occurrences within the current section, skips ignored VAs without jumping to the next section, preserves section-size bounds and includes four focused Go regression cases.
+- The patch iterates successive occurrences within the current section, skips ignored VAs without jumping to the next section, preserves section-size bounds and includes five focused Go regression cases (including rejection of a pointer signature that crosses the current section boundary).
 - Documented clean-checkout application and validation commands. This is a prepared upstream-tool patch only; it has not been applied to GoReSym or run against the APNA binary.
 - It fixes the independently confirmed ignored-first-match bug, not the separate unreadable ftab pointer in the suspected APNA moduledata candidate.
 - DEX linkage reports now include exact string-register correlation for System.loadLibrary and accurate invocation-site counts (not merely methods containing a call).
+
+
+## Dynamic secondary-DEX loader evidence — 2026-11-28
+
+- The bounded DEX smali scan now correlates direct String-register arguments to `DexClassLoader` and `PathClassLoader` constructors and reports only the observed `.dex`, `.apk`, or `.jar` extension.
+- `InMemoryDexClassLoader` remains a counted callsite only; computed paths, aliases, reflection, invoke-range arguments and protected DEX remain unresolved.
+- Split aggregation preserves APK/class/method references for these loader callsites. A loader constructor reference is not proof that the target archive was decrypted, accepted, loaded or executed.
+- The regression suite includes wrong-register and non-literal boundaries; no fresh APK extraction artifact has been produced by the manual workflow.
 
 
 ## Latest validation of parallel static-analysis changes — 2026-11-28
