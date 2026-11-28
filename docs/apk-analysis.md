@@ -472,8 +472,10 @@ The report also distinguishes exact argument-register correlations:
 `System.load`; `runtime_exec_library_references` links a basename to the
 command argument of `Runtime.exec`; and
 `process_builder_library_references` links a basename to the first command
-argument of a `ProcessBuilder` constructor. Receiver registers are excluded
-for instance calls. These indexes are emitted only when a bounded direct
+argument of a `ProcessBuilder` constructor. The split-set report also
+aggregates `ProcessBuilder.start()` call counts by class/method; it does not
+claim that a particular constructor instance reaches a particular start call.
+Receiver registers are excluded for instance calls. These indexes are emitted only when a bounded direct
 string-register argument or a bounded String[] argument is observed. Arrays
 created by `filled-new-array` are associated with their destination only when
 the immediately following instruction is `move-result-object`; arrays created
