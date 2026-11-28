@@ -111,8 +111,17 @@ def inspect_apk_dex_set(
                         "apk": apk["apk"],
                         "class_name": class_row["class_name"],
                         "method_ordinal": method["method_ordinal"],
+                        "loader_types": method["dynamic_dex_loader_types"],
                         "path_extensions": method["dynamic_dex_loader_path_extensions"],
-                        "path_basis": "exact DexClassLoader/PathClassLoader constructor path argument when directly literal",
+                        "path_basis": (
+                            "exact DexClassLoader/PathClassLoader constructor path argument; allowlisted archive extensions only"
+                            if method["dynamic_dex_loader_path_extensions"]
+                            else (
+                                "InMemoryDexClassLoader ByteBuffer constructor; no file path argument"
+                                if method["dynamic_dex_loader_types"] == ["InMemoryDexClassLoader"]
+                                else "loader constructor observed; direct literal archive extension unresolved"
+                            )
+                        ),
                     })
                 for library_name in method["system_load_library_names"]:
                     system_load_library_references.append({
