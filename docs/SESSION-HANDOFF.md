@@ -255,3 +255,9 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
 - Added regression tests for multi-split enumeration, hash correctness, PIE/PT_INTERP classification, malformed ELF reporting, duplicate ZIP entries, aggregate-size bounds and empty input.
 - Wired `native-elf-inventory.json` into the manual APK extraction artifact and documented its fields and safety limits.
 - Validation is pending on the current branch head; no new APK artifact or runtime protocol acceptance is claimed.
+
+### Split-wide native ELF inventory validation — 2026-11-28
+
+- GitHub Actions run [46109322697](https://github.com/meicamghe/ApnaWin/actions/runs/46109322697) passed on code head `8436a803910aef40d16ca9c6c74bf299785cc6c2`: **943 passed, 1 skipped, 2 warnings**.
+- The new `test_inventory_apk_native.py` cases passed, including split aggregation, SHA-256 verification, PIE/PT_INTERP classification, malformed ELF handling, duplicate-entry rejection and aggregate-size limits.
+- `build-windows` was skipped by the existing reverse-engineering gate. This CI run did not execute the manual APK extraction workflow and produced no native-analysis artifact.
