@@ -271,3 +271,21 @@ The patch is prepared but has **not** been applied to upstream GoReSym or
 validated against the APNA binary. It addresses the independently confirmed
 scanner bug only; it does not yet solve the separate unreadable ftab pointer
 in the suspected APNA moduledata candidate.
+
+
+## Bounded Go function-table recovery tool — 2026-11-28
+
+A standalone offline parser is now available at `tools/recover_go_pclntab.py`. It is deliberately separate from GoReSym and does not relax GoReSym's general ELF/moduledata validation.
+
+For a fresh extracted binary, the invocation for the current candidate is:
+
+```sh
+python tools/recover_go_pclntab.py /path/to/libudpqtwo.so \
+  --pclntab-va 0xc1a200 --allow-stomped-magic > go-functions.json
+```
+
+The parser requires ELF64 little-endian AArch64 ET_DYN/ET_EXEC, checks every requested address against file-backed PT_LOAD ranges, validates the remaining Go 1.18+ header byte fields and bounded counts, derives the functab from header word 7, checks the complete serialized table and terminal PC offset, then resolves each `_func.nameOff` against the function-name table. It emits function index, entry offset, function-record offset and decoded name. The stomped magic word is accepted only with the explicit command-line opt-in; all other structural checks remain mandatory.
+
+Synthetic regression tests cover a stomped-header recovery, missing opt-in, invalid header bytes, a non-file-backed table, and non-monotonic entries. These tests validate the parser against a constructed ELF fixture only. **No recovered function list from the APNA binary is claimed yet**: the committed APK-native extraction workflow has not produced a fresh artifact available to this analysis session. The current candidate VA and previously observed first records remain hypotheses pending execution against the exact fresh ARM64 binary.
+
+The parser currently targets Go 1.18+ 64-bit little-endian functab layout. It does not recover inline trees, pcdata streams, line tables, type metadata or DWARF, and it does not replace validation of moduledata or prove that a recovered function is reachable at runtime.
