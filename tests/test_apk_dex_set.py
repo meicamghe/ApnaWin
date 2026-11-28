@@ -134,6 +134,37 @@ def test_split_set_finds_service_class_defined_in_non_base_split(tmp_path, monke
     assert report["android_device_required"] is False
 
 
+
+def test_split_set_aggregates_process_builder_start_without_instance_claim(tmp_path, monkeypatch):
+    base = tmp_path / "base.apk"
+    base.write_bytes(b"placeholder")
+    manifest = _manifest([".vpn.TunnelService"])
+    monkeypatch.setattr(
+        apk_dex_set,
+        "inspect_apk_manifest",
+        lambda path, **kwargs: manifest,
+    )
+
+    def inspect(path, manifest_services, **kwargs):
+        result = _dex(manifest_services[0], True)
+        method = result["native_linkage_evidence"][0]["methods_with_evidence"][0]
+        method["invocation_kinds"].append("process_builder_start")
+        method["invocation_counts"]["process_builder_start"] = 2
+        return result
+
+    monkeypatch.setattr(apk_dex_set, "inspect_apk_dex", inspect)
+    report = apk_dex_set.inspect_apk_dex_set([base])
+    assert report["process_builder_start_references"] == [{
+        "apk": "base.apk",
+        "class_name": "com.example.vpn.TunnelService",
+        "method_ordinal": 4,
+        "call_count": 2,
+        "evidence_basis": (
+            "ProcessBuilder.start() invocation count; not correlated "
+            "to a specific constructor instance"
+        ),
+    }]
+
 def test_split_set_rejects_inconsistent_package_names(tmp_path, monkeypatch):
     first = tmp_path / "base.apk"
     second = tmp_path / "split.apk"
