@@ -528,6 +528,25 @@ def test_new_string_array_ignores_non_string_array_and_unresolved_values():
     assert row["process_builder_library_basenames"] == []
 
 
+
+def test_new_string_array_write_limit_counts_duplicate_writes():
+    lines = [
+        ".method private launchNative()V",
+        "    const/4 v0, 0x1",
+        "    new-array v2, v0, [Ljava/lang/String;",
+        '    const-string v1, "libnative.so"',
+    ]
+    lines.extend("    aput-object v1, v2, v0" for _ in range(257))
+    lines.extend([
+        "    invoke-direct {v3, v2}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V",
+        ".end method",
+    ])
+    report = apk_dex._parse_dex_linkage_evidence("\n".join(lines))
+    row = report["methods_with_evidence"][0]
+    assert row["process_builder_library_basenames"] == []
+
+
+
 def test_new_string_array_tracking_is_bounded_to_256_writes():
     lines = [
         ".method private launchNative()V",
