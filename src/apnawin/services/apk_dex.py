@@ -370,7 +370,7 @@ def _explicit_invocation_registers(register_operands: str) -> list[str]:
     """
     if ".." in register_operands:
         return []
-    return re.findall(r"\\b(?:v|p)[0-9]+\\b", register_operands)
+    return re.findall(r"\b(?:v|p)[0-9]+\b", register_operands)
 
 def _command_argument_libraries(
     current: dict[str, Any],
