@@ -21,7 +21,7 @@ index 0000000..1111111 100644
 +			return -1
 +		}
 +		idx := searchFrom + relative
-+		if uint64(idx) >= sectionSize {
++		if uint64(idx)+uint64(len(signature)) > sectionSize {
 +			return -1
 +		}
 +		candidateVA := sectionAddr + uint64(idx)
@@ -69,7 +69,7 @@ new file mode 100644
 index 0000000..2222222
 --- /dev/null
 +++ b/objfile/elf_moduledata_scan_test.go
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,44 @@
 +package objfile
 +
 +import "testing"
@@ -106,3 +106,11 @@ index 0000000..2222222
 +		t.Fatalf("got offset %d, want -1", got)
 +	}
 +}
++func TestFindModuleDataOffsetRejectsCrossSectionMatch(t *testing.T) {
++	data := []byte("xxPCLNyyPCLN")
++	got := findModuleDataOffset(data, []byte("PCLN"), 5, 0x1000, nil)
++	if got != -1 {
++		t.Fatalf("got offset %d, want -1", got)
++	}
+NaN
++
