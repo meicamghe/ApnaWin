@@ -448,3 +448,11 @@ CI run 43724914682 completed successfully: 848 tests passed, one skipped, and th
   recovered. The manual native extraction workflow remains undispatched.
 - PR #8 remains open and unmerged. No Windows/Linux build, Android build,
   connection activation, or routing implementation was performed.
+
+
+## Final CI for this batch — 2026-11-28
+
+- Final PR head at validation: `c869bb4a71c4a7d37dd0dec32d58a3bf56a30a6a`.
+- GitHub Actions run [46125299993](https://github.com/meicamghe/ApnaWin/actions/runs/46125299993) passed: **982 passed, 1 skipped, 1 warning**. The Windows build job was skipped by the explicit reverse-engineering gate.
+- This run includes the bounded String[] DEX tracker tests and the GoReSym patch-artifact integrity tests (unified-diff hunk counts, five embedded test functions, and balanced braces).
+- No APNA APK extraction artifact was generated. The GoReSym patch remains prepared only, and no Go symbol recovery or provider handshake is claimed.
