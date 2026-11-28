@@ -127,3 +127,18 @@ The primary DEX class-def table contains the Java tunnel manager and helper clas
 - Direct invoke-reference inventory was generated from the actual primary DEX bytes in the Library-backed base APK.
 - The lightweight local decoder used for this pass is not yet committed as a general-purpose tool and has not been validated against the full DEX opcode corpus. Treat the callsite counts as a targeted static triage, not a complete verifier.
 - The existing production DEX scanner's tests remain unexecuted. No APK code was run and no Android runtime behavior is claimed.
+
+
+## Library encrypted-data side track — 2026-11-28
+
+The recursive Library inventory was rechecked. Within /ApnaWin it exposes base.apk, Apna server list.txt, an opaque 405,128-byte item named 6aa1acd5d8b2b25e6884eae4483e57, the Windows package archives, and the previously saved project notes. It does not expose split_config.arm64_v8a.apk, libudpqtwo.so, or libsalamander.so by those names.
+
+The text content of Apna server list.txt was inspected without copying its contents into the repository:
+- 32,750 characters, all in the Base64 alphabet.
+- Decodes to 24,561 bytes.
+- Shannon entropy of decoded bytes: 7.9928 bits/byte.
+- Printable-byte ratio: 0.3824.
+- Initial bytes: 14 a2 ce c1 60 e8 80 5b 1a 78 1d 6e de 7f 07 ed.
+- No common ZIP/GZIP/JSON header is apparent at offset zero. This is high-entropy opaque data; it may be encrypted, compressed, or a custom binary envelope. No cipher, key, or format is identified.
+
+The opaque 405,128-byte Library item could not be materialized through the available Files interface and was not analyzed. Do not assume it is an APK or native library based on its size or hash-like title.
