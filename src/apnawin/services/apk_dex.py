@@ -203,7 +203,7 @@ def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
     )
     dex_archive_suffix = re.compile(r"\.(dex|apk|jar)(?=$|:)", re.IGNORECASE)
     move_result_object = re.compile(r'move-result-object\s+(v[0-9]+|p[0-9]+)')
-    destination_register = re.compile(r'^\s+[a-z][a-z0-9/-]*\s+(v[0-9]+|p[0-9]+)\s*,')
+    destination_register = re.compile(r'^\s+[a-z][a-z0-9/-]*\s+(v[0-9]+|p[0-9]+)(?:\s*,|\s*$)')
     safe_library_name = re.compile(r"^[A-Za-z0-9_]{1,120}$")
     native_basename = re.compile(r"(lib[A-Za-z0-9_.+-]{1,120}\.so)$")
     rows: list[dict[str, Any]] = []
