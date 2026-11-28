@@ -574,3 +574,16 @@ The user has now explicitly authorized moving from reverse-engineering-only work
 - Generic Xray share-link compatibility is not evidence of APNA TUNNEL backend compatibility. APK native extraction artifact is still required to complete APNA protocol/launch-owner verification.
 - No Windows artifact has been built for this new import path yet. Packaging remains opt-in via workflow_dispatch; do not call a desktop preview a connectable VPN build.
 - PR #8 remains open and unmerged. SSH remains on hold.
+
+
+## Asynchronous Windows Xray connection lifecycle — 2026-11-28
+
+- Added `services/xray_connection_worker.py`: starts the fixed Program Files UAC helper on a Qt worker thread, handles cancel/stop requests, polls for unexpected helper exit, and never blocks the GUI while waiting for UAC or tunnel startup.
+- Added `services/windows_tunnel_traffic_probe.py`: resolves a fixed HTTPS probe host, asks Windows `Find-NetRoute` which interface is selected for each candidate IP, requires the selected interface to match the ApnaWin TUN adapter, then completes a TLS-verified HTTP/1.1 request directly to that IP with the expected SNI/Host header.
+- The desktop Connect action is enabled only for a selected XRAY profile with an encrypted config and a protected helper at `%ProgramFiles%\\ApnaWin\\ApnaWinElevator.exe`. It remains disabled for non-Windows development environments or when either prerequisite is absent.
+- UI state transitions are asynchronous: Connect/Cancel during startup, Disconnect after traffic verification, and explicit failure/lost states. Profile mutation controls are locked during an active session.
+- The UI does not report CONNECTED when the helper only signals adapter/routes/DNS readiness. It waits for the route-bound TLS/HTTP probe to pass; a probe failure requests helper shutdown.
+- If graceful cleanup fails, the worker retains the supervisor handle, blocks reconnect, and asks the user to close the desktop. The helper watches the parent process handle and should unwind its Xray Job Object when the desktop exits.
+- Added worker, traffic-probe and UI prerequisite tests. These are mocked/unit tests; they do not constitute live Windows network acceptance.
+- Remaining release gates: run CI on this exact head; test on clean Windows 10 and Windows 11 x64 with an authorized Xray server; verify successful IPv4/IPv6 traffic, DNS behavior, endpoint route pinning, WFP leak prevention, normal disconnect and helper/desktop crash recovery. Verify the pinned Xray/Wintun runtime is present and signed as expected.
+- No APNA TUNNEL protocol compatibility is claimed. The current path is generic Xray share-link connectivity only. APK native extraction and `libudpqtwo.so` ownership/revision analysis remain separate workstreams. PR #8 stays open/unmerged; SSH stays on hold.
