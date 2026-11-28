@@ -61,6 +61,16 @@ The Xray share-link parser is a generic Xray import path. It is not evidence tha
 - The larger `libudpqtwo.so` and `libsalamander.so` contents remain unavailable for direct binary inspection. Do not transfer Xray findings to either file.
 - Preserve exact APK member path, ABI and SHA-256 for each binary. Do not substitute a prior Windows packaging artifact for an APK extraction artifact, and do not commit raw native binaries into Git.
 
+
+
+## Independent revalidation and test-fixture correction
+
+- Recomputed the mounted `libxray.so` SHA-256 and confirmed it matches the dedicated report: `e796e24eece84ab28ab9e20710a8581fbcb1044c6720db5f9c79fecc839f68b5`. The earlier apparent mismatch was a transcription/reading error; there is no evidence of a second distinct attachment.
+- Re-ran an independent offline pclntab extraction against the mounted file: 39,856 function records, 2,574 file entries, 39,823 unique function names; the zero `textStart` fallback resolves to executable `.text` VA `0x3860a0`.
+- `go version -m` independently confirms Go 1.26.2, Android/ARM64, Xray module path and `-buildmode=exe`.
+- Fixed a bytearray slice-length bug in `tests/test_recover_go_pclntab.py` that otherwise shifted the synthetic ELF fixture by five bytes. The pytest suite remains unexecuted.
+- Android's official APK Analyzer CLI reference confirms `dex code --class` requires a class name and `dex references` only reports method-reference counts. The exhaustive, class-independent callsite index therefore needs a DEX instruction parser/disassembler, not just the current apkanalyzer command set.
+
 ## Status summary
 
 | Area | Evidence status | Gate before claiming completion |
