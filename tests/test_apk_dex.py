@@ -413,3 +413,20 @@ def test_linkage_scan_ignores_unresolved_or_missing_manifest_classes():
     )
     assert targets == ["com.example.TunnelService"]
     assert truncated is False
+
+
+def test_dex_linkage_counts_each_invocation_not_just_methods():
+    output = (
+        ".method public launch()V\n"
+        "    invoke-virtual {v0}, Ljava/lang/Runtime;->exec(Ljava/lang/String;)Ljava/lang/Process;\n"
+        "    invoke-virtual {v1}, Ljava/lang/Runtime;->exec(Ljava/lang/String;)Ljava/lang/Process;\n"
+        "    invoke-static {v2}, Ljava/lang/System;->loadLibrary(Ljava/lang/String;)V\n"
+        ".end method\n"
+    )
+    report = apk_dex._parse_dex_linkage_evidence(output)
+    assert report["runtime_exec_calls"] == 2
+    assert report["system_load_library_calls"] == 1
+    assert report["methods_with_evidence"][0]["invocation_counts"] == {
+        "runtime_exec": 2,
+        "system_load_library": 1,
+    }
