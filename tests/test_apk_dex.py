@@ -460,7 +460,9 @@ def test_process_launch_links_only_exact_command_argument_registers():
         '    const-string v1, "libdecoy.so"\n'
         '    const-string v2, "libbuilder.so"\n'
         "    invoke-virtual {v3, v0}, Ljava/lang/Runtime;->exec(Ljava/lang/String;)Ljava/lang/Process;\n"
-        "    invoke-direct {v4, v2}, Ljava/lang/ProcessBuilder;-><init>(Ljava/lang/String;)V\n"
+        "    filled-new-array {v2}, [Ljava/lang/String;\n"
+        "    move-result-object v5\n"
+        "    invoke-direct {v4, v5}, Ljava/lang/ProcessBuilder;-><init>([Ljava/lang/String;)V\n"
         ".end method\n"
     )
     report = apk_dex._parse_dex_linkage_evidence(output)
