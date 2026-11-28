@@ -437,8 +437,8 @@ def test_dex_linkage_counts_each_invocation_not_just_methods():
 def test_system_load_correlates_only_the_exact_path_argument_register():
     output = (
         ".method private loadNative()V\n"
-        '    const-string v0, "/data/user/0/com.example/lib/libudpqtwo.so"\\n'
-        '    const-string v1, "/data/user/0/com.example/lib/libdecoy.so"\\n'
+        '    const-string v0, "/data/user/0/com.example/lib/libudpqtwo.so"\n'
+        '    const-string v1, "/data/user/0/com.example/lib/libdecoy.so"\n'
         "    invoke-static {v0}, Ljava/lang/System;->load(Ljava/lang/String;)V\n"
         ".end method\n"
     )
