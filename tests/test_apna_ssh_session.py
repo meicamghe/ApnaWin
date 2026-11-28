@@ -8,7 +8,11 @@ import threading
 import paramiko
 import pytest
 
-from apnawin.engines.apna_payload_socket import PayloadSocketConfig, PayloadSocketMode
+from apnawin.engines.apna_payload_socket import (
+    PayloadSocketConfig,
+    PayloadSocketMode,
+    PayloadTransportError,
+)
 from apnawin.engines.apna_ssh_session import (
     ApnaSshConfig,
     ApnaSshError,
@@ -610,3 +614,37 @@ def test_close_retains_server_ownership_when_shutdown_fails_and_can_retry() -> N
     assert session._server is None
     assert session._server_thread is None
     assert session._closed is True
+
+
+def test_payload_transport_failure_is_not_wrapped_as_ssh_failure():
+    class FailingConnector:
+        def connect(self, config):
+            raise PayloadTransportError(
+                "TLS certificate verification failed: tls_direct endpoint=ssh.example.test:443"
+            )
+
+    class FakeSshClient:
+        def load_system_host_keys(self):
+            pass
+
+        def set_missing_host_key_policy(self, policy):
+            pass
+
+        def close(self):
+            pass
+
+    session = ApnaSshSession(
+        ApnaSshConfig("ssh.example.test", 1194, "user", password="secret"),
+        PayloadSocketConfig(
+            mode=PayloadSocketMode.TLS_DIRECT,
+            connect_host="ssh.example.test",
+            connect_port=443,
+            target_host="ssh.example.test",
+            target_port=1194,
+            sni="amtun.example.test",
+        ),
+        connector=FailingConnector(),
+        ssh_client_factory=FakeSshClient,
+    )
+    with pytest.raises(PayloadTransportError, match="TLS certificate verification failed"):
+        session.connect()
