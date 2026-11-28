@@ -71,6 +71,7 @@ It does not store passwords, access tokens, private keys or other credentials. D
 - `docs/xray-process-runner.md` — scope and limitations of Xray process supervision
 - `docs/xray-tunnel-supervisor.md` — desktop helper lifecycle contract
 - `docs/windows-tunnel-diagnostics.md` — read-only adapter, route and DNS checks
+- `docs/payload-transport-diagnostics.md` — HTTP Proxy, CloudFront, TLS Direct, SNI and staged failure diagnostics
 
 ## Important compatibility note
 
