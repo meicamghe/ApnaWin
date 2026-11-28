@@ -7,7 +7,11 @@ import paramiko
 import pytest
 
 from apnawin.engines.apna_host_key import ApnaHostKeyProbeError, scan_apna_ssh_host_key
-from apnawin.engines.apna_payload_socket import PayloadSocketConfig, PayloadSocketMode
+from apnawin.engines.apna_payload_socket import (
+    PayloadSocketConfig,
+    PayloadSocketMode,
+    PayloadTransportError,
+)
 from apnawin.engines.apna_ssh_session import ApnaSshConfig
 from apnawin.engines.apna_tunnel_session import ApnaTunnelSessionConfig
 
@@ -125,3 +129,31 @@ def test_probe_closes_socket_when_transport_construction_fails():
             _config(), connector=connector, transport_factory=fail_factory
         )
     assert sock.closed is True
+
+
+
+@pytest.mark.parametrize(
+    "transport_detail",
+    [
+        "DNS resolution failed before TCP connection; endpoint=proxy.example.test:80; gaierror: [Errno 11001]",
+        "TLS certificate verification failed: tls_direct endpoint=ssh.example.test:443; SNI amtun.example.test",
+        "Proxy returned HTTP 403. CloudFront returned an edge-level HTTP denial. "
+        "Request details: mode=http_proxy; request=GET / HTTP/1.1; "
+        "Host=front.example.test; endpoint=proxy.example.test:80; "
+        "target=ssh.example.test:1194. Response headers: server=CloudFront, x-cache=Error from cloudfront.",
+    ],
+)
+def test_probe_keeps_payload_transport_failures_out_of_ssh_key_exchange_stage(
+    transport_detail,
+):
+    class FailingConnector:
+        def connect(self, config):
+            raise PayloadTransportError(transport_detail)
+
+    with pytest.raises(ApnaHostKeyProbeError) as error:
+        scan_apna_ssh_host_key(_config(), connector=FailingConnector())
+
+    assert error.value.stage == "payload_transport"
+    assert str(error.value).startswith("Payload transport failed before SSH key exchange:")
+    assert "SSH host-key exchange failed" not in str(error.value)
+    assert transport_detail in str(error.value)
