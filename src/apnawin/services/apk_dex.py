@@ -18,6 +18,9 @@ _MAX_TIMEOUT_SECONDS = 30
 _MAX_DEX_FILES = 128
 _MAX_CLASSES = 100_000
 _MAX_RELEVANT_CLASSES = 2_000
+_MAX_LINKAGE_CLASSES = 64
+_MAX_LINKAGE_SCAN_TIMEOUT_SECONDS = 4.0
+_MAX_LINKAGE_EVIDENCE_ROWS = 256
 _DEX_NAME = re.compile(r"classes(?:[2-9]|[1-9][0-9]+)?\.dex\Z")
 _CLASS_NAME = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*\Z")
 _PACKAGE_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)*\Z")
@@ -162,6 +165,93 @@ def _parse_native_method_count(output: str) -> int:
     return count
 
 
+def _parse_dex_linkage_evidence(output: str) -> dict[str, Any]:
+    """Extract allowlisted process/native-loader call evidence from smali.
+
+    Method names, descriptors, arbitrary strings and bytecode never leave this
+    parser. Library literals are restricted to syntactically valid .so basenames.
+    """
+    if len(output.encode("utf-8")) > _MAX_OUTPUT_BYTES:
+        raise ValueError("DEX class code exceeds the allowed size")
+    library_literal = re.compile(
+        r'\bconst-string(?:/jumbo)?\s+\w+,\s+"(lib[A-Za-z0-9_.+-]{1,120}\.so)"'
+    )
+    rows: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    method_ordinal = 0
+
+    def finish() -> None:
+        if current is None:
+            return
+        if current["invocation_kinds"] or current["native_library_literals"]:
+            if len(rows) >= _MAX_LINKAGE_EVIDENCE_ROWS:
+                raise ValueError("DEX linkage evidence contains too many methods")
+            rows.append({
+                "method_ordinal": current["method_ordinal"],
+                "invocation_kinds": sorted(current["invocation_kinds"]),
+                "native_library_literals": sorted(current["native_library_literals"]),
+            })
+
+    for line in output.splitlines():
+        if len(line) > 16_384:
+            raise ValueError("DEX class code contains an oversized line")
+        if line.startswith(".method "):
+            finish()
+            method_ordinal += 1
+            current = {
+                "method_ordinal": method_ordinal,
+                "invocation_kinds": set(),
+                "native_library_literals": set(),
+            }
+            continue
+        if line == ".end method":
+            finish()
+            current = None
+            continue
+        if current is None:
+            continue
+        if "Ljava/lang/Runtime;->exec(" in line:
+            current["invocation_kinds"].add("runtime_exec")
+        if "Ljava/lang/ProcessBuilder;-><init>(" in line:
+            current["invocation_kinds"].add("process_builder")
+        if "Ljava/lang/System;->loadLibrary(" in line:
+            current["invocation_kinds"].add("system_load_library")
+        if "Ljava/lang/System;->load(" in line:
+            current["invocation_kinds"].add("system_load")
+        if any(token in line for token in (
+            "Ldalvik/system/DexClassLoader;-><init>(",
+            "Ldalvik/system/PathClassLoader;-><init>(",
+            "Ldalvik/system/InMemoryDexClassLoader;-><init>(",
+        )):
+            current["invocation_kinds"].add("dynamic_dex_loader")
+        for match in library_literal.finditer(line):
+            current["native_library_literals"].add(match.group(1))
+    finish()
+
+    totals = {
+        "runtime_exec_calls": 0,
+        "process_builder_calls": 0,
+        "system_load_calls": 0,
+        "system_load_library_calls": 0,
+        "dynamic_dex_loader_calls": 0,
+    }
+    kind_to_total = {
+        "runtime_exec": "runtime_exec_calls",
+        "process_builder": "process_builder_calls",
+        "system_load": "system_load_calls",
+        "system_load_library": "system_load_library_calls",
+        "dynamic_dex_loader": "dynamic_dex_loader_calls",
+    }
+    for row in rows:
+        for kind in row["invocation_kinds"]:
+            totals[kind_to_total[kind]] += 1
+    return {
+        **totals,
+        "methods_with_evidence": rows,
+        "raw_smali_included": False,
+    }
+
+
 def parse_reference_counts(output: str) -> dict[str, int]:
     if len(output.encode("utf-8")) > _MAX_OUTPUT_BYTES:
         raise ValueError("DEX reference listing exceeds the allowed size")
@@ -220,6 +310,9 @@ def inspect_apk_dex(
                 }
                 for service in (manifest_services or [])
             ],
+            "native_linkage_evidence": [],
+            "linkage_scan_classes_inspected": 0,
+            "linkage_scan_truncated": False,
             "source": "apkanalyzer",
             "raw_dex_output_included": False,
         }
@@ -228,6 +321,7 @@ def inspect_apk_dex(
     class_count, candidates, class_metadata = _parse_defined_class_metadata(class_output)
     service_matches = []
     native_method_counts: dict[str, int] = {}
+    linkage_by_class: dict[str, dict[str, Any]] = {}
     for service in manifest_services or []:
         resolved_name = _resolve_manifest_class(service, package_name)
         evidence = class_metadata.get(resolved_name) if resolved_name else None
@@ -241,6 +335,7 @@ def inspect_apk_dex(
                     timeout,
                 )
                 native_method_counts[resolved_name] = _parse_native_method_count(code_output)
+                linkage_by_class[resolved_name] = _parse_dex_linkage_evidence(code_output)
             native_count = native_method_counts[resolved_name]
             inspection_completed = True
         service_matches.append({
@@ -253,6 +348,37 @@ def inspect_apk_dex(
             "native_method_count": native_count,
             "native_method_inspection_completed": inspection_completed,
         })
+    # Scan a bounded set of network/service candidate classes for process-launch,
+    # native-loader and secondary-DEX-loader callsites. This is static evidence,
+    # not proof that any callsite executes at runtime.
+    scan_targets = sorted(set(candidates) | {
+        item["resolved_class_name"] for item in service_matches
+        if item["resolved_class_name"] and item["defined_in_dex"]
+    })
+    linkage_scan_truncated = len(scan_targets) > _MAX_LINKAGE_CLASSES
+    scan_targets = scan_targets[:_MAX_LINKAGE_CLASSES]
+    for class_name in scan_targets:
+        if class_name in linkage_by_class:
+            continue
+        code_output = _run(
+            resolved,
+            ["dex", "code", "--class", class_name, apk],
+            min(timeout, _MAX_LINKAGE_SCAN_TIMEOUT_SECONDS),
+        )
+        linkage_by_class[class_name] = _parse_dex_linkage_evidence(code_output)
+    linkage_evidence = [
+        {"class_name": name, **linkage_by_class[name]}
+        for name in scan_targets
+        if any((
+            linkage_by_class[name]["runtime_exec_calls"],
+            linkage_by_class[name]["process_builder_calls"],
+            linkage_by_class[name]["system_load_calls"],
+            linkage_by_class[name]["system_load_library_calls"],
+            linkage_by_class[name]["dynamic_dex_loader_calls"],
+            any(row["native_library_literals"] for row in linkage_by_class[name]["methods_with_evidence"]),
+        ))
+    ]
+
     reference_output = _run(resolved, ["dex", "references", apk], timeout)
     references = parse_reference_counts(reference_output)
     if set(references) - set(dex_files):
@@ -265,6 +391,9 @@ def inspect_apk_dex(
         "method_references": references,
         "candidate_classes": candidates,
         "manifest_service_classes": service_matches,
+        "native_linkage_evidence": linkage_evidence,
+        "linkage_scan_classes_inspected": len(scan_targets),
+        "linkage_scan_truncated": linkage_scan_truncated,
         "source": "apkanalyzer",
         "raw_dex_output_included": False,
     }
